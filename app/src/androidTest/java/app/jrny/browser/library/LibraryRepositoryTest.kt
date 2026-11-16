@@ -129,6 +129,22 @@ class LibraryRepositoryTest {
     }
 
     @Test
+    fun aBookmarkIsToggledByWhatThatProfileHasNotByWhatAnotherHas() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        bookmarks.add(personal, "https://example.com/", "Example")
+
+        // Work has no bookmark of it, so toggling there adds one and leaves Personal's alone.
+        assertEquals(true, bookmarks.toggle(work, "https://example.com/", "Example"))
+        assertEquals(1, marked(work).size)
+        assertEquals(1, marked(personal).size)
+
+        assertEquals(false, bookmarks.toggle(work, "https://example.com/", "Example"))
+        assertEquals(emptyList<Bookmark>(), marked(work))
+        assertEquals(1, marked(personal).size)
+        assertEquals(false, bookmarks.toggle(work, "data:text/html,<p>no</p>", "Not a web page"))
+    }
+
+    @Test
     fun deletingAProfileRemovesItsHistoryAndBookmarksAtOnceAndNothingIsAddedAfter() = runBlocking {
         val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
         history.record(work, "https://example.com/private-to-work")

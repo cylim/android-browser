@@ -242,6 +242,7 @@ class BrowserStateTest {
             "/a" to "<title>Page A</title>",
             "/b" to "<title>Page B</title>",
             "/hop" to "<script>location.replace('/b')</script>",
+            "/untitled" to "<p>A page that never gives itself a title.</p>",
         )
         TestServer(pages).use { server ->
             val browser = newBrowser()
@@ -252,11 +253,22 @@ class BrowserStateTest {
 
             val id = runBlocking { tabs.open(personal) }
             val tab = show(browser, id)
+            // A page without a title is still a page the person saw: it stays when the next one loads.
+            onMain { tab.load(server.url("/untitled")) }
+            await("untitled visited") { browser.visits.value.any { it.url == server.url("/untitled") } }
+            await("untitled loaded") { !tab.isLoading && tab.url == server.url("/untitled") }
             load(tab, server.url("/a"), "Page A")
+            await("untitled stays") { browser.visits.value.map { it.url } == listOf(server.url("/a"), server.url("/untitled")) }
+            onMain { browser.deleteVisit(browser.visits.value.last()) }
+            await("removed for the checks below") { browser.visits.value.size == 1 }
             load(tab, server.url("/hop"), "Page B")
             onMain { tab.reload() }
             await("reloaded") { !tab.isLoading }
-            await("history has both, titled") { browser.visits.value.map { it.title } == listOf("Page B", "Page A") }
+            try {
+                await("history has both, titled") { browser.visits.value.map { it.title } == listOf("Page B", "Page A") }
+            } catch (e: AssertionError) {
+                throw AssertionError("history: " + onMain { browser.visits.value.map { it.url.substringAfterLast('/') + "=" + it.title } })
+            }
             assertEquals(listOf(server.url("/b"), server.url("/a")), onMain { browser.visits.value.map { it.url } })
 
             // A fresh BrowserState restores the Tab: the page loads again, and that is no new visit.

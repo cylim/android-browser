@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The Active Profile with its Tabs, read together so they always belong to each other. */
 data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
@@ -88,6 +90,7 @@ class BrowserState(
 
     private class LiveTab(val tab: Tab, val saving: Job)
 
+
     /** The Tab on screen. Its WebView can't be destroyed until another Tab replaces it. */
     private var shownId: TabId? = null
 
@@ -122,29 +125,36 @@ class BrowserState(
         // Keep the saved address and title current, so a kill loses at most the scroll position.
         // Saved one at a time, latest first: a burst of changes during a load writes only the last.
         val page = MutableStateFlow(saved.url to saved.title)
-        // The Tab's newest visit while it has no title yet. If the next visit arrives first, it
-        // was only a redirect's stop on the way, and leaves the history again.
-        var untitled: Pair<RecordedVisit, String>? = null
+        // The Tab's newest visit until the Tab reports its page as seen: it got a title, or it
+        // finished loading. If the next visit arrives first, it was only a redirect's stop on the
+        // way, and leaves the history again.
+        var unconfirmed: Pair<RecordedVisit, String>? = null
+        // A visit is written before its title, and before the visit after it: one at a time, in
+        // the order the Tab reported them. Without this, a title could arrive before its row.
+        val historyOrder = Mutex()
         val tab = Tab(
             context,
             WebProfile.of(saved.profileId),
             onPageChanged = { page.value = it.url to it.title },
             onVisited = { url ->
                 scope.launch {
-                    untitled?.let { (recorded, _) -> history.takeBack(recorded) }
-                    untitled = history.record(saved.profileId, url)?.let { it to url }
+                    historyOrder.withLock {
+                        unconfirmed?.let { (recorded, _) -> history.takeBack(recorded) }
+                        unconfirmed = history.record(saved.profileId, url)?.let { it to url }
+                    }
+                }
+            },
+            onPageSeen = { url, title ->
+                scope.launch {
+                    historyOrder.withLock {
+                        history.setTitle(saved.profileId, url, title)
+                        if (unconfirmed?.second == url) unconfirmed = null
+                    }
                 }
             },
         )
         val saving = scope.launch {
-            page.drop(1).collect { (url, title) ->
-                tabRepository.savePage(saved.id, url, title)
-                // The title arrives after the visit was recorded.
-                if (url != null && title.isNotBlank()) {
-                    history.setTitle(saved.profileId, url, title)
-                    if (untitled?.second == url) untitled = null
-                }
-            }
+            page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
         }
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
         live[saved.id] = LiveTab(tab, saving)
@@ -251,11 +261,9 @@ class BrowserState(
         }
     }
 
-    /** Bookmarks [url] in [profile], or removes the bookmark if it has one. */
+    /** Bookmarks [url] in [profile], or removes the bookmark if that Profile has one. */
     fun toggleBookmark(profile: Profile, url: String, title: String) {
-        scope.launch {
-            if (bookmarks.value.any { it.url == url }) bookmarkRepository.remove(profile.id, url) else bookmarkRepository.add(profile.id, url, title)
-        }
+        scope.launch { bookmarkRepository.toggle(profile.id, url, title) }
     }
 
     fun deleteBookmark(bookmark: Bookmark) {

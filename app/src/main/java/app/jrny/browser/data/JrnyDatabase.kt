@@ -346,6 +346,23 @@ abstract class BookmarkDao {
         if (profileIsLive(bookmark.profileId)) insertRow(bookmark)
     }
 
+    @Query("SELECT EXISTS(SELECT 1 FROM bookmarks WHERE profileId = :profileId AND url = :url)")
+    protected abstract suspend fun has(profileId: Long, url: String): Boolean
+
+    /**
+     * Removes the Profile's bookmark of that address if it has one, and adds it otherwise, decided
+     * by what is in the table now. Returns whether the address is bookmarked afterwards.
+     */
+    @Transaction
+    open suspend fun toggle(bookmark: BookmarkEntity): Boolean {
+        if (has(bookmark.profileId, bookmark.url)) {
+            remove(bookmark.profileId, bookmark.url)
+            return false
+        }
+        add(bookmark)
+        return has(bookmark.profileId, bookmark.url)
+    }
+
     @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
     protected abstract suspend fun profileIsLive(profileId: Long): Boolean
 }

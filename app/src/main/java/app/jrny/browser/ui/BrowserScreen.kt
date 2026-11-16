@@ -125,6 +125,8 @@ fun BrowserWindow(
     // The history or bookmarks, shown in the page's place. Back closes it before anything else.
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
     BackHandler(enabled = panel != null) { panel = null }
+    // A link from another app shows at once, with its Move offer, not behind an open panel.
+    LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
     HideStatusBar()
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.

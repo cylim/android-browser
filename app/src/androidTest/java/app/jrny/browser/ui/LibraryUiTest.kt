@@ -52,6 +52,7 @@ class LibraryUiTest {
     private val deletedVisits = mutableListOf<Visit>()
     private val deletedBookmarks = mutableListOf<Bookmark>()
     private var cleared = 0
+    private var incomingLink by mutableStateOf(false)
 
     @Before
     fun createTab() {
@@ -85,7 +86,7 @@ class LibraryUiTest {
             JrnyTheme {
                 BrowserWindow(
                     tab,
-                    TestTabs.ui(),
+                    TestTabs.ui(incomingLink = incomingLink),
                     TestProfiles.ui(),
                     LibraryUi(
                         visits = visits,
@@ -193,6 +194,18 @@ class LibraryUiTest {
         compose.onNodeWithText("News").performClick()
         compose.onNodeWithTag("panel-Bookmarks").assertDoesNotExist()
         compose.waitUntil(15_000) { !tab.isLoading && tab.url == server.url("/news") && tab.title == "News" }
+    }
+
+    @Test
+    fun aLinkFromAnotherAppClosesThePanelSoItsPageShows() {
+        show(PHONE_PORTRAIT)
+        openFromMenu("menu-history")
+        compose.onNodeWithTag("panel-History").assertExists()
+
+        incomingLink = true
+        compose.onNodeWithTag("panel-History").assertDoesNotExist()
+        compose.onNodeWithTag("page").assertExists()
+        compose.onNodeWithTag("incoming-link-prompt").assertExists()
     }
 
     @Test

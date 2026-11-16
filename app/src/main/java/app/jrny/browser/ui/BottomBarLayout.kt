@@ -39,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,6 +91,8 @@ fun BottomBarLayout(
 ) {
     var sheet by remember { mutableStateOf(false) }
     var overview by rememberSaveable { mutableStateOf(false) }
+    // A link from another app shows at once, not behind the Tab Overview.
+    LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) overview = false }
     // The Tab Overview replaces the page and the bar. Left underneath, they would still take
     // keyboard focus and be read by a screen reader.
     val panel = slots.panel

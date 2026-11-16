@@ -147,7 +147,11 @@ class TabTest {
 
     @Test
     fun aDeadRendererGivesTheTabANewWebView() {
-        val tab = newTab("test-crash")
+        val visits = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val tab = onMain {
+            Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-crash")), onVisited = { visits += it })
+                .also { tabs += it }
+        }
         val one = titled("one")
         onMain { tab.load(one) }
         awaitPage(tab, one, "one navigate")
@@ -158,9 +162,13 @@ class TabTest {
         await("renderer gone") { tab.crashed }
         assertTrue(onMain { tab.webView } !== first)
 
+        // The reload brings the same page back in the new WebView, with its title kept meanwhile.
         onMain { tab.reload() }
-        awaitPage(tab, one, "one navigate")
+        assertEquals("one navigate", onMain { tab.title })
+        await("page back in the new WebView") { !tab.isLoading && tab.webView.url == one && tab.title == "one navigate" }
         assertFalse(onMain { tab.crashed })
+        // It is the same visit as before, not a new one.
+        assertEquals(listOf(one), visits.toList())
     }
 
     @Test
