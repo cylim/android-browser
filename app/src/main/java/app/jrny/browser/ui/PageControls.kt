@@ -2,6 +2,7 @@ package app.jrny.browser.ui
 
 import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,7 +25,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -33,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.jrny.browser.R
+import app.jrny.browser.address.WebAddress
 import app.jrny.browser.tab.Tab
 
 /**
@@ -47,7 +54,7 @@ fun PageView(tab: Tab, modifier: Modifier = Modifier) {
         tab.popup?.let { popup ->
             key(popup) {
                 Column(Modifier.fillMaxSize().testTag("popup")) {
-                    PopupBar(tab)
+                    PopupBar(tab.popupUrl.orEmpty(), onClose = tab::closePopup)
                     WebViewHost(popup, Modifier.weight(1f))
                 }
             }
@@ -57,27 +64,50 @@ fun PageView(tab: Tab, modifier: Modifier = Modifier) {
 }
 
 /**
- * The bar above a popup: the popup's own address, so a popup can't pass off a sign-in form as
- * the page behind it, and a close button. Text starts 16dp in, and the close icon ends 16dp in.
+ * The bar above a popup, so a popup can't pass off a sign-in form as the page behind it:
+ * - the popup's host, cut from the start when it's too long, so the registrable domain at its
+ *   end always shows (`…accounts.google.com.example.net`, never `accounts.google.com…`);
+ * - the full address below it, on one line, or in full after a tap;
+ * - a close button.
+ * Text starts 16dp in, and the close icon ends 16dp in.
  */
 @Composable
-private fun PopupBar(tab: Tab) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+fun PopupBar(address: String, onClose: () -> Unit) {
+    var expanded by remember(address) { mutableStateOf(false) }
+    val host = WebAddress.hostOf(address)
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.testTag("popup-bar")) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 56.dp)
                 .padding(start = 16.dp, end = 4.dp),
         ) {
-            Text(
-                tab.popupUrl.orEmpty(),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).testTag("popup-address"),
-            )
-            IconButton(onClick = tab::closePopup) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clickable(onClickLabel = stringResource(R.string.show_full_address)) { expanded = !expanded }
+                    .padding(vertical = 8.dp),
+            ) {
+                Text(
+                    host.ifEmpty { address },
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.StartEllipsis,
+                    modifier = Modifier.testTag("popup-host"),
+                )
+                if (host.isNotEmpty()) {
+                    Text(
+                        address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("popup-address"),
+                    )
+                }
+            }
+            IconButton(onClick = onClose) {
                 Icon(Icons.Filled.Close, stringResource(R.string.close_popup))
             }
         }

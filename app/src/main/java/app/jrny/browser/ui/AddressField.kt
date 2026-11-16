@@ -33,20 +33,28 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
+ * What the person is typing in the address field, or null while they aren't editing. BrowserScreen
+ * keeps it above the layouts, so it survives a resize across 840dp, even into the Rail, which has
+ * no address field.
+ */
+class AddressDraft {
+    var value: TextFieldValue? by mutableStateOf(null)
+}
+
+/**
  * The address and search field. It shows the page's address, selects all of it when tapped,
  * and loads what was typed (an address or a search) on Go.
  *
  * BrowserScreen moves one instance of this field between the layouts (movableContentOf), and
- * passes the current [layout], so an unsubmitted address survives a resize across 840dp.
+ * passes the current [layout], so the field takes focus back after a move.
  */
 @Composable
-fun AddressField(tab: Tab, modifier: Modifier, shape: Shape, layout: BrowserLayout) {
+fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape, layout: BrowserLayout) {
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
-    // What the person is typing, or null while they aren't editing: the field then follows the
-    // page's address.
-    var editing by remember { mutableStateOf<TextFieldValue?>(null) }
+    // Null while not editing: the field then follows the page's address.
+    var editing by draft::value
     // The tap that focuses the field also moves the cursor to where it landed, right after
     // focus selects everything. Keep the whole address selected through that first change,
     // so typing replaces it.
@@ -107,7 +115,8 @@ fun AddressField(tab: Tab, modifier: Modifier, shape: Shape, layout: BrowserLayo
                 } else if (editing != null && pendingBlur[0] == null) {
                     // Moving to the other layout detaches the field for a moment, which also
                     // ends focus. Wait two frames: a move takes focus back (LaunchedEffect below)
-                    // and keeps the edit. Any other loss of focus ends it.
+                    // and keeps the edit, and leaving the composition (the Rail) cancels this
+                    // with the scope, so the draft waits. Any other loss of focus ends the edit.
                     pendingBlur[0] = scope.launch {
                         withFrameNanos {}
                         withFrameNanos {}

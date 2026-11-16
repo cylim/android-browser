@@ -5,6 +5,10 @@ import android.webkit.WebView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
@@ -25,6 +29,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -36,6 +41,7 @@ import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.page
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.TestServer
+import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.Tab
@@ -239,18 +245,21 @@ class BrowserLayoutUiTest {
 
     @Test
     fun aPopupShowsItsOwnAddressAndANewAddressReplacesIt() {
-        TestServer(mapOf("/signin" to "<title>sign in</title><p>Sign in")).use { server ->
+        val pages = mapOf("/go" to "redirect:/signin", "/signin" to "<title>sign in</title><p>Sign in")
+        TestServer(pages).use { server ->
+            // The popup opens /go, which redirects: the bar must follow to /signin.
             val popupAddress = server.url("/signin")
             val opener = page(
                 "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
-                    "onclick=\"window.open('$popupAddress','signin')\">Sign in</button>",
+                    "onclick=\"window.open('${server.url("/go")}','signin')\">Sign in</button>",
             )
             loadAndWait(opener, "opener")
             show(PHONE_PORTRAIT)
             compose.onNodeWithTag("page").performTouchInput { click(center) }
             // The bar above the popup names the popup's own address, not the page's.
             compose.waitUntil(10_000) { tab.popupUrl == popupAddress }
-            compose.onNodeWithTag("popup-address").assertTextEquals(popupAddress)
+            compose.onNodeWithTag("popup-address", useUnmergedTree = true).assertTextEquals(popupAddress)
+            compose.onNodeWithTag("popup-host", useUnmergedTree = true).assertTextEquals(WebAddress.hostOf(popupAddress))
             // The popup's page really loaded, rather than an error page at that address.
             var popupTitle = ""
             compose.waitUntil(10_000) {
@@ -267,6 +276,51 @@ class BrowserLayoutUiTest {
             compose.onNodeWithTag("popup").assertDoesNotExist()
             assertEquals(address, tab.url)
         }
+    }
+
+    @Test
+    fun aLongPopupHostKeepsItsDomainVisibleAndATapShowsTheFullAddress() {
+        val host = "accounts.google.com." + "x".repeat(60) + ".attacker.example"
+        val address = "https://$host/signin?continue=" + "y".repeat(80)
+        compose.setContent {
+            JrnyTheme { Box(Modifier.width(320.dp)) { PopupBar(address, onClose = {}) } }
+        }
+        val hostLayout = textLayout("popup-host")
+        assertTrue("the host is cut", hostLayout.isLineEllipsized(0))
+        // Cut from the start: the visible text runs to the host's end, so "attacker.example" shows.
+        assertEquals(host.length, hostLayout.getLineEnd(0, visibleEnd = true))
+        assertEquals(1, textLayout("popup-address").lineCount)
+
+        compose.onNodeWithTag("popup-host", useUnmergedTree = true).performClick()
+        assertTrue("the full address wraps", textLayout("popup-address").lineCount > 1)
+    }
+
+    private fun textLayout(tag: String): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!(results)
+        return results.single()
+    }
+
+    @Test
+    fun aHalfTypedAddressSurvivesTheCollapsedRail() {
+        loadAndWait(titled("one"), "one navigate")
+        show(TABLET_LANDSCAPE)
+        compose.onNodeWithContentDescription("Hide sidebar").performClick()
+        compose.onNodeWithTag("sidebar-rail").assertExists()
+
+        windowSize = PHONE_PORTRAIT
+        compose.waitForIdle()
+        compose.onNodeWithTag("address").performClick()
+        compose.onNodeWithTag("address").performTextReplacement("half typed")
+
+        // Back to the wide window: the Sidebar opens instead of the Rail, with the draft in its field.
+        windowSize = TABLET_LANDSCAPE
+        compose.waitForIdle()
+        compose.onNodeWithTag("sidebar").assertExists()
+        compose.onNodeWithTag("address").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("half typed")),
+        )
+        compose.onNodeWithTag("address").assertIsFocused()
     }
 
     @Test

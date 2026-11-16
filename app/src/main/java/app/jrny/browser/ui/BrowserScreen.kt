@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,11 +32,12 @@ fun BrowserScreen(tab: Tab) {
     }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
     HideStatusBar()
-    // One address field that moves between the layouts with its state, so a half-typed
-    // address survives a resize across 840dp.
+    // One address field that moves between the layouts, and its draft kept here, so a
+    // half-typed address survives a resize across 840dp.
+    val draft = remember(tab) { AddressDraft() }
     val movableAddressField = remember(tab) {
         movableContentOf { modifier: Modifier, shape: Shape, layout: BrowserLayout ->
-            AddressField(tab, modifier, shape, layout)
+            AddressField(tab, draft, modifier, shape, layout)
         }
     }
 
@@ -43,6 +45,11 @@ fun BrowserScreen(tab: Tab) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val layout = BrowserLayout.forWindowWidth(maxWidth.value)
             val addressField: AddressFieldSlot = { modifier, shape -> movableAddressField(modifier, shape, layout) }
+            // Mid-edit when the window widens: open the Sidebar, which holds the address field,
+            // even if it was collapsed to the Rail.
+            LaunchedEffect(layout) {
+                if (layout == BrowserLayout.Sidebar && draft.value != null) sidebarCollapsed = false
+            }
             when (layout) {
                 BrowserLayout.Sidebar ->
                     SidebarLayout(tab, addressField, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
