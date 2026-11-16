@@ -249,27 +249,37 @@ class BrowserState(
         }
     }
 
+    /**
+     * Counts the person's choices of which Tab to show. Choosing a saved Tab is written to the
+     * database before the Private Tab selection is lifted. If another choice was made meanwhile,
+     * the earlier one must not undo it.
+     */
+    private var tabChoices = 0
+
     /** Opens an empty Tab in the Active Profile and shows it. */
     fun openTab(profile: Profile) {
+        val choice = ++tabChoices
         scope.launch {
             tabRepository.open(profile.id)
-            privateTabs.select(profile.id, null)
+            if (choice == tabChoices) privateTabs.select(profile.id, null)
         }
     }
 
     /** Opens an empty Private Tab in [profile] and shows it (SPEC, "Private Tabs"). */
     fun openPrivateTab(profile: Profile) {
+        tabChoices++
         privateTabs.open(profile.id)
     }
 
     /** Shows the Tab [id], one of [profile]'s. */
     fun selectTab(profile: Profile, id: TabId) {
+        val choice = ++tabChoices
         if (id.isPrivate) {
             privateTabs.select(profile.id, id)
         } else {
             scope.launch {
                 tabRepository.select(id)
-                privateTabs.select(profile.id, null)
+                if (choice == tabChoices) privateTabs.select(profile.id, null)
             }
         }
     }

@@ -478,6 +478,29 @@ class BrowserStateTest {
     }
 
     @Test
+    fun aPrivateTabChosenRightAfterASavedTabStaysChosen() {
+        val browser = newBrowser()
+        val profile = active(browser).profile
+        val normal = active(browser).selected.id
+        show(browser, normal)
+        val (private, _) = openPrivate(browser)
+        val other = runBlocking { tabs.open(profile.id) }
+        await("other listed") { browser.active.value?.tabs?.any { it.id == other } == true }
+
+        // The saved Tab's choice is still being written when the Private Tab is chosen.
+        onMain {
+            browser.selectTab(profile, normal)
+            browser.selectTab(profile, private)
+        }
+        Thread.sleep(500)
+        assertEquals(private, active(browser).selected.id)
+
+        // A saved Tab chosen last wins as before.
+        onMain { browser.selectTab(profile, normal) }
+        await("saved tab shown") { browser.active.value?.selected?.id == normal }
+    }
+
+    @Test
     fun anIncomingLinkNeverOpensInAPrivateTab() {
         val browser = newBrowser()
         show(browser, active(browser).selected.id)

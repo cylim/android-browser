@@ -2,7 +2,7 @@
 
 An Android browser with separate Profiles, so you can stay signed in to a different account on the same site in each one. For example, work Google in one Profile and personal Google in another.
 
-> **Status:** early development. You can create, switch, edit and delete Profiles, each with its own Tabs and its own sign-ins. Tabs come back after Android kills the app. Each Profile keeps its own history, bookmarks and downloads, and can open Private Tabs. A Tab can be moved to another Profile or opened in one, and links from other apps open in the Active Profile. This project is built in public. See the [roadmap](docs/ROADMAP.md).
+> **Status:** early development. You can create, switch, edit and delete Profiles, each with its own Tabs and its own sign-ins. Tabs come back after Android kills the app (Private Tabs do not). Each Profile keeps its own history, bookmarks and downloads, and can open Private Tabs. A Tab can be moved to another Profile or opened in one, and links from other apps open in the Active Profile. This project is built in public. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
