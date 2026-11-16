@@ -298,12 +298,22 @@ class BrowserState(
      */
     fun startDownload(profile: Profile, request: DownloadRequest) {
         if (!request.supported) return
-        val cookies = WebProfile.of(profile.id).cookieManager.getCookie(request.url)
+        val cookieManager = WebProfile.of(profile.id).cookieManager
         scope.launch {
-            val id = withContext(Dispatchers.IO) { downloader.start(request, cookies) }
+            val id = withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) }
             // The Profile was deleted meanwhile: nothing of it is fetched or listed any more.
             if (!downloadRepository.add(profile.id, id, request)) withContext(Dispatchers.IO) { downloader.cancel(id) }
         }
+    }
+
+    /**
+     * Starts [request] at the address its redirects end at, with only that address's cookies.
+     * Followed here, each hop gets the cookies of its own site; left to the download service,
+     * the first site's cookies would travel along to every site a redirect leads to.
+     */
+    private fun startAtFinalAddress(request: DownloadRequest, cookiesFor: (String) -> String?): Long {
+        val address = downloader.resolve(request.url, request.userAgent, cookiesFor)
+        return downloader.start(request.copy(url = address), cookiesFor(address))
     }
 
     /** Where each of [downloads] stands, by its list id. */
@@ -315,10 +325,17 @@ class BrowserState(
     /** Opens a finished download. False when no app can show it, or the file is gone. */
     fun openDownload(download: Download): Boolean = downloader.open(download)
 
-    /** Takes [download] off the list. One that is still running is stopped; a finished file stays on the device. */
-    fun removeDownload(download: Download, running: Boolean) {
+    /**
+     * Takes [download] off the list. One that is still running is stopped first; a finished file
+     * stays on the device. Whether it is running is asked now, not taken from what the list last
+     * showed, so a download never keeps running without a row.
+     */
+    fun removeDownload(download: Download) {
         scope.launch {
-            if (running) withContext(Dispatchers.IO) { downloader.cancel(download.downloadId) }
+            withContext(Dispatchers.IO) {
+                val status = downloader.statuses(listOf(download.downloadId))[download.downloadId]
+                if (status is DownloadStatus.Running) downloader.cancel(download.downloadId)
+            }
             downloadRepository.remove(download)
         }
     }

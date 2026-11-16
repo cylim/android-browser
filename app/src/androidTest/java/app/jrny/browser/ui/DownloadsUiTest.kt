@@ -50,7 +50,7 @@ class DownloadsUiTest {
     private var statuses by mutableStateOf(emptyMap<Long, DownloadStatus>())
     private val started = mutableListOf<DownloadRequest>()
     private val opened = mutableListOf<Download>()
-    private val removed = mutableListOf<Pair<Download, Boolean>>()
+    private val removed = mutableListOf<Download>()
     private var canOpen = true
 
     @Before
@@ -84,7 +84,7 @@ class DownloadsUiTest {
                             opened += it
                             canOpen
                         },
-                        removeDownload = { download, running -> removed += download to running },
+                        removeDownload = { removed += it },
                     ),
                 )
             }
@@ -163,10 +163,10 @@ class DownloadsUiTest {
         compose.onNodeWithText("done.pdf").performClick()
         assertEquals(listOf(downloads[1]), opened)
 
-        // A running download is cancelled; a finished one only leaves the list.
+        // The button says what it will do: cancel a running download, take a finished one off the list.
         compose.onNodeWithContentDescription("Cancel the download of running.pdf").performClick()
         compose.onNodeWithContentDescription("Remove done.pdf from the list").performClick()
-        assertEquals(listOf(downloads[0] to true, downloads[1] to false), removed)
+        assertEquals(listOf(downloads[0], downloads[1]), removed)
     }
 
     @Test

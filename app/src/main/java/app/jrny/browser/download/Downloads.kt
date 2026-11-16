@@ -98,6 +98,12 @@ interface Downloader {
 
     /** Stops a running download and discards what it fetched. */
     fun cancel(downloadId: Long)
+
+    /**
+     * The address a download of [url] ends up at after its redirects. [cookiesFor] gives the
+     * cookies that belong to an address, so each hop gets only its own (see [DownloadRedirects]).
+     */
+    fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String = url
 }
 
 /** Each Profile's list of downloads (SPEC, "Browsing features"). */

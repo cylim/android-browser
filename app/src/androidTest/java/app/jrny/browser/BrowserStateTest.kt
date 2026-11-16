@@ -338,12 +338,51 @@ class BrowserStateTest {
 
         // Removing a running download stops it. A file that isn't a web address is never started.
         val running = onMain { browser.downloads.value.single() }
-        onMain { browser.removeDownload(running, running = true) }
+        onMain { browser.removeDownload(running) }
         await("removed") { browser.downloads.value.isEmpty() }
         assertEquals(listOf(running.downloadId), downloader.cancelled.toList())
         onMain { browser.startDownload(work, file.copy(url = "blob:https://example.com/abc")) }
         Thread.sleep(300)
         assertEquals(2, downloader.started.size)
+    }
+
+    @Test
+    fun aDownloadThatRedirectsToAnotherSiteDoesNotTakeTheFirstSitesCookiesAlong() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        val session = "jrny_session=${System.nanoTime()}"
+        val set = java.util.concurrent.CountDownLatch(1)
+        onMain { WebProfile.of(personal.id).cookieManager.setCookie("https://example.com", "$session; Max-Age=600; Secure; Path=/") { set.countDown() } }
+        assertTrue(set.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        downloader.redirects["https://example.com/get/report"] = "https://files.example.net/report.pdf"
+
+        onMain { browser.startDownload(personal, DownloadRequest("https://example.com/get/report", "TestAgent", "report.pdf", "application/pdf", -1)) }
+        await("started") { downloader.started.size == 1 }
+
+        // The download service starts at the other site, without example.com's session cookie.
+        val started = downloader.started.single()
+        assertEquals("https://files.example.net/report.pdf", started.request.url)
+        assertFalse(started.cookies.orEmpty().contains(session))
+        // The Profile's list still names the address the page linked.
+        await("listed") { browser.downloads.value.size == 1 }
+        assertEquals("https://example.com/get/report", onMain { browser.downloads.value.single().url })
+    }
+
+    @Test
+    fun removingADownloadStopsItIfItIsStillRunningWhateverTheListLastShowed() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        onMain { browser.startDownload(personal, DownloadRequest("https://example.com/a.zip", "", "a.zip", "application/zip", -1)) }
+        onMain { browser.startDownload(personal, DownloadRequest("https://example.com/b.zip", "", "b.zip", "application/zip", -1)) }
+        await("listed") { browser.downloads.value.size == 2 }
+        val (b, a) = onMain { browser.downloads.value }
+        downloader.status[a.downloadId] = DownloadStatus.Done(10)
+
+        onMain { browser.removeDownload(a) }
+        onMain { browser.removeDownload(b) }
+        await("removed") { browser.downloads.value.isEmpty() }
+        // Only the one that was still running is cancelled. The finished file stays.
+        assertEquals(listOf(b.downloadId), downloader.cancelled.toList())
     }
 
     @Test

@@ -24,7 +24,9 @@ class SystemDownloader(private val context: Context) : Downloader {
         if (request.mimeType.isNotBlank()) download.setMimeType(request.mimeType)
         if (request.userAgent.isNotBlank()) download.addRequestHeader("User-Agent", request.userAgent)
         if (!request.referrer.isNullOrBlank()) download.addRequestHeader("Referer", request.referrer)
-        // The Profile's cookies, so a file behind that Profile's sign-in downloads as the page would get it.
+        // The Profile's cookies for this address, so a file behind that Profile's sign-in downloads
+        // as the page would get it. The address is the one the redirects end at (resolve): the
+        // download service would pass this header on to wherever a redirect leads.
         if (!cookies.isNullOrBlank()) download.addRequestHeader("Cookie", cookies)
         return manager.enqueue(download)
     }
@@ -66,4 +68,7 @@ class SystemDownloader(private val context: Context) : Downloader {
     override fun cancel(downloadId: Long) {
         manager.remove(downloadId)
     }
+
+    override fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String =
+        DownloadRedirects.resolve(url, userAgent, cookiesFor)
 }

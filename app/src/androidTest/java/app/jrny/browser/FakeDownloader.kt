@@ -15,6 +15,11 @@ class FakeDownloader : Downloader {
     val status = java.util.concurrent.ConcurrentHashMap<Long, DownloadStatus>()
     var canOpen = true
 
+    /** Where an address "redirects" to. Addresses not listed here don't redirect. */
+    val redirects = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    override fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String = redirects[url] ?: url
+
     override fun start(request: DownloadRequest, cookies: String?): Long {
         val id = 100L + started.size
         started += Started(id, request, cookies)

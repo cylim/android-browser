@@ -20,6 +20,9 @@ import kotlin.concurrent.thread
  */
 class TestServer(private val pages: Map<String, String>) : AutoCloseable {
 
+    /** Every request so far: its path and the `Cookie` header it carried (empty when none). */
+    val requests: MutableList<Pair<String, String>> = java.util.concurrent.CopyOnWriteArrayList()
+
     /**
      * The device's own network address, not 127.0.0.1: Android lets cleartext to localhost
      * through even when it blocks it everywhere else, so a loopback test would prove nothing.
@@ -65,6 +68,7 @@ class TestServer(private val pages: Map<String, String>) : AutoCloseable {
                 if (header.isNullOrEmpty()) break
                 if (header.startsWith("Cookie:", ignoreCase = true)) cookies = header.substringAfter(':').trim()
             }
+            requests += path to cookies
             val page = pages[path]
             val redirect = page?.removePrefix("redirect:")?.takeIf { page.startsWith("redirect:") }
             val setCookie = page?.removePrefix("set-cookie:")?.takeIf { page.startsWith("set-cookie:") }

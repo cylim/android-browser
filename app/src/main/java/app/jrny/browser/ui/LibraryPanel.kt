@@ -73,8 +73,8 @@ class LibraryUi(
     val downloadStatuses: suspend (List<Download>) -> Map<Long, DownloadStatus> = { emptyMap() },
     /** Opens a finished download. False when nothing on the device can show it. */
     val openDownload: (Download) -> Boolean = { false },
-    /** Takes a download off the list, stopping it first if it is still [running]. */
-    val removeDownload: (Download, running: Boolean) -> Unit = { _, _ -> },
+    /** Takes a download off the list, stopping it first if it is still running. */
+    val removeDownload: (Download) -> Unit = {},
 ) {
     fun isBookmarked(url: String?): Boolean = url != null && bookmarks.any { it.url == url }
 }
@@ -292,7 +292,7 @@ private fun DownloadList(library: LibraryUi, contentPadding: PaddingValues) {
             deleteIcon = if (running) Icons.Filled.Close else Icons.Filled.Delete,
             enabled = status is DownloadStatus.Done,
             onOpen = { if (!library.openDownload(download)) cantOpen = true },
-            onDelete = { library.removeDownload(download, running) },
+            onDelete = { library.removeDownload(download) },
         )
     }
     if (cantOpen) {
