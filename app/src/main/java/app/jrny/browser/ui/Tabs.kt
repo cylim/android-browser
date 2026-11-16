@@ -29,6 +29,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalViewConfiguration
+import app.jrny.browser.library.Folder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -141,9 +146,121 @@ fun TabList(
     fun <T> mover(list: List<T>, index: Int, by: Int, reorder: (List<T>) -> Unit): (() -> Unit)? =
         if (index + by !in list.indices) null else ({ reorder(list.toMutableList().apply { add(index + by, removeAt(index)) }) })
 
+    // Dragging: a row of the Pinned section that is held follows the finger. While it does, the
+    // list shows the order it would have if let go now, and keeps showing it until the saved
+    // order arrives, so the row doesn't jump back for a moment.
+    val listState = rememberLazyListState()
+    val drag = remember(listState) { PinnedDragState(listState) }
+    var draggedOrder by remember { mutableStateOf<List<PinnedItem>?>(null) }
+    LaunchedEffect(pins.items) { draggedOrder = null }
+    val items = draggedOrder ?: pins.items
+    val latestPins by rememberUpdatedState(pins)
+    // The order as it stands this instant, for the drag: a change made by the last move of the
+    // finger counts before the list has been drawn again.
+    fun orderNow(): List<PinnedItem> = draggedOrder ?: latestPins.items
+    /** The Folder a held Pinned Tab is over: let go there, it goes in. */
+    var dropFolder by remember { mutableStateOf<Long?>(null) }
+    val slop = LocalViewConfiguration.current.touchSlop
+
+    fun pinKey(bookmark: Bookmark) = "pin-${bookmark.id}"
+    fun folderKey(folder: Folder) = "folder-${folder.id}"
+    fun keyOf(entry: PinnedItem) = when (entry) {
+        is PinnedItem.Page -> pinKey(entry.bookmark)
+        is PinnedItem.Group -> folderKey(entry.folder)
+    }
+    fun <T> List<T>.swapped(a: Int, b: Int): List<T> = toMutableList().apply { this[a] = this@swapped[b]; this[b] = this@swapped[a] }
+    fun ClosedFloatingPointRange<Float>.middle() = (start + endInclusive) / 2
+
+    /**
+     * A top-level row is being dragged. Past the middle of the Pinned Tab next to it, the two
+     * change places. A Folder next to it is passed once its own row is passed; while a Pinned Tab
+     * is over that row, the Folder is where it would be dropped.
+     */
+    fun dragTop(key: String) {
+        val center = drag.center() ?: return
+        val order = orderNow()
+        val index = order.indexOfFirst { keyOf(it) == key }
+        if (index < 0) return
+        val next = order.getOrNull(index + 1)
+        val previous = order.getOrNull(index - 1)
+        dropFolder = if (order[index] !is PinnedItem.Page) {
+            null
+        } else {
+            listOfNotNull(next, previous).filterIsInstance<PinnedItem.Group>()
+                .firstOrNull { drag.bounds(folderKey(it.folder))?.contains(center) == true }?.folder?.id
+        }
+        if (dropFolder != null) return
+        fun edge(entry: PinnedItem, below: Boolean): Float? = when (entry) {
+            is PinnedItem.Page -> drag.bounds(pinKey(entry.bookmark))?.middle()
+            is PinnedItem.Group -> drag.bounds(folderKey(entry.folder))?.let { if (below) it.endInclusive else it.start }
+        }
+        val down = next?.let { edge(it, below = true) }
+        val up = previous?.let { edge(it, below = false) }
+        when {
+            down != null && center > down -> draggedOrder = order.swapped(index, index + 1)
+            up != null && center < up -> draggedOrder = order.swapped(index, index - 1)
+        }
+    }
+
+    /** Let go: into the Folder it was over, or to its new place. */
+    fun dropTop(key: String) {
+        val target = dropFolder
+        dropFolder = null
+        val order = draggedOrder
+        val dropped = latestPins.items.firstOrNull { keyOf(it) == key }
+        val folder = latestPins.folders.firstOrNull { it.id == target }
+        if (folder != null && dropped is PinnedItem.Page) {
+            draggedOrder = null
+            latestPins.move(dropped.bookmark, folder)
+        } else if (order != null && order.map(::keyOf) != latestPins.items.map(::keyOf)) {
+            latestPins.reorder(order)
+        } else {
+            draggedOrder = null
+        }
+    }
+
+    /** A Folder's row is being dragged: it changes places with the rows next to it in the Folder. */
+    fun dragInFolder(folderId: Long, key: String) {
+        val center = drag.center() ?: return
+        val order = orderNow()
+        val at = order.indexOfFirst { it is PinnedItem.Group && it.folder.id == folderId }
+        val folder = (order.getOrNull(at) as? PinnedItem.Group)?.folder ?: return
+        val index = folder.bookmarks.indexOfFirst { pinKey(it) == key }
+        if (index < 0) return
+        val down = folder.bookmarks.getOrNull(index + 1)?.let { drag.bounds(pinKey(it)) }?.middle()
+        val up = folder.bookmarks.getOrNull(index - 1)?.let { drag.bounds(pinKey(it)) }?.middle()
+        val swapped = when {
+            down != null && center > down -> folder.bookmarks.swapped(index, index + 1)
+            up != null && center < up -> folder.bookmarks.swapped(index, index - 1)
+            else -> return
+        }
+        draggedOrder = order.toMutableList().also { it[at] = PinnedItem.Group(folder.copy(bookmarks = swapped)) }
+    }
+
+    /** Let go: out of the Folder, when dragged past its first or last row, or to its new place in it. */
+    fun dropInFolder(folderId: Long, key: String) {
+        val center = drag.center()
+        val shown = (orderNow().firstOrNull { it is PinnedItem.Group && it.folder.id == folderId } as? PinnedItem.Group)?.folder
+        val saved = latestPins.folders.firstOrNull { it.id == folderId }
+        val bookmark = saved?.bookmarks?.firstOrNull { pinKey(it) == key }
+        // The Folder's rows as the list has laid them out, the held one's own place among them.
+        val top = shown?.let { drag.bounds(folderKey(it)) }?.start
+        val bottom = shown?.bookmarks?.mapNotNull { drag.bounds(pinKey(it))?.endInclusive }?.maxOrNull()
+        val outside = center != null && top != null && bottom != null && (center < top || center > bottom)
+        if (bookmark != null && outside) {
+            draggedOrder = null
+            latestPins.move(bookmark, null)
+        } else if (shown != null && saved != null && shown.bookmarks.map { it.id } != saved.bookmarks.map { it.id }) {
+            latestPins.reorderIn(shown.bookmarks)
+        } else {
+            draggedOrder = null
+        }
+    }
+
     @Composable
-    fun Pinned(bookmark: Bookmark, indent: Dp = 0.dp, onMoveUp: (() -> Unit)?, onMoveDown: (() -> Unit)?) {
+    fun Pinned(bookmark: Bookmark, inFolder: Folder? = null, onMoveUp: (() -> Unit)?, onMoveDown: (() -> Unit)?) {
         val open = openTabs[bookmark.id]
+        val key = pinKey(bookmark)
         PinnedRow(
             bookmark,
             openTab = open,
@@ -157,14 +274,27 @@ fun TabList(
             },
             onClose = { open?.let { tabs.close(it.id) } },
             onDialog = { dialog = it },
-            indent = indent,
+            indent = if (inFolder != null) FOLDER_INDENT else 0.dp,
             onMoveUp = onMoveUp,
             onMoveDown = onMoveDown,
+            drag = { openMenu ->
+                Modifier.pinnedDrag(
+                    drag,
+                    key,
+                    slop,
+                    onHeld = openMenu,
+                    onDrag = { if (inFolder != null) dragInFolder(inFolder.id, key) else dragTop(key) },
+                    onDrop = { if (inFolder != null) dropInFolder(inFolder.id, key) else dropTop(key) },
+                    // A Folder's rows go along while the Folder is dragged.
+                    with = inFolder?.let(::folderKey),
+                )
+            },
+            lifted = drag.key == key && drag.moved,
         )
     }
 
-    LazyColumn(modifier.testTag("tab-list"), contentPadding = contentPadding) {
-        if (pins.items.isNotEmpty()) {
+    LazyColumn(modifier.testTag("tab-list"), state = listState, contentPadding = contentPadding) {
+        if (items.isNotEmpty()) {
             item(key = "pinned-label") {
                 SectionLabel(stringResource(R.string.pinned)) {
                     IconButton(onClick = { dialog = PinDialog.NewFolder(null) }, modifier = Modifier.testTag("new-folder")) {
@@ -172,15 +302,16 @@ fun TabList(
                     }
                 }
             }
-            pins.items.forEachIndexed { index, entry ->
+            items.forEachIndexed { index, entry ->
                 // The top level in its new order, when this entry can go that way.
-                val up = mover(pins.items, index, -1, pins.reorder)
-                val down = mover(pins.items, index, 1, pins.reorder)
+                val up = mover(items, index, -1, pins.reorder)
+                val down = mover(items, index, 1, pins.reorder)
                 when (entry) {
-                    is PinnedItem.Page -> item(key = "pin-${entry.bookmark.id}") { Pinned(entry.bookmark, onMoveUp = up, onMoveDown = down) }
+                    is PinnedItem.Page -> item(key = pinKey(entry.bookmark)) { Pinned(entry.bookmark, onMoveUp = up, onMoveDown = down) }
                     is PinnedItem.Group -> {
                         val folder = entry.folder
-                        item(key = "folder-${folder.id}") {
+                        val key = folderKey(folder)
+                        item(key = key) {
                             FolderRow(
                                 folder,
                                 shape,
@@ -188,13 +319,18 @@ fun TabList(
                                 onDialog = { dialog = it },
                                 onMoveUp = up,
                                 onMoveDown = down,
+                                drag = { openMenu ->
+                                    Modifier.pinnedDrag(drag, key, slop, onHeld = openMenu, onDrag = { dragTop(key) }, onDrop = { dropTop(key) })
+                                },
+                                lifted = drag.key == key && drag.moved,
+                                dropTarget = dropFolder == folder.id,
                             )
                         }
                         if (!folder.collapsed) {
-                            itemsIndexed(folder.bookmarks, key = { _, bookmark -> "pin-${bookmark.id}" }) { place, bookmark ->
+                            itemsIndexed(folder.bookmarks, key = { _, bookmark -> pinKey(bookmark) }) { place, bookmark ->
                                 Pinned(
                                     bookmark,
-                                    indent = FOLDER_INDENT,
+                                    inFolder = folder,
                                     onMoveUp = mover(folder.bookmarks, place, -1, pins.reorderIn),
                                     onMoveDown = mover(folder.bookmarks, place, 1, pins.reorderIn),
                                 )
@@ -207,7 +343,7 @@ fun TabList(
         }
         if (tabsHeader != null) {
             item(key = "tabs-label") { tabsHeader() }
-        } else if (pins.items.isNotEmpty()) {
+        } else if (items.isNotEmpty()) {
             item(key = "tabs-label") { SectionLabel(stringResource(R.string.tabs)) }
         }
         items(others, key = { it.id.value }) { tab ->

@@ -631,9 +631,16 @@ class BrowserStateTest {
             await("personal active") { browser.active.value?.profile?.id == personal.id }
             val id = runBlocking { tabs.open(personal.id) }
             val tab = show(browser, id)
-            load(tab, server.url("/icon"), "Icon page")
-
-            await("icon kept") { browser.siteIcons.cached(personal.id, server.url("/")) != null }
+            // WebView reports a page's icon some time after the page, and on a slow device not
+            // on every load of a page nobody is looking at. Loading it again asks again.
+            var kept = false
+            repeat(4) {
+                if (!kept) {
+                    load(tab, server.url("/icon"), "Icon page")
+                    kept = runCatching { await("icon kept", timeoutMs = 8_000) { browser.siteIcons.cached(personal.id, server.url("/")) != null } }.isSuccess
+                }
+            }
+            assertTrue("the page's icon was never reported", kept)
             // Only in the Profile that showed the page.
             assertEquals(null, runBlocking { siteIcons.load(work.id, server.url("/")) })
             val before = onMain { browser.siteIcons.version.value }

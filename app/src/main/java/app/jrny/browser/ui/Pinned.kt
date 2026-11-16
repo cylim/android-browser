@@ -1,6 +1,7 @@
 package app.jrny.browser.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -146,8 +147,9 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, action: @Composabl
 /**
  * A bookmark as a Pinned Tab. It is open while [openTab] shows it: then it has a close button,
  * which closes the Tab and keeps the bookmark. A closed one is dimmed, and a tap opens it. A long
- * press opens its menu: rename, move to a Folder, move up or down, unpin. [indent] sets a
- * Folder's bookmarks in.
+ * press opens its menu: rename, move to a Folder, move up or down, unpin. Held and dragged, it
+ * goes to another place in its list, into a Folder or out of one. [indent] sets a Folder's
+ * bookmarks in.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -165,22 +167,31 @@ fun PinnedRow(
     /** Moves the row one place up (-1) or down (1) in its list, or null at that end of it. */
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
+    /**
+     * Makes the row one that can be held and dragged, given what opens its menu. Then holding it
+     * opens the menu only when it is let go without having been dragged.
+     */
+    drag: ((openMenu: () -> Unit) -> Modifier)? = null,
+    /** True while the row is held and follows the finger: it is drawn as a card above the others. */
+    lifted: Boolean = false,
 ) {
     val label = bookmarkLabel(bookmark)
     var menu by remember { mutableStateOf(false) }
     val state = stringResource(if (openTab != null) R.string.pinned_open else R.string.pinned_closed)
-    Box {
+    Box(drag?.invoke { menu = true } ?: Modifier) {
         Surface(
-            color = if (selected) selectedColor else Color.Transparent,
-            contentColor = if (selected) MaterialTheme.colorScheme.onSurface else LocalContentColor.current,
+            color = if (selected || lifted) selectedColor else Color.Transparent,
+            contentColor = if (selected || lifted) MaterialTheme.colorScheme.onSurface else LocalContentColor.current,
             shape = shape,
+            shadowElevation = if (lifted) 6.dp else 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(shape)
                 .combinedClickable(
                     role = Role.Tab,
                     onLongClickLabel = stringResource(R.string.more_actions),
-                    onLongClick = { menu = true },
+                    // With dragging, the hold is the drag's to answer: the menu waits for the finger to lift.
+                    onLongClick = { if (drag == null) menu = true },
                     onClick = onOpen,
                 )
                 .semantics {
@@ -243,20 +254,31 @@ fun FolderRow(
     onDialog: (PinDialog) -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
+    /** As for a Pinned Tab's row: makes the Folder one that can be held and dragged. */
+    drag: ((openMenu: () -> Unit) -> Modifier)? = null,
+    lifted: Boolean = false,
+    /** True while a Pinned Tab is held over the Folder: let go, it goes in. */
+    dropTarget: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     val state = stringResource(if (folder.collapsed) R.string.folder_collapsed else R.string.folder_expanded)
-    Box {
+    val background = when {
+        dropTarget -> MaterialTheme.colorScheme.primaryContainer
+        lifted -> MaterialTheme.colorScheme.surface
+        else -> Color.Transparent
+    }
+    Box(drag?.invoke { menu = true } ?: Modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = if (LocalCompactTabs.current) COMPACT_ROW_HEIGHT else PINNED_ROW_HEIGHT)
                 .clip(shape)
+                .background(background)
                 .combinedClickable(
                     role = Role.Button,
                     onLongClickLabel = stringResource(R.string.more_actions),
-                    onLongClick = { menu = true },
+                    onLongClick = { if (drag == null) menu = true },
                     onClick = { pins.setCollapsed(folder, !folder.collapsed) },
                 )
                 .semantics { stateDescription = state }

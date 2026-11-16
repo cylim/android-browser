@@ -39,6 +39,7 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - A Pinned Tab keeps its bookmark's name and address when its page moves on. Its menu then offers the way back to the pinned page.
 - Pinned Tabs can be grouped in **Folders**, one level deep. A Folder can be collapsed, renamed and deleted; deleting it keeps its bookmarks, at the top level.
 - New bookmarks and Folders go to the end. A bookmark moved into or out of a Folder goes to that list's end.
+- A Pinned Tab or a Folder that is held follows the finger. Dragged past the row next to it, the two change places; a Pinned Tab let go on a Folder's row goes into that Folder, and one dragged past its Folder's first or last row leaves it. Let go without having been dragged, the row opens its menu, where "Move up" and "Move down" do the same without dragging.
 - The Bookmarks panel lists the same bookmarks, each Folder under its name. Choosing one there opens its Pinned Tab.
 
 ### Styling
