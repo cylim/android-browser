@@ -23,8 +23,8 @@ object TestProfiles {
 
 /** Tabs for UI tests that don't need a database, recording what was asked. */
 object TestTabs {
-    fun tab(id: Long, title: String = "", url: String? = null, selected: Boolean = false) =
-        SavedTab(TabId(id), TestProfiles.personal.id, url, title, scrollY = 0, selected = selected)
+    fun tab(id: Long, title: String = "", url: String? = null, selected: Boolean = false, bookmarkId: Long? = null) =
+        SavedTab(TabId(id), TestProfiles.personal.id, url, title, scrollY = 0, selected = selected, bookmarkId = bookmarkId)
 
     val one = tab(1, "one navigate", "http://example.com/one", selected = true)
 
@@ -38,6 +38,7 @@ object TestTabs {
         openedIn: MutableList<Profile> = mutableListOf(),
         incomingLink: Boolean = false,
         dismissIncomingLink: () -> Unit = {},
+        pins: PinsUi = PinsUi(),
     ) = TabsUi(
         all,
         selected,
@@ -48,5 +49,6 @@ object TestTabs {
         openIn = { openedIn += it },
         linkOffer = if (incomingLink) LinkOffer.Opened(selected.id) else null,
         dismissIncomingLink = dismissIncomingLink,
+        pins = pins,
     )
 }

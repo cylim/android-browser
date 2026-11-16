@@ -125,8 +125,12 @@ jobs:
           profile: ${{ matrix.device.profile }}
           ram-size: ${{ matrix.device.ram }}
           disable-animations: true
+          # No "isn't responding" dialogs from the emulator's own apps: one of those takes the
+          # focus from the app's window, and every test that presses Back then times out.
           # On failure, print each failing test so the log says what broke.
-          script: ./gradlew connectedDebugAndroidTest || { grep -rh -A8 '<failure' app/build/outputs/androidTest-results; exit 1; }
+          script: |
+            adb shell settings put global hide_error_dialogs 1
+            ./gradlew connectedDebugAndroidTest || { grep -rh -A8 '<failure' app/build/outputs/androidTest-results; exit 1; }
 
       - name: Upload the device test reports
         if: always()

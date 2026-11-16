@@ -1,6 +1,19 @@
 package app.jrny.browser.ui
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import app.jrny.browser.address.WebAddress
+import app.jrny.browser.library.Bookmark
+import app.jrny.browser.library.PinnedItem
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -68,6 +82,8 @@ class TabsUi(
     val dismissIncomingLink: () -> Unit = {},
     /** Takes up the offered Site Rule ([LinkOffer.Always]). */
     val acceptRuleOffer: () -> Unit = {},
+    /** The Profile's bookmarks as its Pinned Tabs. */
+    val pins: PinsUi = PinsUi(),
 ) {
     /** True while the selected Tab is one an Incoming Link just opened. */
     val incomingLink: Boolean get() = linkOffer is LinkOffer.Opened
@@ -85,10 +101,14 @@ fun tabLabel(tab: SavedTab): String =
     tab.pageTitle ?: tab.displayHost.ifEmpty { stringResource(if (tab.isPrivate) R.string.new_private_tab else R.string.new_tab) }
 
 /**
- * The Active Profile's Tabs, oldest first, then its Private Tabs, each marked with a lock: the
- * Sidebar's list and the Tab Overview. The selected Tab sits on a [selectedColor] card. Rows are
- * [ROW_HEIGHT] tall, text starts [TEXT_INSET] in, and each close button sits in a 48dp slot
- * [ICON_INSET] from the end.
+ * The Active Profile's Tab list, for the Sidebar and the Tab Overview: its Pinned Tabs and
+ * Folders under "Pinned", then its other Tabs, oldest first, then its Private Tabs, each marked
+ * with a lock. The selected Tab sits on a [selectedColor] card. In every row the site mark starts
+ * [LIST_TEXT_INSET] in, the text follows [LIST_ICON_GAP] after it, and the close button sits in a
+ * 48dp slot [LIST_ICON_INSET] from the end.
+ *
+ * "Pinned" shows only once there is something pinned. [tabsHeader] is the label above the other
+ * Tabs; without one, the list labels them "Tabs" itself when there is a Pinned section above.
  *
  * A Private Tab's page is named only while a Private Tab is the one showing, which is when the
  * window can't be captured ([SecureWindow]). Otherwise its row just says "Private Tab".
@@ -101,9 +121,92 @@ fun TabList(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
     onChosen: () -> Unit = {},
+    tabsHeader: (@Composable () -> Unit)? = null,
 ) {
+    val pins = tabs.pins
+    var dialog by remember { mutableStateOf<PinDialog?>(null) }
+    val listed = pins.bookmarks.map { it.id }.toSet()
+    // A bookmark's open Tab is listed in the bookmark's row, not among the other Tabs.
+    val openTabs = tabs.all.filter { it.bookmarkId in listed }.associateBy { it.bookmarkId }
+    val others = tabs.all.filter { it.bookmarkId !in listed }
+
+    /**
+     * What moves the entry at [index] of [list] [by] places and hands the new order to [reorder],
+     * or null when that would leave the list. The new order is made only when it is asked for.
+     */
+    fun <T> mover(list: List<T>, index: Int, by: Int, reorder: (List<T>) -> Unit): (() -> Unit)? =
+        if (index + by !in list.indices) null else ({ reorder(list.toMutableList().apply { add(index + by, removeAt(index)) }) })
+
+    @Composable
+    fun Pinned(bookmark: Bookmark, indent: Dp = 0.dp, onMoveUp: (() -> Unit)?, onMoveDown: (() -> Unit)?) {
+        val open = openTabs[bookmark.id]
+        PinnedRow(
+            bookmark,
+            openTab = open,
+            selected = open != null && open.id == tabs.selected.id,
+            shape = shape,
+            selectedColor = selectedColor,
+            pins = pins,
+            onOpen = {
+                if (open != null) tabs.select(open.id) else pins.open(bookmark)
+                onChosen()
+            },
+            onClose = { open?.let { tabs.close(it.id) } },
+            onDialog = { dialog = it },
+            indent = indent,
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
+        )
+    }
+
     LazyColumn(modifier.testTag("tab-list"), contentPadding = contentPadding) {
-        items(tabs.all, key = { it.id.value }) { tab ->
+        if (pins.items.isNotEmpty()) {
+            item(key = "pinned-label") {
+                SectionLabel(stringResource(R.string.pinned)) {
+                    IconButton(onClick = { dialog = PinDialog.NewFolder(null) }, modifier = Modifier.testTag("new-folder")) {
+                        Icon(JrnyIcons.NewFolder, stringResource(R.string.new_folder))
+                    }
+                }
+            }
+            pins.items.forEachIndexed { index, entry ->
+                // The top level in its new order, when this entry can go that way.
+                val up = mover(pins.items, index, -1, pins.reorder)
+                val down = mover(pins.items, index, 1, pins.reorder)
+                when (entry) {
+                    is PinnedItem.Page -> item(key = "pin-${entry.bookmark.id}") { Pinned(entry.bookmark, onMoveUp = up, onMoveDown = down) }
+                    is PinnedItem.Group -> {
+                        val folder = entry.folder
+                        item(key = "folder-${folder.id}") {
+                            FolderRow(
+                                folder,
+                                shape,
+                                pins,
+                                onDialog = { dialog = it },
+                                onMoveUp = up,
+                                onMoveDown = down,
+                            )
+                        }
+                        if (!folder.collapsed) {
+                            itemsIndexed(folder.bookmarks, key = { _, bookmark -> "pin-${bookmark.id}" }) { place, bookmark ->
+                                Pinned(
+                                    bookmark,
+                                    indent = FOLDER_INDENT,
+                                    onMoveUp = mover(folder.bookmarks, place, -1, pins.reorderIn),
+                                    onMoveDown = mover(folder.bookmarks, place, 1, pins.reorderIn),
+                                )
+                            }
+                            if (folder.bookmarks.isEmpty()) item(key = "folder-empty-${folder.id}") { EmptyFolderHint() }
+                        }
+                    }
+                }
+            }
+        }
+        if (tabsHeader != null) {
+            item(key = "tabs-label") { tabsHeader() }
+        } else if (pins.items.isNotEmpty()) {
+            item(key = "tabs-label") { SectionLabel(stringResource(R.string.tabs)) }
+        }
+        items(others, key = { it.id.value }) { tab ->
             TabRow(
                 tab,
                 selected = tab.id == tabs.selected.id,
@@ -115,11 +218,16 @@ fun TabList(
                     onChosen()
                 },
                 onClose = { tabs.close(tab.id) },
+                // Only a saved Tab with a web page can be pinned.
+                onPin = if (!tab.isPrivate && WebAddress.isWebAddress(tab.url)) ({ pins.pin(tab) }) else null,
             )
         }
     }
+    dialog?.let { open -> PinDialogs(open, pins, onDialog = { dialog = it }, onDone = { dialog = null }) }
 }
 
+/** A Tab's row. With [onPin], a long press opens its menu: pin it, or close it. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TabRow(
     tab: SavedTab,
@@ -129,47 +237,81 @@ private fun TabRow(
     selectedColor: Color,
     onSelect: () -> Unit,
     onClose: () -> Unit,
+    onPin: (() -> Unit)?,
 ) {
     val label = if (named) tabLabel(tab) else stringResource(R.string.private_tab)
-    Surface(
-        onClick = onSelect,
-        color = if (selected) selectedColor else Color.Transparent,
-        contentColor = if (selected) MaterialTheme.colorScheme.onSurface else LocalContentColor.current,
-        shape = shape,
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics { this.selected = selected }
-            .testTag("tab-row-${tab.id.value}"),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = ROW_HEIGHT)) {
-            if (tab.isPrivate) {
-                // The lock starts on the text line, and the text follows 8dp after it.
-                Icon(
-                    Icons.Filled.Lock,
-                    contentDescription = if (named) stringResource(R.string.private_tab) else null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = TEXT_INSET).size(16.dp).testTag("private-tab-mark"),
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            color = if (selected) selectedColor else Color.Transparent,
+            contentColor = if (selected) MaterialTheme.colorScheme.onSurface else LocalContentColor.current,
+            shape = shape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .combinedClickable(
+                    role = Role.Tab,
+                    onLongClickLabel = if (onPin != null) stringResource(R.string.more_actions) else null,
+                    onLongClick = if (onPin != null) ({ menu = true }) else null,
+                    onClick = onSelect,
                 )
-            }
-            Column(
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = if (tab.isPrivate) 8.dp else TEXT_INSET, top = 8.dp, bottom = 8.dp),
-            ) {
-                Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (named && tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
-                    Text(
-                        tab.displayHost,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                .semantics { this.selected = selected }
+                .testTag("tab-row-${tab.id.value}"),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = ROW_HEIGHT)) {
+                if (tab.isPrivate) {
+                    // The lock sits where another row's site mark does.
+                    Box(Modifier.padding(start = LIST_TEXT_INSET).size(SITE_ICON_SIZE), contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = if (named) stringResource(R.string.private_tab) else null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp).testTag("private-tab-mark"),
+                        )
+                    }
+                } else {
+                    SiteIcon(tab.url, Modifier.padding(start = LIST_TEXT_INSET))
+                }
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP, top = 8.dp, bottom = 8.dp),
+                ) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (named && tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
+                        Text(
+                            tab.displayHost,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                IconButton(onClick = onClose, modifier = Modifier.padding(end = LIST_ICON_INSET).testTag("close-tab")) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.close_tab_named, label))
                 }
             }
-            IconButton(onClick = onClose, modifier = Modifier.padding(end = ICON_INSET).testTag("close-tab")) {
-                Icon(Icons.Filled.Close, stringResource(R.string.close_tab_named, label))
+        }
+        if (onPin != null) {
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(12.dp)) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.pin_tab)) },
+                    leadingIcon = { Icon(JrnyIcons.Pin, contentDescription = null) },
+                    onClick = {
+                        menu = false
+                        onPin()
+                    },
+                    modifier = Modifier.testTag("tab-pin"),
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.close_tab)) },
+                    leadingIcon = { Icon(Icons.Filled.Close, contentDescription = null) },
+                    onClick = {
+                        menu = false
+                        onClose()
+                    },
+                    modifier = Modifier.testTag("tab-close"),
+                )
             }
         }
     }
@@ -233,8 +375,11 @@ private val SWIPE_DISTANCE = 64.dp
 /** Height of a Tab row. */
 private val ROW_HEIGHT: Dp = 56.dp
 
-/** Where a Tab row's text starts. */
-private val TEXT_INSET: Dp = 16.dp
+/** Where a list row's site mark starts, and a section label's text. */
+val LIST_TEXT_INSET: Dp = 16.dp
 
-/** Where a Tab row's 48dp close-button slot ends, so its icon centers 28dp from the row's end. */
-private val ICON_INSET: Dp = 4.dp
+/** Between a row's site mark and its text. */
+val LIST_ICON_GAP: Dp = 12.dp
+
+/** Where a row's 48dp close-button slot ends, so its icon centers 28dp from the row's end. */
+val LIST_ICON_INSET: Dp = 4.dp

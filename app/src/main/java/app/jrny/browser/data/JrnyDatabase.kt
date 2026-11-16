@@ -2,6 +2,7 @@ package app.jrny.browser.data
 
 import android.content.Context
 import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -85,6 +86,9 @@ abstract class ProfileDao {
     @Query("DELETE FROM site_rules WHERE profileId = :id")
     protected abstract suspend fun deleteSiteRules(id: Long)
 
+    @Query("DELETE FROM folders WHERE profileId = :id")
+    protected abstract suspend fun deleteFolders(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -98,7 +102,7 @@ abstract class ProfileDao {
 
     /**
      * Marks [id] for deletion unless it's the last live Profile, and removes its Tabs, history,
-     * bookmarks and list of downloads at once, so no address from it outlives it on disk. The
+     * bookmarks, Folders and list of downloads at once, so no address from it outlives it on disk. The
      * downloaded files are the person's own and stay. The Site Rules that sent links to it go
      * too: those links open in the Active Profile again. Returns whether it did.
      */
@@ -109,6 +113,7 @@ abstract class ProfileDao {
         deleteTabs(id)
         deleteHistory(id)
         deleteBookmarks(id)
+        deleteFolders(id)
         deleteDownloads(id)
         deleteSiteRules(id)
         return true
@@ -138,6 +143,11 @@ data class TabEntity(
     /** The page's vertical scroll position, in pixels. */
     val scrollY: Int = 0,
     val lastUsed: Long = 0,
+    /**
+     * The bookmark this Tab is the open Pinned Tab of, or null for an ordinary Tab (SPEC, "Pinned
+     * Tabs"). A bookmark has at most one. Not a foreign key: the DAOs clear it when the bookmark goes.
+     */
+    val bookmarkId: Long? = null,
 )
 
 @Dao
@@ -169,6 +179,27 @@ abstract class TabDao {
 
     @Query("DELETE FROM tabs WHERE id = :id")
     protected abstract suspend fun deleteRow(id: Long)
+
+    @Query("SELECT * FROM bookmarks WHERE id = :id")
+    protected abstract suspend fun bookmark(id: Long): BookmarkEntity?
+
+    @Query("SELECT id FROM tabs WHERE bookmarkId = :bookmarkId LIMIT 1")
+    protected abstract suspend fun tabOf(bookmarkId: Long): Long?
+
+    /**
+     * Shows the bookmark [bookmarkId] as a Pinned Tab: its open Tab is selected, and a closed one
+     * gets a new Tab that loads the bookmark's address. Returns the Tab's id, or null when the
+     * bookmark is gone.
+     */
+    @Transaction
+    open suspend fun openPinned(bookmarkId: Long): Long? {
+        val pinned = bookmark(bookmarkId) ?: return null
+        tabOf(bookmarkId)?.let { open ->
+            select(open)
+            return open
+        }
+        return insertRow(TabEntity(profileId = pinned.profileId, url = pinned.url, title = pinned.title, lastUsed = maxLastUsed() + 1, bookmarkId = bookmarkId))
+    }
 
     @Query(
         "UPDATE profiles SET activation = (SELECT COALESCE(MAX(activation), 0) + 1 FROM profiles) " +
@@ -319,7 +350,10 @@ abstract class HistoryDao {
  */
 data class RecordedVisit(val id: Long, val previousVisitedAt: Long?)
 
-/** One row per bookmarked address, kept per Profile. An address is bookmarked at most once in a Profile. */
+/**
+ * One row per bookmarked address, kept per Profile. An address is bookmarked at most once in a
+ * Profile. The Sidebar lists a Profile's bookmarks as its Pinned Tabs (SPEC, "Pinned Tabs").
+ */
 @Entity(
     tableName = "bookmarks",
     foreignKeys = [
@@ -333,49 +367,204 @@ data class BookmarkEntity(
     val url: String,
     val title: String = "",
     val createdAt: Long,
+    /** The Folder it is in, or null at the top level. Not a foreign key: [BookmarkDao] keeps it right. */
+    val folderId: Long? = null,
+    /**
+     * Its place: lower comes first, among the Profile's top-level bookmarks and Folders, or inside
+     * its Folder. One counter per Profile gives every new or moved item the next number.
+     */
+    @ColumnInfo(defaultValue = "0") val position: Long = 0,
+)
+
+/** One row per Folder, a named group of a Profile's bookmarks. Folders don't nest. */
+@Entity(
+    tableName = "folders",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId")],
+)
+data class FolderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val name: String,
+    /** Its place among the Profile's top-level bookmarks and Folders. */
+    val position: Long = 0,
+    /** Whether the Sidebar hides its bookmarks. */
+    val collapsed: Boolean = false,
+    val createdAt: Long,
 )
 
 @Dao
 abstract class BookmarkDao {
-    /** A Profile's bookmarks, newest first. */
-    @Query("SELECT * FROM bookmarks WHERE profileId = :profileId ORDER BY createdAt DESC, id DESC")
+    /** A Profile's bookmarks, in their order. */
+    @Query("SELECT * FROM bookmarks WHERE profileId = :profileId ORDER BY position, id")
     abstract fun observe(profileId: Long): Flow<List<BookmarkEntity>>
+
+    /** A Profile's Folders, in their order. */
+    @Query("SELECT * FROM folders WHERE profileId = :profileId ORDER BY position, id")
+    abstract fun observeFolders(profileId: Long): Flow<List<FolderEntity>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertRow(bookmark: BookmarkEntity): Long
 
-    @Query("DELETE FROM bookmarks WHERE profileId = :profileId AND url = :url")
-    abstract suspend fun remove(profileId: Long, url: String)
+    @Insert
+    protected abstract suspend fun insertFolder(folder: FolderEntity): Long
+
+    @Query("SELECT * FROM bookmarks WHERE id = :id")
+    protected abstract suspend fun get(id: Long): BookmarkEntity?
+
+    @Query("SELECT * FROM bookmarks WHERE profileId = :profileId AND url = :url")
+    protected abstract suspend fun find(profileId: Long, url: String): BookmarkEntity?
+
+    @Query("SELECT * FROM folders WHERE id = :id")
+    protected abstract suspend fun folder(id: Long): FolderEntity?
+
+    @Query("SELECT * FROM tabs WHERE id = :id")
+    protected abstract suspend fun tab(id: Long): TabEntity?
 
     @Query("DELETE FROM bookmarks WHERE id = :id")
-    abstract suspend fun delete(id: Long)
+    protected abstract suspend fun deleteRow(id: Long)
 
-    /** Bookmarks the address unless the Profile already has it, or is gone. */
-    @Transaction
-    open suspend fun add(bookmark: BookmarkEntity) {
-        if (profileIsLive(bookmark.profileId)) insertRow(bookmark)
-    }
+    @Query("DELETE FROM folders WHERE id = :id")
+    protected abstract suspend fun deleteFolderRow(id: Long)
+
+    /** The Tab that showed the bookmark becomes an ordinary Tab. */
+    @Query("UPDATE tabs SET bookmarkId = NULL WHERE bookmarkId = :bookmarkId")
+    protected abstract suspend fun unpinTabs(bookmarkId: Long)
+
+    @Query("UPDATE tabs SET bookmarkId = :bookmarkId WHERE id = :tabId")
+    protected abstract suspend fun setTabBookmark(tabId: Long, bookmarkId: Long)
+
+    @Query("UPDATE bookmarks SET title = :title WHERE id = :id")
+    abstract suspend fun rename(id: Long, title: String)
+
+    @Query("UPDATE bookmarks SET folderId = :folderId, position = :position WHERE id = :id")
+    protected abstract suspend fun place(id: Long, folderId: Long?, position: Long)
+
+    @Query("UPDATE bookmarks SET folderId = NULL WHERE folderId = :folderId")
+    protected abstract suspend fun emptyFolder(folderId: Long)
+
+    @Query("UPDATE folders SET name = :name WHERE id = :id")
+    abstract suspend fun renameFolder(id: Long, name: String)
+
+    @Query("UPDATE folders SET collapsed = :collapsed WHERE id = :id")
+    abstract suspend fun setCollapsed(id: Long, collapsed: Boolean)
+
+    @Query("UPDATE bookmarks SET position = :position WHERE id = :id AND profileId = :profileId")
+    protected abstract suspend fun setPosition(profileId: Long, id: Long, position: Long)
+
+    @Query("UPDATE folders SET position = :position WHERE id = :id AND profileId = :profileId")
+    protected abstract suspend fun setFolderPosition(profileId: Long, id: Long, position: Long)
+
+    /** The next place in [profileId]'s order, after every bookmark and Folder it has. */
+    @Query(
+        "SELECT 1 + MAX(" +
+            "COALESCE((SELECT MAX(position) FROM bookmarks WHERE profileId = :profileId), 0), " +
+            "COALESCE((SELECT MAX(position) FROM folders WHERE profileId = :profileId), 0))",
+    )
+    protected abstract suspend fun nextPosition(profileId: Long): Long
 
     @Query("SELECT EXISTS(SELECT 1 FROM bookmarks WHERE profileId = :profileId AND url = :url)")
     protected abstract suspend fun has(profileId: Long, url: String): Boolean
 
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+
     /**
-     * Removes the Profile's bookmark of that address if it has one, and adds it otherwise, decided
-     * by what is in the table now. Returns whether the address is bookmarked afterwards.
+     * Bookmarks the address at the end of the Profile's top level, unless the Profile already has
+     * it, or is gone. Returns the bookmark's id either way, or null for a Profile that is gone.
      */
     @Transaction
-    open suspend fun toggle(bookmark: BookmarkEntity): Boolean {
+    open suspend fun add(bookmark: BookmarkEntity): Long? {
+        if (!profileIsLive(bookmark.profileId)) return null
+        find(bookmark.profileId, bookmark.url)?.let { return it.id }
+        return insertRow(bookmark.copy(position = nextPosition(bookmark.profileId)))
+    }
+
+    /** Removes the bookmark. A Tab that showed it as a Pinned Tab stays open as an ordinary Tab. */
+    @Transaction
+    open suspend fun delete(id: Long) {
+        unpinTabs(id)
+        deleteRow(id)
+    }
+
+    @Transaction
+    open suspend fun remove(profileId: Long, url: String) {
+        find(profileId, url)?.let { delete(it.id) }
+    }
+
+    /**
+     * Removes the Profile's bookmark of that address if it has one, and adds it otherwise, decided
+     * by what is in the table now. A newly added bookmark takes the Tab [pinTabId], if that is a
+     * Tab of the same Profile, as its Pinned Tab, in the same step: two quick toggles can't leave
+     * the second one's removal undone by the first one's pinning. Returns whether the address is
+     * bookmarked afterwards.
+     */
+    @Transaction
+    open suspend fun toggle(bookmark: BookmarkEntity, pinTabId: Long? = null): Boolean {
         if (has(bookmark.profileId, bookmark.url)) {
             remove(bookmark.profileId, bookmark.url)
             return false
         }
-        add(bookmark)
-        return has(bookmark.profileId, bookmark.url)
+        val id = add(bookmark) ?: return false
+        if (pinTabId != null && tab(pinTabId)?.profileId == bookmark.profileId) setTabBookmark(pinTabId, id)
+        return true
     }
 
-    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
-    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+    /**
+     * Pins the Tab [tabId]: bookmarks [bookmark]'s address in the Tab's Profile, unless it is
+     * bookmarked already, and makes the Tab that bookmark's Pinned Tab. A bookmark has one Pinned
+     * Tab, so a Tab that showed it before becomes an ordinary Tab, and so does this Tab for a
+     * bookmark it showed before. Returns the bookmark's id, or null when the Tab is gone.
+     */
+    @Transaction
+    open suspend fun pin(tabId: Long, bookmark: BookmarkEntity): Long? {
+        val tab = tab(tabId) ?: return null
+        val id = add(bookmark.copy(profileId = tab.profileId)) ?: return null
+        unpinTabs(id)
+        setTabBookmark(tabId, id)
+        return id
+    }
+
+    /** Moves the bookmark into [folderId], or to the top level with null, at the end. */
+    @Transaction
+    open suspend fun move(id: Long, folderId: Long?) {
+        val bookmark = get(id) ?: return
+        // A Folder of another Profile, or one that is gone, takes nothing.
+        if (folderId != null && folder(folderId)?.profileId != bookmark.profileId) return
+        place(id, folderId, nextPosition(bookmark.profileId))
+    }
+
+    /** Adds an empty Folder at the end of the Profile's top level. Null for a Profile that is gone. */
+    @Transaction
+    open suspend fun addFolder(profileId: Long, name: String, createdAt: Long): Long? {
+        if (!profileIsLive(profileId)) return null
+        return insertFolder(FolderEntity(profileId = profileId, name = name, position = nextPosition(profileId), createdAt = createdAt))
+    }
+
+    /** Deletes the Folder. Its bookmarks stay, at the top level. */
+    @Transaction
+    open suspend fun deleteFolder(id: Long) {
+        emptyFolder(id)
+        deleteFolderRow(id)
+    }
+
+    /**
+     * Gives the listed bookmarks and Folders of [profileId] new places, in the order given: the
+     * new order of the Profile's top level, or of one Folder's bookmarks.
+     */
+    @Transaction
+    open suspend fun reorder(profileId: Long, order: List<Placed>) {
+        var position = nextPosition(profileId)
+        order.forEach { item ->
+            if (item.folder) setFolderPosition(profileId, item.id, position++) else setPosition(profileId, item.id, position++)
+        }
+    }
 }
+
+/** A bookmark or a Folder ([folder]) by its id: an entry of a list being put in a new order. */
+data class Placed(val id: Long, val folder: Boolean)
 
 /**
  * One row per download a Profile started. The file itself is with Android's download service,
@@ -481,15 +670,16 @@ abstract class SiteRuleDao {
 @Database(
     entities = [
         ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class,
-        SiteRuleEntity::class,
+        SiteRuleEntity::class, FolderEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
     ],
 )
 abstract class JrnyDatabase : RoomDatabase() {

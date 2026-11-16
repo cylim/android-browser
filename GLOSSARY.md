@@ -27,6 +27,18 @@ A single open page, owned by exactly one Profile.
 A Tab whose web data is discarded once the last Private Tab of its Profile closes, and which never writes to history.
 _Avoid_: Incognito tab
 
+**Bookmark**:
+An address a person saved in a Profile, with a name, at the top level or in one Folder. A Profile's bookmarks are its Pinned Tabs.
+_Avoid_: Favorite, shortcut
+
+**Pinned Tab**:
+A bookmark as the Tab list shows it, under "Pinned" above the Profile's other Tabs. It is open while a Tab shows it and closed otherwise. Closing its Tab keeps the bookmark.
+_Avoid_: Favorite, pinned site, essential
+
+**Folder**:
+A named group of a Profile's bookmarks, which the Tab list can show or hide. Folders don't nest.
+_Avoid_: Group, collection
+
 **Move**:
 Transferring a Tab to another Profile, carrying only its current address. The page reloads under the target Profile's Accounts, and the original Tab is closed.
 _Avoid_: Transfer, send

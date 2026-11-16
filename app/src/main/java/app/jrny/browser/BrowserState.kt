@@ -9,6 +9,8 @@ import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.library.Bookmark
+import app.jrny.browser.library.Folder
+import app.jrny.browser.library.PinnedItem
 import app.jrny.browser.library.Visit
 import app.jrny.browser.address.AddressInput
 import app.jrny.browser.address.WebAddress
@@ -130,10 +132,19 @@ class BrowserState(
         .flatMapLatest { history.visits(it.id) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** The Active Profile's bookmarks, newest first. */
+    /** All of the Active Profile's bookmarks, in their order. */
     val bookmarks: StateFlow<List<Bookmark>> = profileRepository.activeProfile
         .filterNotNull()
         .flatMapLatest { bookmarkRepository.bookmarks(it.id) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * The Active Profile's bookmarks and Folders as the Sidebar lists them under "Pinned" (SPEC,
+     * "Pinned Tabs"): its top level in order, each Folder with its bookmarks.
+     */
+    val pinned: StateFlow<List<PinnedItem>> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { bookmarkRepository.pinned(it.id) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** The Active Profile's downloads, newest first. */
@@ -486,13 +497,81 @@ class BrowserState(
         return pages + searches
     }
 
-    /** Bookmarks [url] in [profile], or removes the bookmark if that Profile has one. */
-    fun toggleBookmark(profile: Profile, url: String, title: String) {
-        scope.launch { bookmarkRepository.toggle(profile.id, url, title) }
+    /**
+     * Bookmarks the page [tab] shows, [url], in its Profile, or removes the bookmark if that
+     * Profile has one. A newly bookmarked page's Tab becomes its Pinned Tab. A Private Tab stays
+     * what it is: its page is only bookmarked.
+     */
+    fun toggleBookmark(tab: SavedTab, url: String, title: String) {
+        scope.launch { bookmarkRepository.toggle(tab.profileId, url, title, pinTab = tab.id.takeUnless { tab.isPrivate }) }
     }
 
+    /**
+     * Pins [tab]: bookmarks the page it shows and makes the Tab that bookmark's Pinned Tab, which
+     * the Sidebar lists under "Pinned". Nothing happens for a Private Tab or a Tab without a web page.
+     */
+    fun pinTab(tab: SavedTab) {
+        if (tab.isPrivate) return
+        val live = live[tab.id]?.tab
+        val url = live?.url ?: tab.url ?: return
+        val title = live?.pageTitle ?: tab.pageTitle.orEmpty()
+        scope.launch { bookmarkRepository.pin(tab.id, url, title) }
+    }
+
+    /**
+     * Shows [bookmark] as a Pinned Tab: its open Tab if it has one, else a new Tab that loads its
+     * address. Either way a Private Tab is no longer the one shown.
+     */
+    fun openPinned(profile: Profile, bookmark: Bookmark) {
+        val choice = ++tabChoices
+        scope.launch {
+            if (tabRepository.openPinned(bookmark.id) != null && choice == tabChoices) privateTabs.select(profile.id, null)
+        }
+    }
+
+    /** Removes [bookmark]: unpins it. A Tab that showed it stays open as an ordinary Tab. */
     fun deleteBookmark(bookmark: Bookmark) {
         scope.launch { bookmarkRepository.delete(bookmark) }
+    }
+
+    fun renameBookmark(bookmark: Bookmark, title: String) {
+        scope.launch { bookmarkRepository.rename(bookmark, title) }
+    }
+
+    /** Moves [bookmark] to the end of [folder], or of the top level with null. */
+    fun moveBookmark(bookmark: Bookmark, folder: Folder?) {
+        scope.launch { bookmarkRepository.move(bookmark, folder) }
+    }
+
+    /** Adds a Folder to [profile] and, with [first], moves that bookmark into it. */
+    fun addFolder(profile: Profile, name: String, first: Bookmark? = null) {
+        scope.launch {
+            val id = bookmarkRepository.addFolder(profile.id, name) ?: return@launch
+            if (first != null) bookmarkRepository.move(first, Folder(id, name))
+        }
+    }
+
+    fun renameFolder(folder: Folder, name: String) {
+        scope.launch { bookmarkRepository.renameFolder(folder, name) }
+    }
+
+    fun setFolderCollapsed(folder: Folder, collapsed: Boolean) {
+        scope.launch { bookmarkRepository.setCollapsed(folder, collapsed) }
+    }
+
+    /** Deletes [folder]. Its bookmarks stay, at the top level. */
+    fun deleteFolder(folder: Folder) {
+        scope.launch { bookmarkRepository.deleteFolder(folder) }
+    }
+
+    /** Puts [profile]'s top level of bookmarks and Folders in the order of [items]. */
+    fun reorderPinned(profile: Profile, items: List<PinnedItem>) {
+        scope.launch { bookmarkRepository.reorder(profile.id, items) }
+    }
+
+    /** Puts the bookmarks of one of [profile]'s Folders in the order of [bookmarks]. */
+    fun reorderFolder(profile: Profile, bookmarks: List<Bookmark>) {
+        scope.launch { bookmarkRepository.reorderIn(profile.id, bookmarks) }
     }
 
     fun deleteVisit(visit: Visit) {
