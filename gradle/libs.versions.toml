@@ -5,6 +5,9 @@ agp = "9.5.1"
 kotlin = "2.4.21"
 ksp = "2.3.14"
 room = "2.8.5"
+# Room's MigrationTestHelper needs 1.8. Lifecycle brings 1.7.3 into the app, and the test APK
+# shares the app's process and so its version, so the app carries 1.8.1 (backward compatible).
+kotlinx-serialization = "1.8.1"
 compose-bom = "2026.09.00"
 activity-compose = "1.13.0"
 core-ktx = "1.19.1"
@@ -26,6 +29,8 @@ androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-material3 = { module = "androidx.compose.material3:material3" }

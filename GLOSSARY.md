@@ -59,6 +59,6 @@ _Avoid_: Mini sidebar, collapsed drawer
 The narrow-window layout: an address and search field along the bottom edge, with the Active Profile's avatar for switching Profiles.
 _Avoid_: Toolbar, omnibox
 
-**Tab Overview** (planned):
+**Tab Overview**:
 The Bottom Bar's full-screen view of all the Active Profile's Tabs, opened from a button on the bar.
 _Avoid_: Tab switcher, tab grid

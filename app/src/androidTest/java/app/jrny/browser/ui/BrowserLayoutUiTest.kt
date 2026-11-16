@@ -95,7 +95,7 @@ class BrowserLayoutUiTest {
         windowSize = size
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(windowSize)) {
-                JrnyTheme { BrowserWindow(tab, profiles) }
+                JrnyTheme { BrowserWindow(tab, TestTabs.ui(), profiles) }
             }
         }
     }
@@ -420,9 +420,27 @@ class BrowserLayoutUiTest {
         compose.onNodeWithTag("page").performTouchInput { click(center) }
         compose.waitUntil(10_000) { tab.popup != null }
 
-        compose.runOnUiThread { tab.popup!!.evaluateJavascript("window.close()", null) }
-        compose.waitUntil(5_000) { tab.popup == null }
+        // A window that was just created may not run scripts yet, so ask until it has closed.
+        compose.waitUntil(10_000) {
+            compose.runOnUiThread { tab.popup?.evaluateJavascript("window.close()", null) }
+            tab.popup == null
+        }
         assertTrue(tab.webView.isAttachedToWindow)
+    }
+
+    @Test
+    fun aRestoredTabScrollsBackToWhereItWas() {
+        show(PHONE_PORTRAIT)
+        val tall = page("<title>tall</title><div style='height:20000px'>top</div>")
+        compose.runOnUiThread {
+            tab.restore(tall, "", 1500)
+            // Saved while it's still loading, the Tab keeps the position it's going back to.
+            assertEquals(1500, tab.scrollY)
+        }
+        compose.waitUntil(15_000) { !tab.isLoading && tab.title == "tall" }
+        // The page itself, not the position the Tab is still waiting to apply.
+        compose.waitUntil(15_000) { tab.webView.scrollY == 1500 }
+        assertEquals(1500, tab.scrollY)
     }
 
     private companion object {

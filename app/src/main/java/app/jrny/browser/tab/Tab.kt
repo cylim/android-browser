@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,10 +28,15 @@ import app.jrny.browser.profile.WebProfile
  * Moving a page to another Profile creates a new Tab (ADR 0003).
  *
  * Create, use and destroy a Tab on the main thread, and only when `WebViewFeature.MULTI_PROFILE`
- * is supported (MainActivity checks).
+ * is supported (MainActivity checks). [onPageChanged] runs whenever [url] or [title] changes, even
+ * while nothing is drawn, so the Tab can be saved.
  */
 @SuppressLint("RequiresFeature")
-class Tab(private val context: Context, val profile: WebProfile) {
+class Tab(
+    private val context: Context,
+    val profile: WebProfile,
+    private val onPageChanged: (Tab) -> Unit = {},
+) {
 
     /**
      * The WebView showing this Tab. It is replaced with a new one if the renderer dies, so
@@ -72,19 +78,59 @@ class Tab(private val context: Context, val profile: WebProfile) {
         private set
 
     /** The page's own title, or null when it has none (or only repeats the address). */
-    val pageTitle: String?
-        get() = title.takeIf { it.isNotBlank() && it != url }
+    val pageTitle: String? get() = pageTitle(title, url)
 
     /** The site's host for display, without a leading `www.`, or empty for a non-web page. */
-    val displayHost: String
-        get() = WebAddress.hostOf(url).removePrefix("www.")
+    val displayHost: String get() = displayHost(url)
+
+    /**
+     * The page's vertical scroll position, in pixels, to save with the Tab. While a restored page
+     * is still loading, or waits for a reload after a crash, it's the position the page goes back
+     * to, so saving the Tab in that moment doesn't lose it.
+     */
+    val scrollY: Int
+        get() = if (restoreScrollY > 0) restoreScrollY else webView.scrollY
+
+    /** Where to scroll once the page being restored has loaded and is laid out, or 0. */
+    private var restoreScrollY = 0
+
+    /**
+     * True once the restored page has loaded. The restore ends when the next page starts. Until
+     * then a failure, in whatever order WebView reports it, still brings back the saved title.
+     */
+    private var restoreDone = false
+
+    /**
+     * The saved title of the page being restored. The page's own title replaces it on screen, and
+     * it comes back if the page fails to load.
+     */
+    private var restoringTitle: String? = null
+
+    /** True once the page's own load failed. WebView then shows its error page, whose title isn't the page's. */
+    private var loadFailed = false
 
     /** Loads [address] in the Tab. A popup over the page closes, so the new page is what shows. */
     fun load(address: String) {
         closePopup()
         crashed = false
+        restoreScrollY = 0
+        restoreDone = false
+        restoringTitle = null
         url = address
+        onPageChanged(this)
         webView.loadUrl(address)
+    }
+
+    /**
+     * Brings back a saved Tab: loads [address] and, once it has loaded, scrolls to [scrollY].
+     * The page itself is never saved, so it loads afresh (SPEC, "Tabs"). The Tab keeps its saved
+     * [title] until the page reports its own, so a page that fails to load doesn't lose its name.
+     */
+    fun restore(address: String, title: String, scrollY: Int) {
+        this.title = title
+        load(address)
+        restoringTitle = title
+        restoreScrollY = scrollY
     }
 
     fun goBack() {
@@ -97,7 +143,14 @@ class Tab(private val context: Context, val profile: WebProfile) {
 
     fun reload() {
         val address = url
-        if (crashed && address != null) load(address) else webView.reload()
+        if (crashed && address != null) {
+            // The new WebView loads the page afresh, then scrolls back to where the old one was.
+            val scrollY = restoreScrollY
+            load(address)
+            restoreScrollY = scrollY
+        } else {
+            webView.reload()
+        }
     }
 
     fun stop() = webView.stopLoading()
@@ -148,6 +201,23 @@ class Tab(private val context: Context, val profile: WebProfile) {
         return view
     }
 
+    /**
+     * Scrolls the restored page to [scrollY] once it's ready to draw. When the load finishes the
+     * page may not be laid out yet, and scrolling then does nothing.
+     */
+    private fun scrollWhenLaidOut(view: WebView, scrollY: Int) {
+        view.postVisualStateCallback(
+            0,
+            object : WebView.VisualStateCallback() {
+                override fun onComplete(requestId: Long) {
+                    if (view != webView || !restoreDone || restoreScrollY != scrollY) return
+                    view.scrollTo(0, scrollY)
+                    restoreScrollY = 0
+                }
+            },
+        )
+    }
+
     private fun updateHistory() {
         canGoBack = webView.canGoBack()
         canGoForward = webView.canGoForward()
@@ -161,6 +231,7 @@ class Tab(private val context: Context, val profile: WebProfile) {
      */
     private fun replaceDeadWebView(dead: WebView) {
         if (dead != webView) return
+        restoreScrollY = scrollY
         closePopup()
         (dead.parent as? ViewGroup)?.removeView(dead)
         dead.destroy()
@@ -181,8 +252,16 @@ class Tab(private val context: Context, val profile: WebProfile) {
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             if (view != webView) return
             isLoading = true
+            loadFailed = false
+            if (restoreDone) {
+                // The restored page had loaded, and this is the next page.
+                restoreScrollY = 0
+                restoringTitle = null
+                restoreDone = false
+            }
             this@Tab.url = url
             updateHistory()
+            onPageChanged(this@Tab)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -190,6 +269,21 @@ class Tab(private val context: Context, val profile: WebProfile) {
             isLoading = false
             this@Tab.url = view.url ?: url
             updateHistory()
+            onPageChanged(this@Tab)
+            // A page that failed keeps its saved title and position for a reload.
+            if (!loadFailed && !restoreDone && (restoreScrollY > 0 || restoringTitle != null)) {
+                restoreDone = true
+                if (restoreScrollY > 0) scrollWhenLaidOut(view, restoreScrollY)
+            }
+        }
+
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (view != webView || !request.isForMainFrame) return
+            // The page didn't load. Keep the title it was saved with, or none, so the Tab shows
+            // its site, instead of the error page's "Webpage not available".
+            loadFailed = true
+            title = restoringTitle.orEmpty()
+            onPageChanged(this@Tab)
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -197,6 +291,7 @@ class Tab(private val context: Context, val profile: WebProfile) {
             // Also fires for same-document navigations (history.pushState), which don't start a page load.
             this@Tab.url = url
             updateHistory()
+            onPageChanged(this@Tab)
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -222,7 +317,11 @@ class Tab(private val context: Context, val profile: WebProfile) {
         }
 
         override fun onReceivedTitle(view: WebView, title: String?) {
-            if (view == webView) this@Tab.title = title.orEmpty()
+            if (view != webView || loadFailed) return
+            // A restored page keeps its saved title until it has one of its own.
+            if (restoringTitle != null && title.isNullOrBlank()) return
+            this@Tab.title = title.orEmpty()
+            onPageChanged(this@Tab)
         }
 
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {

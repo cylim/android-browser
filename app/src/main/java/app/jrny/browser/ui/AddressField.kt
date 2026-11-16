@@ -86,6 +86,13 @@ fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape
             keepSelectAll = false
         },
         placeholder = { Text(stringResource(R.string.address_hint)) },
+        // In the Bottom Bar, reload sits inside the field, which leaves room for the Tab count.
+        // The Sidebar has it above, with back and forward. Hidden while typing.
+        trailingIcon = if (layout == BrowserLayout.BottomBar && editing == null) {
+            { ReloadOrStopButton(tab) }
+        } else {
+            null
+        },
         singleLine = true,
         shape = shape,
         colors = TextFieldDefaults.colors(

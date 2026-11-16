@@ -42,6 +42,8 @@ dependencies {
     implementation(libs.guava)
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
+    // See the version catalog: Room's migration tests need this version in the app.
+    implementation(libs.kotlinx.serialization.core)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -56,6 +58,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.room.testing)
 }
 
 ksp {

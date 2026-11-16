@@ -8,6 +8,17 @@
     <string name="stop">Stop loading</string>
     <string name="tabs">Tabs</string>
     <string name="new_tab">New Tab</string>
+    <string name="open_new_tab">Open a new Tab</string>
+    <string name="close_tab_named">Close %1$s</string>
+    <string name="done">Done</string>
+    <plurals name="show_tabs">
+        <item quantity="one">Show %1$d Tab</item>
+        <item quantity="other">Show all %1$d Tabs</item>
+    </plurals>
+    <plurals name="tab_count">
+        <item quantity="one">%1$d Tab</item>
+        <item quantity="other">%1$d Tabs</item>
+    </plurals>
     <string name="hide_sidebar">Hide sidebar</string>
     <string name="show_sidebar">Show sidebar</string>
     <!-- The Profile created on first launch. -->

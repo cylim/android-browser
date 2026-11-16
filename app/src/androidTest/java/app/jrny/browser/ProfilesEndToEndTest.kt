@@ -50,9 +50,11 @@ class ProfilesEndToEndTest {
 
     private fun active(): Profile = browser().activeProfile.value!!
 
+    /** The selected Tab of [profile], once it's the Active Profile. */
     private fun tabOf(profile: Profile): Tab {
+        compose.waitUntil(10_000) { browser().active.value?.profile?.id == profile.id }
         var tab: Tab? = null
-        compose.runOnUiThread { tab = browser().tabFor(profile) }
+        compose.runOnUiThread { tab = browser().tabFor(browser().active.value!!.selected) }
         return tab!!
     }
 

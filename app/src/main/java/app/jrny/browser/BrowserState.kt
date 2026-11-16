@@ -1,85 +1,186 @@
 package app.jrny.browser
 
 import android.content.Context
-import androidx.compose.runtime.mutableStateMapOf
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
-import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.ProfileRepository
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
+import app.jrny.browser.tab.TabId
+import app.jrny.browser.tab.TabRepository
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** The Active Profile with its Tabs, read together so they always belong to each other. */
+data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
+    /** The Tab the window shows. */
+    val selected: SavedTab get() = tabs.first { it.selected }
+}
+
 /**
- * What the browser window shows: the Profiles, the Active Profile, and one Tab per Profile until
- * Milestone 3 adds more. Each Tab is created the first time its Profile is shown, in that
- * Profile's web data store, and lives until its Profile is deleted or the activity ends.
+ * What the browser window shows: the Profiles, the Active Profile and its Tabs.
+ *
+ * Every Tab is saved in the database, so Tabs come back after Android kills the app. Only a few
+ * are live, with a WebView: the shown Tab and the [MAX_LIVE_TABS] - 1 most recently shown, across
+ * all Profiles (SPEC, "Tabs"). The others are unloaded and load again when shown.
  *
  * Create and use it on the main thread.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class BrowserState(
     private val context: Context,
-    private val repository: ProfileRepository,
+    private val profileRepository: ProfileRepository,
+    private val tabRepository: TabRepository,
     private val scope: CoroutineScope,
-    /** Addresses to reload after the activity was recreated, by Profile id. */
-    restored: Map<ProfileId, String> = emptyMap(),
 ) {
-    /** Kept until the Profile is deleted, so a Profile not shown since is still restored next time. */
-    private val restored = restored.toMutableMap()
+    val profiles: StateFlow<List<Profile>> = profileRepository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
+    val pendingDeletionCount: StateFlow<Int> = profileRepository.pendingDeletionCount.stateIn(scope, SharingStarted.Eagerly, 0)
 
-    val profiles: StateFlow<List<Profile>> = repository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
-    val activeProfile: StateFlow<Profile?> = repository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
-    val pendingDeletionCount: StateFlow<Int> = repository.pendingDeletionCount.stateIn(scope, SharingStarted.Eagerly, 0)
+    /** The Active Profile and its Tabs. A Profile without Tabs gets an empty one first. */
+    val active: StateFlow<ActiveProfileTabs?> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { profile ->
+            tabRepository.tabs(profile.id)
+                .onEach { if (it.isEmpty()) tabRepository.ensureOne(profile.id) }
+                .filter { it.isNotEmpty() }
+                .map { ActiveProfileTabs(profile, it) }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
-    private val tabs = mutableStateMapOf<ProfileId, Tab>()
+    /** Live Tabs, least recently shown first. */
+    private val live = LinkedHashMap<TabId, LiveTab>(MAX_LIVE_TABS + 1, 0.75f, true)
 
-    /** The Tab of [profile], created in its web data store the first time it's asked for. */
-    fun tabFor(profile: Profile): Tab = tabs.getOrPut(profile.id) {
-        Tab(context, WebProfile.of(profile.id)).also { tab -> restored[profile.id]?.let(tab::load) }
-    }
+    private class LiveTab(val tab: Tab, val saving: Job)
+
+    /** The Tab on screen. Its WebView can't be destroyed until another Tab replaces it. */
+    private var shownId: TabId? = null
+
+    /** Closed Tabs still on screen, destroyed once another Tab is shown. */
+    private val retired = mutableSetOf<TabId>()
+
+    /** How many Tabs have a WebView now. */
+    val liveTabCount: Int get() = live.size
+
+    fun isLive(id: TabId): Boolean = live.containsKey(id)
 
     /**
-     * The address each Profile's Tab shows, to restore after the activity is recreated. A Profile
-     * whose Tab hasn't been created since the last recreation keeps its restored address.
+     * The live Tab for [saved], loading it with its saved address and scroll position if it was
+     * unloaded. Call [shown] once it's on screen.
      */
-    fun addresses(): Map<ProfileId, String> =
-        restored + tabs.mapNotNull { (id, tab) -> tab.url?.let { id to it } }
+    fun tabFor(saved: SavedTab): Tab {
+        live[saved.id]?.let { return it.tab }
+        // Keep the saved address and title current, so a kill loses at most the scroll position.
+        // Saved one at a time, latest first: a burst of changes during a load writes only the last.
+        val page = MutableStateFlow(saved.url to saved.title)
+        val tab = Tab(context, WebProfile.of(saved.profileId)) { page.value = it.url to it.title }
+        val saving = scope.launch {
+            page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
+        }
+        saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
+        live[saved.id] = LiveTab(tab, saving)
+        return tab
+    }
+
+    /** [id] is on screen: it becomes the most recently shown, and Tabs past the limit unload. */
+    fun shown(id: TabId) {
+        live[id] ?: return
+        shownId = id
+        retired.filter { it != id }.forEach { destroy(it); retired.remove(it) }
+        while (live.size > MAX_LIVE_TABS) {
+            val (oldest, _) = live.entries.first()
+            unload(oldest)
+        }
+    }
 
     fun switchTo(profile: Profile) {
-        scope.launch { repository.activate(profile.id) }
+        scope.launch { profileRepository.activate(profile.id) }
     }
 
     fun create(name: String, color: ProfileColor, icon: ProfileIcon) {
-        scope.launch { repository.create(name, color, icon) }
+        scope.launch { profileRepository.create(name, color, icon) }
     }
 
     fun update(profile: Profile) {
-        scope.launch { repository.update(profile) }
+        scope.launch { profileRepository.update(profile) }
     }
 
     /**
-     * Deletes [profile]: it disappears, its Tab closes, and its web data is wiped at the next cold
+     * Deletes [profile]: it disappears, its Tabs close, and its web data is wiped at the next cold
      * start. Nothing happens for the last Profile.
      */
     fun delete(profile: Profile) {
         scope.launch {
-            if (repository.delete(profile.id)) {
-                restored.remove(profile.id)
-                tabs.remove(profile.id)?.destroy()
+            if (profileRepository.delete(profile.id)) {
+                val store = WebProfile.of(profile.id).name
+                live.entries.filter { it.value.tab.profile.name == store }.map { it.key }.forEach(::retire)
             }
         }
     }
 
-    /** Writes every open Profile's cookies to disk. */
-    fun flush() = tabs.values.forEach { it.profile.flush() }
+    /** Opens an empty Tab in the Active Profile and shows it. */
+    fun openTab(profile: Profile) {
+        scope.launch { tabRepository.open(profile.id) }
+    }
+
+    fun selectTab(id: TabId) {
+        scope.launch { tabRepository.select(id) }
+    }
+
+    fun closeTab(id: TabId) {
+        retire(id)
+        scope.launch { tabRepository.close(id) }
+    }
+
+    /** Saves the live Tabs' scroll positions and writes every open Profile's cookies to disk. */
+    fun flush() {
+        live.forEach { (id, it) -> saveScroll(id, it.tab) }
+        live.values.map { it.tab.profile }.distinct().forEach { it.flush() }
+    }
 
     fun destroy() {
-        tabs.values.forEach(Tab::destroy)
-        tabs.clear()
+        live.keys.toList().forEach(::destroy)
+    }
+
+    /** Destroys a closed Tab, or, if it's on screen, once another Tab replaces it. */
+    private fun retire(id: TabId) {
+        if (id == shownId) retired += id else destroy(id)
+    }
+
+    /** Frees [id]'s WebView, keeping it saved so it loads again when shown. */
+    private fun unload(id: TabId) {
+        val entry = live[id] ?: return
+        saveScroll(id, entry.tab)
+        destroy(id)
+    }
+
+    private fun destroy(id: TabId) {
+        val entry = live.remove(id) ?: return
+        entry.saving.cancel()
+        entry.tab.destroy()
+    }
+
+    private fun saveScroll(id: TabId, tab: Tab) {
+        val scrollY = tab.scrollY
+        scope.launch { tabRepository.saveScroll(id, scrollY) }
+    }
+
+    companion object {
+        /** At most this many Tabs are live at once, across all Profiles (SPEC, "Tabs"). */
+        const val MAX_LIVE_TABS = 5
     }
 }
