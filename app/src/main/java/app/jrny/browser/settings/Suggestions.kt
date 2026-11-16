@@ -25,17 +25,20 @@ fun interface SearchSuggestions {
 
 /**
  * Asks the search engine itself. The request carries only the typed text: no cookies, so it isn't
- * tied to any Account or Profile, and a plain user agent.
+ * tied to any Account or Profile, and a user agent that names a browser but no device.
  */
 class HttpSearchSuggestions : SearchSuggestions {
-    override suspend fun fetch(engine: SearchEngine, query: String): List<String> = withContext(Dispatchers.IO) {
+    override suspend fun fetch(engine: SearchEngine, query: String): List<String> = fetch(engine.suggestTemplate, query)
+
+    /** Asks the address made from [template], with `%s` replaced by the encoded [query]. */
+    internal suspend fun fetch(template: String, query: String): List<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = URL(engine.suggestTemplate.replace("%s", URLEncoder.encode(query, Charsets.UTF_8)))
+            val url = URL(template.replace("%s", URLEncoder.encode(query, Charsets.UTF_8)))
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 instanceFollowRedirects = false
-                setRequestProperty("User-Agent", "Mozilla/5.0")
+                setRequestProperty("User-Agent", USER_AGENT)
                 setRequestProperty("Accept", "application/json")
             }
             try {
@@ -49,6 +52,12 @@ class HttpSearchSuggestions : SearchSuggestions {
     }
 
     private companion object {
+        /**
+         * Bing answers nothing to a client that doesn't look like a browser. This is the generic
+         * form browsers send now: it names no device model and no real Android version.
+         */
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
         const val TIMEOUT_MS = 3_000
         const val MAX_BYTES = 64 * 1024
     }
