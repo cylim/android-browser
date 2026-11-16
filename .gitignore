@@ -1,0 +1,43 @@
+# --- Secrets and signing material: never commit these ---
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+signing.properties
+local.properties
+secrets.properties
+.env
+.env.*
+!.env.example
+google-services.json
+*.mobileprovision
+
+# --- Files that can contain personal data ---
+# Heap dumps, network captures and logs can hold cookies and session tokens.
+*.hprof
+*.har
+*.log
+captures/
+
+# --- Gradle and build output ---
+.gradle/
+.kotlin/
+build/
+out/
+.cxx/
+.externalNativeBuild/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# --- IDEs and OS files ---
+.idea/
+*.iml
+.vscode/
+.fleet/
+.DS_Store
+Thumbs.db

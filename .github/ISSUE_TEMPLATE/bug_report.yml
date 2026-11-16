@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in JRNY browser does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security problems go to the [private report form](https://github.com/cylim/android-browser/security/advisories/new), not here.**
+
+        Before you paste logs or screenshots, remove cookies, tokens, account names, email addresses and private URLs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a Tab in Profile "Work"
+        2. Move it to Profile "Personal"
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: JRNY browser version
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: Pixel 9, Android 16
+    validations:
+      required: true
+  - type: input
+    id: webview-version
+    attributes:
+      label: Android System WebView version
+      description: Settings → Apps → Android System WebView → App details.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (redacted)
+      render: text
