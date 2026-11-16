@@ -450,6 +450,12 @@ class BrowserLayoutUiTest {
         fun listEndsAt() = compose.onNodeWithTag("tab-list").fetchSemanticsNode().boundsInWindow.bottom
         runCatching { compose.waitUntil(5_000) { listEndsAt() <= window.height - keyboard() } }
         assertTrue("the list ends at ${listEndsAt()}, the keyboard starts at ${window.height - keyboard()}", listEndsAt() <= window.height - keyboard())
+        // It ends at the keyboard, not somewhere above it: it gave up no more room than it had to.
+        val slack = 4 * window.resources.displayMetrics.density
+        assertTrue(
+            "the list ends at ${listEndsAt()}, well above the keyboard at ${window.height - keyboard()}",
+            listEndsAt() >= window.height - keyboard() - slack,
+        )
         // Only the list gave way. The field is where it was.
         assertEquals(fieldTop, compose.onNodeWithTag("address").fetchSemanticsNode().boundsInWindow.top)
     }

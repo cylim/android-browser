@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -159,6 +160,14 @@ class ProfilesUiTest {
         fun keyboardStartsAt() = window.height - (ViewCompat.getRootWindowInsets(window)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0)
         runCatching { compose.waitUntil(5_000) { createEndsAt() <= keyboardStartsAt() } }
         assertTrue("Create ends at ${createEndsAt()}, the keyboard starts at ${keyboardStartsAt()}", createEndsAt() <= keyboardStartsAt())
+        // The dialog made room without giving up what matters: the button and the name being
+        // typed are both still on screen, inside the window.
+        compose.onNodeWithTag("save-profile").assertIsDisplayed()
+        compose.onNodeWithTag("profile-name-field").assertIsDisplayed()
+        assertTrue(compose.onNodeWithTag("profile-name-field").fetchSemanticsNode().boundsInWindow.top >= 0f)
+        // And it didn't collapse: counting the keyboard's height twice would leave it no room at all.
+        val dialog = compose.onNodeWithTag("profile-editor").fetchSemanticsNode().boundsInWindow
+        assertTrue("the dialog is only ${dialog.height}px tall", dialog.height >= 160 * window.resources.displayMetrics.density)
     }
 
     @Test
