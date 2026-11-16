@@ -5,6 +5,7 @@ import android.webkit.WebView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.jrny.browser.R
@@ -41,8 +44,43 @@ fun PageView(tab: Tab, modifier: Modifier = Modifier) {
     Box(modifier.testTag("page")) {
         // A new WebView replaces a dead one (Tab.replaceDeadWebView), so key the view on it.
         key(tab.webView) { WebViewHost(tab.webView) }
-        tab.popup?.let { popup -> key(popup) { WebViewHost(popup, Modifier.testTag("popup")) } }
+        tab.popup?.let { popup ->
+            key(popup) {
+                Column(Modifier.fillMaxSize().testTag("popup")) {
+                    PopupBar(tab)
+                    WebViewHost(popup, Modifier.weight(1f))
+                }
+            }
+        }
         if (tab.crashed) CrashedPage(tab)
+    }
+}
+
+/**
+ * The bar above a popup: the popup's own address, so a popup can't pass off a sign-in form as
+ * the page behind it, and a close button. Text starts 16dp in, and the close icon ends 16dp in.
+ */
+@Composable
+private fun PopupBar(tab: Tab) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .padding(start = 16.dp, end = 4.dp),
+        ) {
+            Text(
+                tab.popupUrl.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).testTag("popup-address"),
+            )
+            IconButton(onClick = tab::closePopup) {
+                Icon(Icons.Filled.Close, stringResource(R.string.close_popup))
+            }
+        }
     }
 }
 

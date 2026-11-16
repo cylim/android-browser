@@ -12,6 +12,8 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
@@ -33,6 +35,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.page
 import app.jrny.browser.TestPages.titled
+import app.jrny.browser.TestServer
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.Tab
@@ -50,6 +53,10 @@ import org.junit.runner.RunWith
 /**
  * The browser window at forced window sizes, so every layout is checked on any device. The same
  * tests also run on a phone and a tablet (see CONTRIBUTING.md).
+ *
+ * Tests that touch the page load it before showing the window. An empty Tab focuses the address
+ * field, and on a phone the on-screen keyboard would then squeeze a forced tablet-sized window's
+ * page down to nothing.
  */
 @SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
@@ -81,6 +88,12 @@ class BrowserLayoutUiTest {
                 JrnyTheme { BrowserScreen(tab) }
             }
         }
+    }
+
+    private fun fitsTheScreen(size: DpSize): Boolean {
+        val metrics = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics
+        return size.width.value <= metrics.widthPixels / metrics.density &&
+            size.height.value <= metrics.heightPixels / metrics.density
     }
 
     private fun loadAndWait(url: String, title: String) {
@@ -147,8 +160,8 @@ class BrowserLayoutUiTest {
     @Test
     fun aDeadRendererShowsAMessageAndReloadBringsThePageBack() {
         val one = titled("one")
-        show(TABLET_LANDSCAPE)
         loadAndWait(one, "one navigate")
+        show(TABLET_LANDSCAPE)
         val first: WebView = tab.webView
 
         compose.runOnUiThread { first.loadUrl("chrome://crash") }
@@ -166,6 +179,8 @@ class BrowserLayoutUiTest {
     fun goLoadsTheAddressShowsItAndHandsFocusToThePage() {
         // A .invalid host never resolves, so this needs no network: the address is what matters.
         val address = "https://jrny-test.invalid/"
+        // Start with a page, so the empty-Tab focus (and keyboard) doesn't get in the way.
+        loadAndWait(titled("one"), "one navigate")
         for (size in listOf(PHONE_PORTRAIT, TABLET_LANDSCAPE)) {
             if (size == PHONE_PORTRAIT) show(size) else windowSize = size
             compose.waitForIdle()
@@ -174,11 +189,14 @@ class BrowserLayoutUiTest {
             compose.onNodeWithTag("address").performImeAction()
 
             compose.waitUntil(5_000) { tab.url == address }
+            // The page takes focus once the on-screen keyboard has gone. Checked only where the
+            // forced window fits the real screen: squeezing a 1280dp window onto a phone breaks
+            // focus for embedded Android views (it works on a real tablet).
+            if (fitsTheScreen(size)) compose.waitUntil(5_000) { tab.webView.hasFocus() }
             compose.onNodeWithTag("address").assertIsNotFocused()
             compose.onNodeWithTag("address").assert(
                 SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(address)),
             )
-            assertTrue("the page has focus", tab.webView.hasFocus())
         }
     }
 
@@ -204,8 +222,8 @@ class BrowserLayoutUiTest {
             "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
                 "onclick=\"window.open('about:blank','signin')\">Sign in</button>",
         )
-        show(TABLET_LANDSCAPE)
         loadAndWait(opener, "opener")
+        show(TABLET_LANDSCAPE)
 
         // A real tap: without one, WebView blocks window.open.
         compose.onNodeWithTag("page").performTouchInput { click(center) }
@@ -220,13 +238,77 @@ class BrowserLayoutUiTest {
     }
 
     @Test
+    fun aPopupShowsItsOwnAddressAndANewAddressReplacesIt() {
+        TestServer(mapOf("/signin" to "<title>sign in</title><p>Sign in")).use { server ->
+            val popupAddress = server.url("/signin")
+            val opener = page(
+                "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
+                    "onclick=\"window.open('$popupAddress','signin')\">Sign in</button>",
+            )
+            loadAndWait(opener, "opener")
+            show(PHONE_PORTRAIT)
+            compose.onNodeWithTag("page").performTouchInput { click(center) }
+            // The bar above the popup names the popup's own address, not the page's.
+            compose.waitUntil(10_000) { tab.popupUrl == popupAddress }
+            compose.onNodeWithTag("popup-address").assertTextEquals(popupAddress)
+            // The popup's page really loaded, rather than an error page at that address.
+            var popupTitle = ""
+            compose.waitUntil(10_000) {
+                compose.runOnUiThread { tab.popup?.evaluateJavascript("document.title") { popupTitle = it } }
+                popupTitle == "\"sign in\""
+            }
+            assertEquals(opener, tab.url)
+
+            val address = "https://jrny-test.invalid/next"
+            compose.onNodeWithTag("address").performClick()
+            compose.onNodeWithTag("address").performTextReplacement(address)
+            compose.onNodeWithTag("address").performImeAction()
+            compose.waitUntil(5_000) { tab.popup == null }
+            compose.onNodeWithTag("popup").assertDoesNotExist()
+            assertEquals(address, tab.url)
+        }
+    }
+
+    @Test
+    fun aPopupClosesWithItsCloseButton() {
+        val opener = page(
+            "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
+                "onclick=\"window.open('about:blank','signin')\">Sign in</button>",
+        )
+        loadAndWait(opener, "opener")
+        show(TABLET_LANDSCAPE)
+        compose.onNodeWithTag("page").performTouchInput { click(center) }
+        compose.waitUntil(10_000) { tab.popup != null }
+        compose.onNodeWithContentDescription("Close popup").performClick()
+        compose.waitUntil(5_000) { tab.popup == null }
+        assertEquals(opener, tab.url)
+    }
+
+    @Test
+    fun aHalfTypedAddressSurvivesALayoutSwitch() {
+        loadAndWait(titled("one"), "one navigate")
+        show(PHONE_PORTRAIT)
+        compose.onNodeWithTag("address").performClick()
+        compose.onNodeWithTag("address").performTextReplacement("half typed")
+
+        for (size in listOf(TABLET_LANDSCAPE, PHONE_PORTRAIT)) {
+            windowSize = size
+            compose.waitForIdle()
+            compose.onNodeWithTag("address").assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("half typed")),
+            )
+            compose.onNodeWithTag("address").assertIsFocused()
+        }
+    }
+
+    @Test
     fun aPopupClosesItselfWithWindowClose() {
         val opener = page(
             "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
                 "onclick=\"window.open('about:blank','signin')\">Sign in</button>",
         )
-        show(PHONE_PORTRAIT)
         loadAndWait(opener, "opener")
+        show(PHONE_PORTRAIT)
         compose.onNodeWithTag("page").performTouchInput { click(center) }
         compose.waitUntil(10_000) { tab.popup != null }
 

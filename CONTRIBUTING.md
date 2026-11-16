@@ -52,6 +52,7 @@ You need:
 - Two emulators or devices with Android 15 (API 35) or later and an up-to-date Android System WebView: a **phone** and a **tablet**. Every UI change is checked on both, because the app has a different layout for each (the Bottom Bar and the Sidebar). For Android 17 images, create the emulators with Command-line Tools 22 or later. Older `avdmanager` writes `target=android-0` into the emulator's `.ini` file, and the emulator then crashes in a loop:
 
   ```sh
+  sdkmanager --install "system-images;android-37.0;google_apis_playstore;x86_64" "emulator"
   avdmanager create avd -n JRNY_Phone_API_37 -d pixel_7 -k "system-images;android-37.0;google_apis_playstore;x86_64"
   avdmanager create avd -n JRNY_Tablet_API_37 -d pixel_tablet -k "system-images;android-37.0;google_apis_playstore;x86_64"
   ```

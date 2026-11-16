@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -78,7 +79,7 @@ private val CORNER = RoundedCornerShape(12.dp)
  * cutouts, a status bar that stays visible under a top cutout, and the keyboard take space.
  */
 @Composable
-fun SidebarLayout(tab: Tab, collapsed: Boolean, onCollapsedChange: (Boolean) -> Unit) {
+fun SidebarLayout(tab: Tab, addressField: AddressFieldSlot, collapsed: Boolean, onCollapsedChange: (Boolean) -> Unit) {
     // A Surface, not just a background, so text and icons get the matching content color in dark mode.
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize()) {
         Row(
@@ -91,6 +92,8 @@ fun SidebarLayout(tab: Tab, collapsed: Boolean, onCollapsedChange: (Boolean) -> 
                 .windowInsetsPadding(
                     WindowInsets.tappableElement.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                 )
+                // A freeform window's title bar, which statusBars doesn't include.
+                .windowInsetsPadding(WindowInsets.captionBar)
                 // Zero while the status bar is hidden. Under a top cutout it stays visible.
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
@@ -100,7 +103,7 @@ fun SidebarLayout(tab: Tab, collapsed: Boolean, onCollapsedChange: (Boolean) -> 
             if (collapsed) {
                 Rail(tab, onExpand = { onCollapsedChange(false) })
             } else {
-                Sidebar(tab, onCollapse = { onCollapsedChange(true) })
+                Sidebar(tab, addressField, onCollapse = { onCollapsedChange(true) })
             }
             Box(
                 Modifier
@@ -117,7 +120,7 @@ fun SidebarLayout(tab: Tab, collapsed: Boolean, onCollapsedChange: (Boolean) -> 
 }
 
 @Composable
-private fun Sidebar(tab: Tab, onCollapse: () -> Unit) {
+private fun Sidebar(tab: Tab, addressField: AddressFieldSlot, onCollapse: () -> Unit) {
     Column(
         Modifier
             .width(SIDEBAR_WIDTH)
@@ -140,7 +143,7 @@ private fun Sidebar(tab: Tab, onCollapse: () -> Unit) {
         }
         Spacer(Modifier.height(GUTTER))
         // TextField puts its text 16dp inside, which is CONTENT_INSET, and is 56dp tall (ROW_HEIGHT).
-        AddressField(tab, Modifier.fillMaxWidth(), shape = CORNER)
+        addressField(Modifier.fillMaxWidth(), CORNER)
 
         Text(
             stringResource(R.string.tabs),

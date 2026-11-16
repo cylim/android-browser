@@ -6,11 +6,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import app.jrny.browser.tab.Tab
+
+/** The address field, placed by a layout with its own modifier and shape. */
+typealias AddressFieldSlot = @Composable (Modifier, Shape) -> Unit
 
 /**
  * The browser window. It shows the Sidebar layout in windows at least 840dp wide and the Bottom
@@ -25,13 +31,22 @@ fun BrowserScreen(tab: Tab) {
     }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
     HideStatusBar()
+    // One address field that moves between the layouts with its state, so a half-typed
+    // address survives a resize across 840dp.
+    val movableAddressField = remember(tab) {
+        movableContentOf { modifier: Modifier, shape: Shape, layout: BrowserLayout ->
+            AddressField(tab, modifier, shape, layout)
+        }
+    }
 
     Surface(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            when (BrowserLayout.forWindowWidth(maxWidth.value)) {
+            val layout = BrowserLayout.forWindowWidth(maxWidth.value)
+            val addressField: AddressFieldSlot = { modifier, shape -> movableAddressField(modifier, shape, layout) }
+            when (layout) {
                 BrowserLayout.Sidebar ->
-                    SidebarLayout(tab, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
-                BrowserLayout.BottomBar -> BottomBarLayout(tab)
+                    SidebarLayout(tab, addressField, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
+                BrowserLayout.BottomBar -> BottomBarLayout(tab, addressField)
             }
         }
     }

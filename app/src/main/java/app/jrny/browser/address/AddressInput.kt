@@ -36,6 +36,8 @@ object AddressInput {
     }
 
     private fun webAddressWithoutScheme(text: String): String? {
+        // mailto:me@example.com looks like user:password@host, but it's another scheme.
+        if (text.substringBefore(':', missingDelimiterValue = "").lowercase() in NON_WEB_SCHEMES) return null
         if (WebAddress.hasCredentials(text)) return "https://$text"
         // A bare email address, such as me@example.com, is a search, not an address.
         if (text.substringBefore('/').contains('@')) return null
@@ -62,6 +64,12 @@ object AddressInput {
         host.startsWith("[") -> IPV6.matches(host)
         else -> ANY_HOST.matches(host)
     }
+
+    /** Schemes written without `//`, which must never be read as `user:password@host`. */
+    private val NON_WEB_SCHEMES = setOf(
+        "about", "bitcoin", "blob", "chrome", "content", "data", "file", "geo", "intent", "javascript",
+        "magnet", "mailto", "market", "mms", "news", "sms", "smsto", "tel", "urn", "webcal",
+    )
 
     private val IPV4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
     private val IPV6 = Regex("^\\[[0-9a-fA-F:.]+]$")

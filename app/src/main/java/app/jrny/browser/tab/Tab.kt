@@ -46,6 +46,13 @@ class Tab(private val context: Context, val profile: WebProfile) {
     var popup: WebView? by mutableStateOf(null)
         private set
 
+    /**
+     * The [popup]'s own address, which the browser shows above it. Without it, a popup could put
+     * a sign-in form under the page's address.
+     */
+    var popupUrl: String? by mutableStateOf(null)
+        private set
+
     /** The page's address, or null before anything has loaded. Set as soon as a load starts. */
     var url: String? by mutableStateOf(null)
         private set
@@ -72,7 +79,9 @@ class Tab(private val context: Context, val profile: WebProfile) {
     val displayHost: String
         get() = WebAddress.hostOf(url).removePrefix("www.")
 
+    /** Loads [address] in the Tab. A popup over the page closes, so the new page is what shows. */
     fun load(address: String) {
+        closePopup()
         crashed = false
         url = address
         webView.loadUrl(address)
@@ -97,6 +106,7 @@ class Tab(private val context: Context, val profile: WebProfile) {
     fun closePopup() {
         val view = popup ?: return
         popup = null
+        popupUrl = null
         (view.parent as? ViewGroup)?.removeView(view)
         view.destroy()
     }
@@ -104,6 +114,8 @@ class Tab(private val context: Context, val profile: WebProfile) {
     /** Frees the WebViews. The Tab can't be used afterwards. */
     fun destroy() {
         closePopup()
+        // WebView must leave the view hierarchy before destroy().
+        (webView.parent as? ViewGroup)?.removeView(webView)
         webView.stopLoading()
         webView.destroy()
     }
@@ -219,6 +231,9 @@ class Tab(private val context: Context, val profile: WebProfile) {
             // Same Profile as the page, so the popup sees the page's sign-ins (spike result).
             val window = newWebView(popup = true)
             popup = window
+            // A new window starts at about:blank, which reports no page start. Its real address
+            // replaces this as soon as it loads.
+            popupUrl = "about:blank"
             (resultMsg.obj as WebView.WebViewTransport).webView = window
             resultMsg.sendToTarget()
             return true
@@ -228,6 +243,15 @@ class Tab(private val context: Context, val profile: WebProfile) {
     /** Navigation callbacks for a popup. */
     private inner class PopupViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(request)
+
+        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            if (view == popup) popupUrl = url
+        }
+
+        override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+            // Also catches redirects and same-document navigations inside the popup.
+            if (view == popup) popupUrl = url
+        }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             if (view == popup) closePopup()

@@ -125,4 +125,16 @@ jobs:
           profile: ${{ matrix.device.profile }}
           ram-size: ${{ matrix.device.ram }}
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest
+          # On failure, print each failing test so the log says what broke.
+          script: ./gradlew connectedDebugAndroidTest || { grep -rh -A8 '<failure' app/build/outputs/androidTest-results; exit 1; }
+
+      - name: Upload the device test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: device-test-reports-${{ matrix.device.name }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14

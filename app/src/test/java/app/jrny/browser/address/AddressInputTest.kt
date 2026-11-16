@@ -62,6 +62,14 @@ class AddressInputTest {
     }
 
     @Test
+    fun `other schemes written without slashes are never read as credentials`() {
+        assertEquals(search("mailto%3Ame%40example.com"), address("mailto:me@example.com"))
+        assertEquals(search("MAILTO%3Ame%40example.com"), address("MAILTO:me@example.com"))
+        assertEquals(search("sms%3Aa%3Ab%40example.com"), address("sms:a:b@example.com"))
+        assertEquals(search("tel%3A%2B15551234"), address("tel:+15551234"))
+    }
+
+    @Test
     fun `single-label hosts load when a port or slash makes them an address`() {
         assertEquals("https://nas:8080", address("nas:8080"))
         assertEquals("https://nas/", address("nas/"))

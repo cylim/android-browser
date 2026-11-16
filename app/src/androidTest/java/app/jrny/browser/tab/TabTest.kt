@@ -11,6 +11,7 @@ import app.jrny.browser.TestPages.await
 import app.jrny.browser.TestPages.onMain
 import app.jrny.browser.TestPages.page
 import app.jrny.browser.TestPages.titled
+import app.jrny.browser.TestServer
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
 import org.junit.After
@@ -110,6 +111,22 @@ class TabTest {
         // Had either link loaded, the Tab would show an error page at that address.
         assertEquals(start, onMain { tab.url })
         assertFalse(onMain { tab.crashed })
+    }
+
+    @Test
+    fun httpPagesLoad() {
+        // A browser must load the http:// pages people ask for (network_security_config.xml).
+        TestServer(mapOf("/" to "<title>http ok</title>")).use { server ->
+            val tab = newTab("test-http")
+            val address = server.url("/")
+            onMain { tab.load(address) }
+            try {
+                await("http page loaded") { !tab.isLoading && tab.url == address && tab.title == "http ok" }
+            } catch (e: AssertionError) {
+                val state = onMain { "url=${tab.url} title=${tab.title} loading=${tab.isLoading}" }
+                throw AssertionError("${e.message}: $state")
+            }
+        }
     }
 
     @Test
