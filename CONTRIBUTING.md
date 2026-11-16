@@ -45,7 +45,35 @@ CI runs the same scan on every pull request, so a leak that gets past your machi
 
 ## Development setup
 
-The Android project does not exist yet. It arrives in Milestone 1 of the roadmap. When it does, this section will list the JDK, Android SDK and emulator requirements.
+You need:
+
+- JDK 21.
+- The Android SDK with platform 37 (`platforms;android-37.0`).
+- Two emulators or devices with Android 15 (API 35) or later and an up-to-date Android System WebView: a **phone** and a **tablet**. Every UI change is checked on both, because the app has a different layout for each (the Bottom Bar and the Sidebar). For Android 17 images, create the emulators with Command-line Tools 22 or later. Older `avdmanager` writes `target=android-0` into the emulator's `.ini` file, and the emulator then crashes in a loop:
+
+  ```sh
+  avdmanager create avd -n JRNY_Phone_API_37 -d pixel_7 -k "system-images;android-37.0;google_apis_playstore;x86_64"
+  avdmanager create avd -n JRNY_Tablet_API_37 -d pixel_tablet -k "system-images;android-37.0;google_apis_playstore;x86_64"
+  ```
+
+Point Gradle at your SDK. `local.properties` is gitignored:
+
+```sh
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
+```
+
+Build, lint and run the unit tests, the same as CI:
+
+```sh
+./gradlew assembleDebug lintDebug testDebugUnitTest
+```
+
+Install the app and run the device tests on the phone, then on the tablet. CI does the same on every pull request. Run them on **one** device at a time: without `ANDROID_SERIAL`, `installDebug` and `connectedDebugAndroidTest` use every connected device and emulator.
+
+```sh
+adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk
+ANDROID_SERIAL=<serial> ./gradlew connectedDebugAndroidTest
+```
 
 ## Licensing of contributions
 

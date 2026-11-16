@@ -2,7 +2,7 @@
 
 An Android browser with separate Profiles, so you can stay signed in to a different account on the same site in each one. For example, work Google in one Profile and personal Google in another.
 
-> **Status:** planning. There is no usable app yet. This project is built in public. See the [roadmap](docs/ROADMAP.md).
+> **Status:** early development. The app opens one Profile with one Tab, and nothing more yet. This project is built in public. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
