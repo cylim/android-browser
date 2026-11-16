@@ -29,13 +29,15 @@ import app.jrny.browser.profile.WebProfile
  *
  * Create, use and destroy a Tab on the main thread, and only when `WebViewFeature.MULTI_PROFILE`
  * is supported (MainActivity checks). [onPageChanged] runs whenever [url] or [title] changes, even
- * while nothing is drawn, so the Tab can be saved.
+ * while nothing is drawn, so the Tab can be saved. [onVisited] runs for each page the person
+ * goes to, for the history: not for a reload, Back or Forward, and not for a saved page coming back.
  */
 @SuppressLint("RequiresFeature")
 class Tab(
     private val context: Context,
     val profile: WebProfile,
     private val onPageChanged: (Tab) -> Unit = {},
+    private val onVisited: (url: String) -> Unit = {},
 ) {
 
     /**
@@ -100,6 +102,9 @@ class Tab(
      */
     private var restoreDone = false
 
+    /** True from [restore] until the restored page has loaded: that load is not a new visit. */
+    private var restoring = false
+
     /**
      * The saved title of the page being restored. The page's own title replaces it on screen, and
      * it comes back if the page fails to load.
@@ -115,6 +120,7 @@ class Tab(
         crashed = false
         restoreScrollY = 0
         restoreDone = false
+        restoring = false
         restoringTitle = null
         url = address
         onPageChanged(this)
@@ -129,17 +135,28 @@ class Tab(
     fun restore(address: String, title: String, scrollY: Int) {
         this.title = title
         load(address)
+        restoring = true
         restoringTitle = title
         restoreScrollY = scrollY
     }
 
     fun goBack() {
-        if (webView.canGoBack()) webView.goBack()
+        if (!webView.canGoBack()) return
+        historyStep = true
+        webView.goBack()
     }
 
     fun goForward() {
-        if (webView.canGoForward()) webView.goForward()
+        if (!webView.canGoForward()) return
+        historyStep = true
+        webView.goForward()
     }
+
+    /** True from Back or Forward until that page arrives: going back to a page isn't a new visit. */
+    private var historyStep = false
+
+    /** True from a page load starting until the new page takes over. A move within one page never sets it. */
+    private var pageStarting = false
 
     fun reload() {
         val address = url
@@ -253,6 +270,7 @@ class Tab(
             if (view != webView) return
             isLoading = true
             loadFailed = false
+            pageStarting = true
             if (restoreDone) {
                 // The restored page had loaded, and this is the next page.
                 restoreScrollY = 0
@@ -271,8 +289,9 @@ class Tab(
             updateHistory()
             onPageChanged(this@Tab)
             // A page that failed keeps its saved title and position for a reload.
-            if (!loadFailed && !restoreDone && (restoreScrollY > 0 || restoringTitle != null)) {
+            if (!loadFailed && !restoreDone && restoring) {
                 restoreDone = true
+                restoring = false
                 if (restoreScrollY > 0) scrollWhenLaidOut(view, restoreScrollY)
             }
         }
@@ -291,7 +310,15 @@ class Tab(
             // Also fires for same-document navigations (history.pushState), which don't start a page load.
             this@Tab.url = url
             updateHistory()
+            // A new page starts without a title, not with the one of the page before. A reload,
+            // a saved page coming back and a move within the page keep theirs.
+            val newPage = pageStarting
+            pageStarting = false
+            if (newPage && !isReload && !restoring) title = ""
             onPageChanged(this@Tab)
+            val step = historyStep
+            historyStep = false
+            if (!isReload && !restoring && !step) onVisited(url)
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {

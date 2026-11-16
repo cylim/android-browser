@@ -60,6 +60,9 @@ private val BAR_GAP = 8.dp
 /** Icon buttons are 48dp with a 24dp icon, so 4dp puts the outer icons 16dp from the screen edges. */
 private val BAR_SIDE_PADDING = 4.dp
 
+/** Below a panel's last row, so it can scroll clear of the gesture handle. */
+private val PANEL_BOTTOM_SPACE = 24.dp
+
 /** Between the Incoming Link prompt and the page's edges. */
 private val PROMPT_GAP = 16.dp
 
@@ -89,8 +92,20 @@ fun BottomBarLayout(
     var overview by rememberSaveable { mutableStateOf(false) }
     // The Tab Overview replaces the page and the bar. Left underneath, they would still take
     // keyboard focus and be read by a screen reader.
+    val panel = slots.panel
     if (overview) {
         TabOverview(tabs, profileTint(profiles.active), onClose = { overview = false })
+    } else if (panel != null) {
+        // Full screen, like the Tab Overview: clear of side buttons, cutouts and what's at the top,
+        // with the list running to the bottom edge under the gesture handle.
+        Surface(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.tappableElement.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                    .padding(overviewTopSpace()),
+            ) { panel(PaddingValues(bottom = PANEL_BOTTOM_SPACE)) }
+        }
     } else {
         BarAndPage(tab, tabs, profiles, slots, showForward, editingAddress, onProfiles = { sheet = true }, onTabs = { overview = true })
     }

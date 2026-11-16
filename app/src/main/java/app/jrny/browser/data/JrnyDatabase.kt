@@ -8,6 +8,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
@@ -72,6 +73,12 @@ abstract class ProfileDao {
     @Query("DELETE FROM tabs WHERE profileId = :id")
     protected abstract suspend fun deleteTabs(id: Long)
 
+    @Query("DELETE FROM history WHERE profileId = :id")
+    protected abstract suspend fun deleteHistory(id: Long)
+
+    @Query("DELETE FROM bookmarks WHERE profileId = :id")
+    protected abstract suspend fun deleteBookmarks(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -84,14 +91,16 @@ abstract class ProfileDao {
     open suspend fun activate(id: Long) = setActivation(id, maxActivation() + 1)
 
     /**
-     * Marks [id] for deletion unless it's the last live Profile, and closes its Tabs, so their
-     * addresses don't outlive it on disk. Returns whether it did.
+     * Marks [id] for deletion unless it's the last live Profile, and removes its Tabs, history and
+     * bookmarks at once, so no address from it outlives it on disk. Returns whether it did.
      */
     @Transaction
     open suspend fun markPendingUnlessLast(id: Long): Boolean {
         if (countLive() <= 1) return false
         markPending(id)
         deleteTabs(id)
+        deleteHistory(id)
+        deleteBookmarks(id)
         return true
     }
 }
@@ -221,15 +230,131 @@ abstract class TabDao {
     }
 }
 
+/** One row per page visit, kept per Profile (SPEC, "Browsing features"). */
+@Entity(
+    tableName = "history",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId", "visitedAt")],
+)
+data class HistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val url: String,
+    val title: String = "",
+    /** When the page was visited, in milliseconds since the epoch. */
+    val visitedAt: Long,
+)
+
+@Dao
+abstract class HistoryDao {
+    /** A Profile's most recent visits, newest first. */
+    @Query("SELECT * FROM history WHERE profileId = :profileId ORDER BY visitedAt DESC, id DESC LIMIT :limit")
+    abstract fun observe(profileId: Long, limit: Int): Flow<List<HistoryEntity>>
+
+    @Insert
+    protected abstract suspend fun insertRow(visit: HistoryEntity): Long
+
+    @Query(
+        "DELETE FROM history WHERE profileId = :profileId AND id NOT IN " +
+            "(SELECT id FROM history WHERE profileId = :profileId ORDER BY visitedAt DESC, id DESC LIMIT :keep)",
+    )
+    protected abstract suspend fun trim(profileId: Long, keep: Int)
+
+    /** Gives the Profile's latest visit of [url] its page title, once the page has reported it. */
+    @Query(
+        "UPDATE history SET title = :title WHERE id = " +
+            "(SELECT id FROM history WHERE profileId = :profileId AND url = :url ORDER BY visitedAt DESC, id DESC LIMIT 1)",
+    )
+    abstract suspend fun setTitle(profileId: Long, url: String, title: String)
+
+    @Query("DELETE FROM history WHERE id = :id")
+    abstract suspend fun delete(id: Long)
+
+    @Query("DELETE FROM history WHERE profileId = :profileId")
+    abstract suspend fun clear(profileId: Long)
+
+    @Query("SELECT * FROM history WHERE profileId = :profileId ORDER BY visitedAt DESC, id DESC LIMIT 1")
+    protected abstract suspend fun latest(profileId: Long): HistoryEntity?
+
+    @Query("UPDATE history SET visitedAt = :visitedAt WHERE id = :id")
+    protected abstract suspend fun setVisitedAt(id: Long, visitedAt: Long)
+
+    /**
+     * Records a visit and drops the Profile's oldest visits beyond [keep]. Visiting the address
+     * of the Profile's latest visit again only moves that visit's time. Returns the id of the new
+     * row, or null when there is none: a repeat, or a Profile that is gone.
+     */
+    @Transaction
+    open suspend fun record(visit: HistoryEntity, keep: Int): Long? {
+        if (!profileIsLive(visit.profileId)) return null
+        val latest = latest(visit.profileId)
+        if (latest != null && latest.url == visit.url) {
+            setVisitedAt(latest.id, visit.visitedAt)
+            return null
+        }
+        val id = insertRow(visit)
+        trim(visit.profileId, keep)
+        return id
+    }
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+}
+
+/** One row per bookmarked address, kept per Profile. An address is bookmarked at most once in a Profile. */
+@Entity(
+    tableName = "bookmarks",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index(value = ["profileId", "url"], unique = true)],
+)
+data class BookmarkEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val url: String,
+    val title: String = "",
+    val createdAt: Long,
+)
+
+@Dao
+abstract class BookmarkDao {
+    /** A Profile's bookmarks, newest first. */
+    @Query("SELECT * FROM bookmarks WHERE profileId = :profileId ORDER BY createdAt DESC, id DESC")
+    abstract fun observe(profileId: Long): Flow<List<BookmarkEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertRow(bookmark: BookmarkEntity): Long
+
+    @Query("DELETE FROM bookmarks WHERE profileId = :profileId AND url = :url")
+    abstract suspend fun remove(profileId: Long, url: String)
+
+    @Query("DELETE FROM bookmarks WHERE id = :id")
+    abstract suspend fun delete(id: Long)
+
+    /** Bookmarks the address unless the Profile already has it, or is gone. */
+    @Transaction
+    open suspend fun add(bookmark: BookmarkEntity) {
+        if (profileIsLive(bookmark.profileId)) insertRow(bookmark)
+    }
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+}
+
 @Database(
-    entities = [ProfileEntity::class, TabEntity::class],
-    version = 2,
+    entities = [ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class],
+    version = 3,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 abstract class JrnyDatabase : RoomDatabase() {
     abstract fun profiles(): ProfileDao
     abstract fun tabs(): TabDao
+    abstract fun history(): HistoryDao
+    abstract fun bookmarks(): BookmarkDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

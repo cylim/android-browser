@@ -184,6 +184,34 @@ class TabTest {
         awaitPage(tab, two, "two navigate")
     }
 
+    @Test
+    fun onlyPagesThePersonGoesToCountAsVisits() {
+        val visits = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val tab = onMain {
+            Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-visits")), onVisited = { visits += it })
+                .also { tabs += it }
+        }
+        val one = titled("one")
+        val two = titled("two")
+
+        // A saved page coming back is not a visit, and neither is reloading it. The saved title
+        // differs from the page's, so the wait below ends only once the page has really loaded.
+        onMain { tab.restore(one, "saved", 0) }
+        awaitPage(tab, one, "one navigate")
+        onMain { tab.reload() }
+        awaitPage(tab, one, "one reload")
+        assertEquals(emptyList<String>(), visits.toList())
+
+        // Going to a page is a visit. Going back to the one before, and forward again, is not.
+        onMain { tab.load(two) }
+        awaitPage(tab, two, "two navigate")
+        onMain { tab.goBack() }
+        awaitPage(tab, one, "one back_forward")
+        onMain { tab.goForward() }
+        awaitPage(tab, two, "two back_forward")
+        assertEquals(listOf(two), visits.toList())
+    }
+
     private fun newTab(profileId: String): Tab = onMain {
         Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId(profileId)))
             .also { tabs += it }

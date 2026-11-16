@@ -50,8 +50,7 @@ class MainActivity : ComponentActivity() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         // Tabs come back from the database, after a recreation or after Android killed the app.
-        val app = application as JrnyApplication
-        val browser = BrowserState(this, app.profiles, app.tabs, lifecycleScope)
+        val browser = BrowserState(this, (application as JrnyApplication).repositories, lifecycleScope)
         this.browser = browser
         // Not after a restore: the link's Tab is already saved, and would open a second time.
         if (savedInstanceState == null) openIncomingLink(intent)

@@ -2,6 +2,7 @@ package app.jrny.browser.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -30,6 +31,11 @@ class WindowSlots(
     val pageMenu: @Composable () -> Unit,
     /** The Incoming Link prompt, floating at the bottom of the page. Empty when there's nothing to offer. */
     val pagePrompt: @Composable () -> Unit,
+    /**
+     * The open panel (history or bookmarks), which the layout shows in the page's place, or null.
+     * The layout passes the space its list must keep clear at the bottom.
+     */
+    val panel: (@Composable (PaddingValues) -> Unit)? = null,
 )
 
 /**
@@ -58,10 +64,21 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         dismissIncomingLink = browser::dismissIncomingLink,
     )
 
+    val visits by browser.visits.collectAsState()
+    val bookmarks by browser.bookmarks.collectAsState()
+    val library = LibraryUi(
+        visits = visits,
+        bookmarks = bookmarks,
+        toggleBookmark = { url, title -> browser.toggleBookmark(profile, url, title) },
+        deleteBookmark = browser::deleteBookmark,
+        deleteVisit = browser::deleteVisit,
+        clearHistory = { browser.clearHistory(profile) },
+    )
+
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
-    BrowserWindow(tab, tabs, profiles, onSetDefaultBrowser)
+    BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser)
 
     editing?.let { target ->
         val existing = target.profile
@@ -89,7 +106,13 @@ private class EditorTarget(val profile: Profile?)
  * folding). The Tab and its page survive the switch.
  */
 @Composable
-fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, onSetDefaultBrowser: (() -> Unit)? = null) {
+fun BrowserWindow(
+    tab: Tab,
+    tabs: TabsUi,
+    profiles: ProfilesUi,
+    library: LibraryUi = LibraryUi(),
+    onSetDefaultBrowser: (() -> Unit)? = null,
+) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
         if (tab.popup != null) tab.closePopup() else tab.goBack()
@@ -99,6 +122,9 @@ fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, onSetDefaultBrow
     // Link prompt. It belongs to the Tab it was opened for: if another Tab is shown meanwhile
     // (an Incoming Link, say), it closes, so a choice never moves a Tab the person didn't mean.
     var pick by remember(tabs.selected.id) { mutableStateOf<ProfilePick?>(null) }
+    // The history or bookmarks, shown in the page's place. Back closes it before anything else.
+    var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
+    BackHandler(enabled = panel != null) { panel = null }
     HideStatusBar()
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.
@@ -128,8 +154,10 @@ fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, onSetDefaultBrow
                         tab,
                         tabs,
                         profiles,
+                        library,
                         showForward = layout == BrowserLayout.BottomBar && !forwardInBar,
                         onPick = { pick = it },
+                        onPanel = { panel = it },
                         onSetDefaultBrowser = onSetDefaultBrowser,
                     )
                 },
@@ -137,6 +165,21 @@ fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, onSetDefaultBrow
                     // With one Profile there's nowhere to move the page to, so nothing to offer.
                     if (tabs.incomingLink && profiles.all.size > 1) {
                         IncomingLinkPrompt(profiles.active.name, onMove = { pick = ProfilePick.Move }, onDismiss = tabs.dismissIncomingLink)
+                    }
+                },
+                panel = panel?.let { open ->
+                    { padding ->
+                        LibraryPanel(
+                            panel = open,
+                            library = library,
+                            profileName = profiles.active.name,
+                            onOpen = {
+                                tab.load(it)
+                                panel = null
+                            },
+                            onClose = { panel = null },
+                            contentPadding = padding,
+                        )
                     }
                 },
             )
