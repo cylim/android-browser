@@ -9,7 +9,7 @@ class ProfileEmojiTest {
 
     @Test
     fun `one emoji is kept as it is`() {
-        listOf("🚀", "❤️", "🏠", "⭐", "🛠️").forEach { assertEquals(it, ProfileEmoji.clean(it)) }
+        listOf("🚀", "❤️", "🏠", "⭐", "🛠️", "⚽", "☀️", "✈️", "㊗️").forEach { assertEquals(it, ProfileEmoji.clean(it)) }
         assertEquals("🦊", ProfileEmoji.clean("  🦊 "))
     }
 
@@ -29,6 +29,8 @@ class ProfileEmojiTest {
     @Test
     fun `plain text is not an emoji`() {
         listOf("", "   ", "fox", "A", "7", "!", "é", "work 🚀").forEach { assertNull("\"$it\"", ProfileEmoji.clean(it)) }
+        // Nor is a letter, a digit or punctuation of any other script.
+        listOf("日", "日本", "Ж", "ع", "한", "あ", "、", "。", "٣", "€", "—").forEach { assertNull("\"$it\"", ProfileEmoji.clean(it)) }
     }
 
     @Test

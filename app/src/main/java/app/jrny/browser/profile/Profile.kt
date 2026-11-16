@@ -69,10 +69,24 @@ object ProfileEmoji {
         val breaks = java.text.BreakIterator.getCharacterInstance()
         breaks.setText(text)
         val first = text.substring(0, breaks.next())
-        // Letters, digits and punctuation are not emoji. A digit with a keycap mark is.
-        val plain = first.all { it.code < 0x2000 }
-        return first.takeIf { !plain && it.length <= MAX_LENGTH }
+        val points = first.codePoints().toArray()
+        // A digit under a keycap mark is an emoji. Any other letter or digit, in any script, is text.
+        val keycap = KEYCAP in points
+        val written = !keycap && points.any(Character::isLetterOrDigit)
+        val picture = keycap || points.any { it >= PICTOGRAPHS || it in SYMBOLS || it in SINGLES }
+        return first.takeIf { !written && picture && it.length <= MAX_LENGTH }
     }
+
+    private const val KEYCAP = 0x20E3
+
+    /** From here up are the emoji blocks: pictographs, faces, transport, flags' letters. */
+    private const val PICTOGRAPHS = 0x1F000
+
+    /** Arrows, technical and miscellaneous symbols and dingbats: where ❤, ⭐ and ⚽ live. */
+    private val SYMBOLS = 0x2190..0x2BFF
+
+    /** Emoji that sit alone among other characters: ‼ ⁉ ™ ℹ 〰 〽 ㊗ ㊙. */
+    private val SINGLES = setOf(0x203C, 0x2049, 0x2122, 0x2139, 0x3030, 0x303D, 0x3297, 0x3299)
 
     /** The longest sequence stored: enough for a family of four with skin tones. */
     const val MAX_LENGTH = 32
