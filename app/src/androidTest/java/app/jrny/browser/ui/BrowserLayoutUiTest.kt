@@ -17,6 +17,7 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
@@ -429,6 +430,15 @@ class BrowserLayoutUiTest {
     }
 
     @Test
+    fun theHintStaysOnOneLineInAPhonesNarrowField() {
+        // An empty Tab shows the hint. A hint that wraps makes the field, and the bar, taller.
+        show(PHONE_PORTRAIT)
+        compose.onNodeWithTag("address").assertHeightIsEqualTo(56.dp)
+        windowSize = PHONE_SMALL
+        compose.onNodeWithTag("address").assertHeightIsEqualTo(56.dp)
+    }
+
+    @Test
     fun aRestoredTabScrollsBackToWhereItWas() {
         show(PHONE_PORTRAIT)
         val tall = page("<title>tall</title><div style='height:20000px'>top</div>")
@@ -445,6 +455,7 @@ class BrowserLayoutUiTest {
 
     private companion object {
         val PHONE_PORTRAIT = DpSize(411.dp, 891.dp)
+        val PHONE_SMALL = DpSize(360.dp, 740.dp)
         val PHONE_LANDSCAPE = DpSize(891.dp, 411.dp)
         val TABLET_PORTRAIT = DpSize(800.dp, 1280.dp)
         val TABLET_LANDSCAPE = DpSize(1280.dp, 800.dp)

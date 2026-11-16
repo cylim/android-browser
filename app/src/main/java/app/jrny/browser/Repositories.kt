@@ -2,6 +2,10 @@ package app.jrny.browser
 
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.DownloadRepository
+import app.jrny.browser.download.Downloader
+import app.jrny.browser.settings.SearchSuggestions
+import app.jrny.browser.settings.SettingsRepository
+import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.library.BookmarkRepository
 import app.jrny.browser.library.HistoryRepository
 import app.jrny.browser.profile.ProfileRepository
@@ -15,3 +19,12 @@ class Repositories(database: JrnyDatabase) {
     val bookmarks = BookmarkRepository(database.bookmarks())
     val downloads = DownloadRepository(database.downloads())
 }
+
+/** What a [BrowserState] works with besides the screen: what is stored, and the services around it. */
+class BrowserServices(
+    val repositories: Repositories,
+    val downloader: Downloader,
+    val privateTabs: PrivateTabs,
+    val settings: SettingsRepository,
+    val searchSuggestions: SearchSuggestions,
+)

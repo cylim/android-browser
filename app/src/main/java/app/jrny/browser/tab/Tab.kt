@@ -17,7 +17,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.profile.WebProfile
@@ -44,7 +46,25 @@ class Tab(
     private val onPageChanged: (Tab) -> Unit = {},
     private val onVisited: (url: String) -> Unit = {},
     private val onPageSeen: (url: String, title: String) -> Unit = { _, _ -> },
+    safeBrowsing: Boolean = true,
 ) {
+    /**
+     * Whether WebView checks pages against Safe Browsing and warns before a dangerous one
+     * (SPEC, "Browsing features"). It follows the app's setting, also for pages already open.
+     */
+    var safeBrowsing: Boolean = safeBrowsing
+        set(value) {
+            field = value
+            applySafeBrowsing(webView)
+            popup?.let(::applySafeBrowsing)
+        }
+
+    private fun applySafeBrowsing(view: WebView) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
+            WebSettingsCompat.setSafeBrowsingEnabled(view.settings, safeBrowsing)
+        }
+    }
+
 
     /**
      * The WebView showing this Tab. It is replaced with a new one if the renderer dies, so
@@ -238,6 +258,7 @@ class Tab(
             // (javaScriptCanOpenWindowsAutomatically is false by default).
             setSupportMultipleWindows(!popup)
         }
+        applySafeBrowsing(view)
         // Sign-in flows rely on third-party cookies (the Milestone 0 spike signed in with them on).
         profile.cookieManager.setAcceptThirdPartyCookies(view, true)
         view.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->

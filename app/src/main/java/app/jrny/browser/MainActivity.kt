@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,6 +29,7 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.ui.BrowserScreen
 import app.jrny.browser.ui.SystemBarsFollowTheme
 import app.jrny.browser.ui.theme.JrnyTheme
+import app.jrny.browser.ui.theme.isDark
 
 class MainActivity : ComponentActivity() {
 
@@ -51,13 +53,15 @@ class MainActivity : ComponentActivity() {
 
         // Tabs come back from the database, after a recreation or after Android killed the app.
         val app = application as JrnyApplication
-        val browser = BrowserState(this, app.repositories, app.downloader, app.privateTabs, lifecycleScope)
+        val browser = BrowserState(this, app.services, lifecycleScope)
         this.browser = browser
         // Not after a restore: the link's Tab is already saved, and would open a second time.
         if (savedInstanceState == null) openIncomingLink(intent)
         setContent {
-            SystemBarsFollowTheme()
-            JrnyTheme {
+            // The theme is a setting: the device's, or always light or dark.
+            val settings by browser.settings.collectAsState()
+            SystemBarsFollowTheme(settings.theme.isDark())
+            JrnyTheme(settings.theme) {
                 BrowserScreen(browser, onSetDefaultBrowser = if (canBecomeDefaultBrowser) ::askToBeDefaultBrowser else null)
             }
         }

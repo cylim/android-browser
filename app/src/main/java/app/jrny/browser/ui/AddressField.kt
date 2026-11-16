@@ -29,6 +29,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import app.jrny.browser.R
 import app.jrny.browser.address.AddressInput
 import app.jrny.browser.tab.Tab
@@ -52,7 +53,16 @@ class AddressDraft {
  * passes the current [layout], so the field takes focus back after a move.
  */
 @Composable
-fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape, layout: BrowserLayout, private: Boolean = false) {
+fun AddressField(
+    tab: Tab,
+    draft: AddressDraft,
+    modifier: Modifier,
+    shape: Shape,
+    layout: BrowserLayout,
+    private: Boolean = false,
+    /** The chosen search engine's address for a search, with `%s` for the query. */
+    searchTemplate: String = AddressInput.GOOGLE_SEARCH,
+) {
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -66,7 +76,7 @@ fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape
     val pendingBlur = remember { arrayOfNulls<Job>(1) }
 
     fun submit() {
-        val address = AddressInput.toAddress(editing?.text.orEmpty()) ?: return
+        val address = AddressInput.toAddress(editing?.text.orEmpty(), searchTemplate) ?: return
         tab.load(address)
         editing = null
         // Hand focus to the page, as browsers do. Only clearing it isn't enough: when the
@@ -88,7 +98,9 @@ fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape
             }
             keepSelectAll = false
         },
-        placeholder = { Text(stringResource(R.string.address_hint)) },
+        // One line, cut short if it must be: in a phone's narrow field the hint would wrap and
+        // make the whole bar taller.
+        placeholder = { Text(stringResource(R.string.address_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         // A lock marks a Private Tab's address field, in both layouts.
         leadingIcon = if (private) {
             { Icon(Icons.Filled.Lock, stringResource(R.string.private_tab), modifier = Modifier.testTag("private-mark")) }

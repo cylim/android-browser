@@ -6,11 +6,20 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import app.jrny.browser.settings.ThemeChoice
 
-/** Material 3 with the device's dynamic colors. Every supported device (Android 15+) has them. */
+/** Whether [this] choice means dark right now: its own answer, or the device's. */
 @Composable
-fun JrnyTheme(content: @Composable () -> Unit) {
+fun ThemeChoice.isDark(): Boolean = when (this) {
+    ThemeChoice.System -> isSystemInDarkTheme()
+    ThemeChoice.Light -> false
+    ThemeChoice.Dark -> true
+}
+
+/** The app's colors, from the device's own palette, light or dark as [theme] says. */
+@Composable
+fun JrnyTheme(theme: ThemeChoice = ThemeChoice.System, content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val colors = if (isSystemInDarkTheme()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colors = if (theme.isDark()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     MaterialTheme(colorScheme = colors, content = content)
 }

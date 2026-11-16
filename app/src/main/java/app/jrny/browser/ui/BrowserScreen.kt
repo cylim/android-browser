@@ -16,8 +16,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
+import app.jrny.browser.BuildConfig
+import app.jrny.browser.address.AddressInput
+import app.jrny.browser.settings.Suggestion
+import kotlinx.coroutines.delay
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
 
@@ -36,6 +41,8 @@ class WindowSlots(
      * The layout passes the space its list must keep clear at the bottom.
      */
     val panel: (@Composable (PaddingValues) -> Unit)? = null,
+    /** What the address field offers for the text typed so far, or null when there is nothing. */
+    val suggestions: (@Composable (Modifier) -> Unit)? = null,
 )
 
 /**
@@ -85,10 +92,13 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         removeDownload = browser::removeDownload,
     )
 
+    val appSettings by browser.settings.collectAsState()
+    val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME)
+
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
-    BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser)
+    BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) })
 
     editing?.let { target ->
         val existing = target.profile
@@ -122,6 +132,9 @@ fun BrowserWindow(
     profiles: ProfilesUi,
     library: LibraryUi = LibraryUi(),
     onSetDefaultBrowser: (() -> Unit)? = null,
+    settings: SettingsUi = SettingsUi(),
+    /** What to offer for the text typed in the address field so far. */
+    suggest: suspend (String) -> List<Suggestion> = { emptyList() },
 ) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
@@ -144,9 +157,35 @@ fun BrowserWindow(
     // half-typed address survives a resize across 840dp.
     val draft = remember(tab) { AddressDraft() }
     val private = tabs.selected.isPrivate
-    val movableAddressField = remember(tab, private) {
+    val searchTemplate = settings.settings.searchEngine.searchTemplate
+    val movableAddressField = remember(tab, private, searchTemplate) {
         movableContentOf { modifier: Modifier, shape: Shape, layout: BrowserLayout ->
-            AddressField(tab, draft, modifier, shape, layout, private)
+            AddressField(tab, draft, modifier, shape, layout, private, searchTemplate)
+        }
+    }
+
+    // Suggestions for what is typed, asked for a moment after the last keystroke. Just focusing
+    // the field, which selects the page's own address, asks for nothing.
+    var suggestions by remember(tab) { mutableStateOf(emptyList<Suggestion>()) }
+    val typed = draft.value?.text
+    LaunchedEffect(tab, typed) {
+        val text = typed?.trim().orEmpty()
+        if (text.isEmpty() || text == tab.url) {
+            suggestions = emptyList()
+        } else {
+            delay(SUGGESTION_DELAY_MS)
+            suggestions = suggest(text)
+        }
+    }
+    val focusManager = LocalFocusManager.current
+    val openSuggestion: (Suggestion) -> Unit = { suggestion ->
+        (suggestion.url ?: AddressInput.toAddress(suggestion.text, searchTemplate))?.let { address ->
+            tab.load(address)
+            draft.value = null
+            suggestions = emptyList()
+            // As after Go: the page takes the focus, and the keyboard closes.
+            focusManager.clearFocus(force = true)
+            tab.webView.requestFocus()
         }
     }
     // What a Private Tab shows can't be captured (SPEC, "Private Tabs").
@@ -174,7 +213,12 @@ fun BrowserWindow(
                         library,
                         showForward = layout == BrowserLayout.BottomBar && !forwardInBar,
                         onPick = { pick = it },
-                        onPanel = { panel = it },
+                        onPanel = {
+                            // A panel takes the page's place, so an address being typed is given up.
+                            draft.value = null
+                            focusManager.clearFocus(force = true)
+                            panel = it
+                        },
                         onSetDefaultBrowser = onSetDefaultBrowser,
                     )
                 },
@@ -194,9 +238,16 @@ fun BrowserWindow(
                         IncomingLinkPrompt(profiles.active.name, onMove = { pick = ProfilePick.Move }, onDismiss = tabs.dismissIncomingLink)
                     }
                 },
+                suggestions = if (suggestions.isNotEmpty() && draft.value != null) {
+                    { modifier -> SuggestionList(suggestions, openSuggestion, modifier) }
+                } else {
+                    null
+                },
                 panel = panel?.let { open ->
                     { padding ->
-                        LibraryPanel(
+                        if (open == Panel.Settings) {
+                            SettingsPanel(settings, onClose = { panel = null }, contentPadding = padding)
+                        } else LibraryPanel(
                             panel = open,
                             library = library,
                             profileName = profiles.active.name,
@@ -245,6 +296,9 @@ fun BrowserWindow(
         )
     }
 }
+
+/** How long typing has to pause before suggestions are asked for. */
+private const val SUGGESTION_DELAY_MS = 150L
 
 /** From this window width up, the Bottom Bar shows the Forward button itself. */
 private val BOTTOM_BAR_FORWARD_MIN_WIDTH = 600.dp

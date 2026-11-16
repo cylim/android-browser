@@ -1,6 +1,8 @@
 package app.jrny.browser.address
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -146,5 +148,21 @@ class AddressInputTest {
     @Test
     fun `the default search engine is Google`() {
         assertEquals("https://www.google.com/search?q=jrny", AddressInput.toAddress("jrny"))
+    }
+
+    @Test
+    fun onlyTextThatWouldBeSearchedForMayGoToTheSearchEngineWhileTyping() {
+        assertTrue(AddressInput.isSearch("android tablets"))
+        assertTrue(AddressInput.isSearch("jrny"))
+        assertTrue(AddressInput.isSearch("me@example.com"))
+        // An address stays on the device, with or without its scheme.
+        assertFalse(AddressInput.isSearch("https://bank.example/account?token=abc"))
+        assertFalse(AddressInput.isSearch("example.com/path"))
+        assertFalse(AddressInput.isSearch("192.168.1.1"))
+        // So does anything shaped like credentials, and empty text.
+        assertFalse(AddressInput.isSearch("user:secret@example.com"))
+        assertFalse(AddressInput.isSearch("user:two words@example.com"))
+        assertFalse(AddressInput.isSearch("ftp://user:secret@example.com"))
+        assertFalse(AddressInput.isSearch("   "))
     }
 }

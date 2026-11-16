@@ -63,9 +63,8 @@ fun SecureWindow(secure: Boolean) {
  * navigation bar icons are switched between light and dark here.
  */
 @Composable
-fun SystemBarsFollowTheme() {
+fun SystemBarsFollowTheme(dark: Boolean = isSystemInDarkTheme()) {
     val activity = LocalActivity.current as? ComponentActivity ?: return
-    val dark = isSystemInDarkTheme()
     DisposableEffect(activity, dark) {
         val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark }
         activity.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)

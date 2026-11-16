@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -60,6 +61,9 @@ private val BAR_GAP = 8.dp
 
 /** Icon buttons are 48dp with a 24dp icon, so 4dp puts the outer icons 16dp from the screen edges. */
 private val BAR_SIDE_PADDING = 4.dp
+
+/** Five suggestion rows; more scroll. */
+private val SUGGESTIONS_MAX_HEIGHT = 288.dp
 
 /** Below a panel's last row, so it can scroll clear of the gesture handle. */
 private val PANEL_BOTTOM_SPACE = 24.dp
@@ -144,7 +148,15 @@ private fun BarAndPage(
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
         ) {
-            Box(Modifier.align(Alignment.BottomCenter).padding(PROMPT_GAP)) { slots.pagePrompt() }
+            val suggestions = slots.suggestions
+            if (suggestions != null) {
+                // What the address field offers, over the page and right above the bar, tinted like it.
+                Surface(color = profileTint(profiles.active), modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                    suggestions(Modifier.heightIn(max = SUGGESTIONS_MAX_HEIGHT).padding(top = BAR_GAP))
+                }
+            } else {
+                Box(Modifier.align(Alignment.BottomCenter).padding(PROMPT_GAP)) { slots.pagePrompt() }
+            }
         }
         // Tinted with the Active Profile's color, like the Sidebar.
         Surface(color = profileTint(profiles.active)) {
