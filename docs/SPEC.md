@@ -49,6 +49,13 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - "Compact rows" (Settings, for all Profiles) makes every row of the Tab list one line and 40dp tall: a Tab shows its title without its site.
 - The app's own theme stays one setting for all Profiles: the device's, light or dark.
 
+### Site icons
+
+- Every row of the Tab list starts with a mark for its site: the site's own icon once the Profile has shown a page of that site, and until then the first letter of the site's name on a color picked by that name.
+- Icons are kept on the device, per Profile, in the app's private storage. A Profile never shows an icon another Profile fetched.
+- A Private Tab's icons are never kept.
+- Clearing a Profile's history removes the icons of every site it has no bookmark or open Tab of. Deleting a Profile removes all of its icons at once.
+
 ### Private Tabs
 
 - Each Profile can open **Private Tabs**. All of a Profile's Private Tabs share one temporary web data store, which is separate from the Profile's normal store.

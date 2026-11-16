@@ -47,6 +47,8 @@ class Tab(
     private val onVisited: (url: String) -> Unit = {},
     private val onPageSeen: (url: String, title: String) -> Unit = { _, _ -> },
     safeBrowsing: Boolean = true,
+    /** The page at [url] has shown its site's icon. */
+    private val onIcon: (url: String, icon: Bitmap) -> Unit = { _, _ -> },
 ) {
     /**
      * Whether WebView checks pages against Safe Browsing and warns before a dangerous one
@@ -433,6 +435,12 @@ class Tab(
     private inner class PageChromeClient : QuietChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) {
             if (view == webView) progress = newProgress
+        }
+
+        override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
+            // The page's own, not a popup's, and not an error page's.
+            if (view != webView || loadFailed || icon == null) return
+            loadedUrl?.let { onIcon(it, icon) }
         }
 
         override fun onReceivedTitle(view: WebView, title: String?) {

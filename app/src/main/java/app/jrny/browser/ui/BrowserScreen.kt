@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
@@ -126,7 +127,16 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
+    // The Active Profile's site icons. Made anew when one is saved, so the Tab list looks again.
+    val iconVersion by browser.siteIcons.version.collectAsState()
+    val siteIcons = remember(profile.id, iconVersion) {
+        SiteIconSource(
+            cached = { browser.siteIcons.cached(profile.id, it)?.asImageBitmap() },
+            load = { browser.siteIcons.load(profile.id, it)?.asImageBitmap() },
+        )
+    }
     // The browser wears the Active Profile's color: its accents here, its tint in the layouts.
+    CompositionLocalProvider(LocalSiteIcons provides siteIcons) {
     ProfileTheme(profile.color.color) {
         BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules)
 
@@ -150,6 +160,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
                 onDismiss = { editing = null },
             )
         }
+    }
     }
 }
 

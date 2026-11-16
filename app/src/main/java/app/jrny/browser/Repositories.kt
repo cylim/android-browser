@@ -3,6 +3,7 @@ package app.jrny.browser
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.DownloadRepository
 import app.jrny.browser.download.Downloader
+import app.jrny.browser.icons.SiteIconStore
 import app.jrny.browser.settings.SearchSuggestions
 import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.tab.PrivateTabs
@@ -29,4 +30,5 @@ class BrowserServices(
     val privateTabs: PrivateTabs,
     val settings: SettingsRepository,
     val searchSuggestions: SearchSuggestions,
+    val siteIcons: SiteIconStore,
 )
