@@ -10,7 +10,8 @@ import app.jrny.browser.profile.ProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -28,7 +29,9 @@ class BrowserStateTest {
 
     @After
     fun close() {
-        scope.cancel()
+        // Wait for the state flows' queries to finish: closing the database under a running one
+        // crashes the test process.
+        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
         database.close()
     }
 
