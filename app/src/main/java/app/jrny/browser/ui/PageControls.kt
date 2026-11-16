@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -32,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -68,7 +71,8 @@ fun PageView(tab: Tab, modifier: Modifier = Modifier) {
  * - the popup's host. Its registrable domain (who owns the site, from the Public Suffix List)
  *   always shows in full, wrapping if it must. Only the part before it is cut, from the start:
  *   `…google.com.xxxx.attacker.com` shows `attacker.com` whole, never `accounts.google.com…`;
- * - the full address below it, on one line, or in full after a tap;
+ * - the full address below it, on one line, or after a tap in a box of at most five lines that
+ *   scrolls, so a long address never hides the popup;
  * - a close button.
  * Text starts 16dp in, and the close icon ends 16dp in.
  */
@@ -110,13 +114,23 @@ fun PopupBar(address: String, onClose: () -> Unit) {
                     )
                 }
                 if (host.isNotEmpty()) {
+                    val style = MaterialTheme.typography.bodySmall
+                    val fiveLines = with(LocalDensity.current) { (style.lineHeight * 5).toDp() }
                     Text(
                         address,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = style,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = if (expanded) Int.MAX_VALUE else 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.testTag("popup-address"),
+                        modifier = Modifier
+                            .testTag("popup-address")
+                            .then(
+                                if (expanded) {
+                                    Modifier.heightIn(max = fiveLines).verticalScroll(rememberScrollState())
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     )
                 }
             }

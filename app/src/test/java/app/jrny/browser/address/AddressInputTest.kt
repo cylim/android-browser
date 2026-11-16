@@ -73,6 +73,15 @@ class AddressInputTest {
     @Test
     fun `other names before a colon and an at sign are credentials and load`() {
         assertEquals("https://ftp:me@example.com", address("ftp:me@example.com"))
+        // Spaces after the host are part of the path, which loads.
+        assertEquals("https://user:secret@example.com/a b", address("user:secret@example.com/a b"))
+    }
+
+    @Test
+    fun `credentials with a space before the path load nothing and are never searched for`() {
+        assertNull(address("user:two words@example.com"))
+        assertNull(address("user:two words@example.com/path"))
+        assertNull(address("mailto:a b@example.com"))
     }
 
     @Test

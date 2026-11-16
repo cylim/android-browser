@@ -1,9 +1,11 @@
 package app.jrny.browser
 
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
+import java.net.Socket
 import java.net.SocketException
 import kotlin.concurrent.thread
 
@@ -38,25 +40,34 @@ class TestServer(private val pages: Map<String, String>) : AutoCloseable {
                     break
                 }
                 thread(isDaemon = true) {
-                    connection.use { client ->
-                        val reader = client.getInputStream().bufferedReader()
-                        val path = reader.readLine()?.split(' ')?.getOrNull(1) ?: return@use
-                        while (reader.readLine()?.isNotEmpty() == true) Unit
-                        val page = pages[path]
-                        val redirect = page?.removePrefix("redirect:")?.takeIf { page.startsWith("redirect:") }
-                        val status = when {
-                            redirect != null -> "302 Found\r\nLocation: $redirect"
-                            page != null -> "200 OK"
-                            else -> "404 Not Found"
-                        }
-                        val bytes = (page.takeIf { redirect == null } ?: "").toByteArray()
-                        client.getOutputStream().write(
-                            ("HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\n" +
-                                "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n").toByteArray() + bytes,
-                        )
+                    // A client may hang up mid-request. Only that request ends: an exception
+                    // escaping this thread would kill the test process.
+                    try {
+                        serve(connection)
+                    } catch (_: IOException) {
                     }
                 }
             }
+        }
+    }
+
+    private fun serve(connection: Socket) {
+        connection.use { client ->
+            val reader = client.getInputStream().bufferedReader()
+            val path = reader.readLine()?.split(' ')?.getOrNull(1) ?: return@use
+            while (reader.readLine()?.isNotEmpty() == true) Unit
+            val page = pages[path]
+            val redirect = page?.removePrefix("redirect:")?.takeIf { page.startsWith("redirect:") }
+            val status = when {
+                redirect != null -> "302 Found\r\nLocation: $redirect"
+                page != null -> "200 OK"
+                else -> "404 Not Found"
+            }
+            val bytes = (page.takeIf { redirect == null } ?: "").toByteArray()
+            client.getOutputStream().write(
+                ("HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\n" +
+                    "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n").toByteArray() + bytes,
+            )
         }
     }
 

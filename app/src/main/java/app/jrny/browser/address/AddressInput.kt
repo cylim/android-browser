@@ -31,17 +31,27 @@ object AddressInput {
             val afterScheme = text.substring(scheme!!.length + 3)
             return text.takeIf { isAnyHost(WebAddress.authorityHost(afterScheme)) }
         }
+        // Checked before anything that could search: text shaped like credentials may hold a
+        // password, even with spaces in it ("user:two words@example.com").
+        if (scheme == null && WebAddress.hasCredentials(text)) return credentialAddress(text)
         if (scheme == null && text.none(Char::isWhitespace)) {
-            if (WebAddress.hasCredentials(text)) {
-                // "mailto:secret@example.com" is ambiguous: a mail link, or user "mailto" with a
-                // password. Either way it never goes to the search engine. Handing mail links to
-                // apps comes with Incoming Links (Milestone 4).
-                val name = text.substringBefore(':').lowercase()
-                return if (name in NON_WEB_SCHEMES) null else "https://$text"
-            }
             webAddressWithoutScheme(text)?.let { return it }
         }
         return searchTemplate.replace("%s", URLEncoder.encode(text, Charsets.UTF_8))
+    }
+
+    /**
+     * Text shaped like `name:secret@host`, which never goes to the search engine. It loads over
+     * https when it can be an address. Otherwise nothing happens:
+     * - a space before the path means it can't be an address;
+     * - "mailto:secret@example.com" is ambiguous (a mail link, or user "mailto" with a password).
+     *   Handing mail links to apps comes with Incoming Links (Milestone 4).
+     */
+    private fun credentialAddress(text: String): String? {
+        val authority = text.substringBefore('/').substringBefore('?').substringBefore('#')
+        if (authority.any(Char::isWhitespace)) return null
+        if (text.substringBefore(':').lowercase() in NON_WEB_SCHEMES) return null
+        return "https://$text"
     }
 
     private fun webAddressWithoutScheme(text: String): String? {

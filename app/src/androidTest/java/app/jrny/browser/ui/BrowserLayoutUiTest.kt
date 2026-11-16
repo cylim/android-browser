@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Typography
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.AnnotatedString
@@ -313,6 +315,27 @@ class BrowserLayoutUiTest {
         val layout = textLayout("popup-site")
         assertTrue("a site this long wraps", layout.lineCount > 1)
         assertShownWhole(layout, site)
+    }
+
+    @Test
+    fun aVeryLongExpandedAddressStaysWithinFiveLinesAndScrollsToItsEnd() {
+        val address = "https://login.example.com/" + "segment/".repeat(180)
+        compose.setContent {
+            JrnyTheme { Box(Modifier.width(320.dp)) { PopupBar(address, onClose = {}) } }
+        }
+        compose.onNodeWithTag("popup-site", useUnmergedTree = true).performClick()
+
+        val node = compose.onNodeWithTag("popup-address", useUnmergedTree = true)
+        val lineHeight = with(compose.density) { Typography().bodySmall.lineHeight.toPx() }
+        assertTrue("the address wraps past five lines", textLayout("popup-address").lineCount > 5)
+        assertTrue("the box is at most five lines tall", node.fetchSemanticsNode().size.height <= lineHeight * 5 + 1)
+
+        // The end of the address can be reached by scrolling inside the box.
+        val range = node.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        assertTrue("the box scrolls", range.maxValue() > 0f)
+        node.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        compose.waitForIdle()
+        assertEquals(range.maxValue(), range.value(), 0.5f)
     }
 
     /** Every character of [text] is laid out and visible: no ellipsis, nothing cut off. */
