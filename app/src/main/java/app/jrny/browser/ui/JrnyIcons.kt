@@ -29,6 +29,30 @@ object JrnyIcons {
     /** An arrow down onto a tray: downloads. */
     val Download: ImageVector = icon("Download", "M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z")
 
+    /** A push pin: a Pinned Tab. */
+    val Pin: ImageVector = icon(
+        "Pin",
+        "M16,9V4h1c0.55,0 1,-0.45 1,-1s-0.45,-1 -1,-1H7C6.45,2 6,2.45 6,3s0.45,1 1,1h1v5c0,1.66 -1.34,3 -3,3v2h5.97v7l1,1 1,-1v-7H19v-2c-1.66,0 -3,-1.34 -3,-3z",
+    )
+
+    /** A closed folder. */
+    val Folder: ImageVector = icon(
+        "Folder",
+        "M10,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z",
+    )
+
+    /** An open folder: a Folder whose bookmarks show. */
+    val FolderOpen: ImageVector = icon(
+        "FolderOpen",
+        "M20,6h-8l-2,-2H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2zM20,18H4V8h16v10z",
+    )
+
+    /** A folder with a plus: a new Folder. */
+    val NewFolder: ImageVector = icon(
+        "NewFolder",
+        "M20,6h-8l-2,-2H4c-1.11,0 -1.99,0.89 -1.99,2L2,18c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2V8c0,-1.11 -0.89,-2 -2,-2zM19,14h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z",
+    )
+
     private fun icon(name: String, path: String): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
             .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))

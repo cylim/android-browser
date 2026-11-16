@@ -30,6 +30,17 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - At most 5 Tabs are live at once, across all Profiles: the visible Tab and the 4 most recently used. Other Tabs are unloaded and reload when opened.
 - After Android kills the app, each normal Tab is restored with its address, title and scroll position. Back/forward history is not restored, and page content is never written to disk.
 
+### Pinned Tabs
+
+- A Profile's **bookmarks** are its **Pinned Tabs**: the Tab list shows them under "Pinned", above the Profile's other Tabs, in the Sidebar and in the Tab Overview. With nothing pinned there is no "Pinned" section.
+- A Pinned Tab is open while a Tab shows it, and closed otherwise. A closed one is dimmed. Choosing it opens a new Tab with the bookmark's address; choosing an open one shows its Tab. A bookmark has at most one open Tab.
+- Closing an open Pinned Tab closes its Tab and keeps the bookmark. Unpinning removes the bookmark, and its Tab stays open as an ordinary Tab.
+- A Tab is pinned from its row (hold it, then "Pin Tab") or by bookmarking its page from the page menu. Either bookmarks the page, unless the Profile already has it, and makes that Tab the bookmark's Pinned Tab. Only a Tab with a web page can be pinned, and never a Private Tab.
+- A Pinned Tab keeps its bookmark's name and address when its page moves on. Its menu then offers the way back to the pinned page.
+- Pinned Tabs can be grouped in **Folders**, one level deep. A Folder can be collapsed, renamed and deleted; deleting it keeps its bookmarks, at the top level.
+- New bookmarks and Folders go to the end. A bookmark moved into or out of a Folder goes to that list's end.
+- The Bookmarks panel lists the same bookmarks, each Folder under its name. Choosing one there opens its Pinned Tab.
+
 ### Private Tabs
 
 - Each Profile can open **Private Tabs**. All of a Profile's Private Tabs share one temporary web data store, which is separate from the Profile's normal store.
@@ -68,7 +79,7 @@ The layout depends on window width, not device type. It switches live when the w
 
 ### Sidebar (window width ≥ 840dp)
 
-- An Arc-style vertical list that shows only the Active Profile's Tabs.
+- An Arc-style vertical list that shows only the Active Profile's Tabs: its Pinned Tabs and Folders first, then its other Tabs.
 - The Profile switcher sits at the bottom of the Sidebar. Choosing a Profile, or swiping between Profiles, replaces the whole Tab list.
 - The Sidebar can be collapsed to give the page the full width.
 
@@ -84,7 +95,7 @@ The layout depends on window width, not device type. It switches live when the w
 - History, bookmarks and downloads, each per Profile.
   - History keeps web pages the person goes to, not reloads, Back, Forward, or pages restored with a Tab. A redirect's stops on the way are left out. Each Profile keeps its latest 5,000 visits.
   - History and bookmarks open in the page's place: beside the Sidebar, or full screen above the Bottom Bar layout.
-  - Deleting a Profile removes its history, its bookmarks and its list of downloads at once. Downloaded files stay on the device.
+  - Deleting a Profile removes its history, its bookmarks, its Folders and its list of downloads at once. Downloaded files stay on the device.
   - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. Files a page makes itself (`blob:` and `data:` addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.
 - Search: Google by default, and the engine can be changed in settings (Google, Bing, DuckDuckGo, Brave Search). Address-bar suggestions are on by default and can be turned off.
   - While the person types, the address field offers matching pages from the Active Profile's bookmarks and history, then searches the search engine suggests.

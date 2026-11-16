@@ -39,6 +39,12 @@ class TabRepository(private val dao: TabDao) {
      */
     suspend fun move(id: TabId, profile: ProfileId, url: String): TabId? = dao.move(id.value, profile.toLong(), url)?.let(::TabId)
 
+    /**
+     * Shows the bookmark [bookmarkId] as a Pinned Tab: its open Tab is selected, and a closed one
+     * gets a new Tab that loads the bookmark's address. Returns null when the bookmark is gone.
+     */
+    suspend fun openPinned(bookmarkId: Long): TabId? = dao.openPinned(bookmarkId)?.let(::TabId)
+
     /** Gives [profile] an empty Tab if it has none. */
     suspend fun ensureOne(profile: ProfileId) = dao.ensureOne(profile.toLong())
 
@@ -53,6 +59,7 @@ class TabRepository(private val dao: TabDao) {
         title = title,
         scrollY = scrollY,
         selected = selected,
+        bookmarkId = bookmarkId,
     )
 
     private fun ProfileId.toLong(): Long = value.toLong()

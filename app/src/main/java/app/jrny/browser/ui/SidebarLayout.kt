@@ -210,23 +210,23 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowS
             if (suggestions != null) {
                 suggestions(Modifier.weight(1f).padding(top = GUTTER).imePadding())
             } else {
-            // The label's text starts on the content line; the new-Tab button sits in the icon
-            // column at the end, under the collapse arrow.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(top = GUTTER, end = ICON_SLOT_INSET),
-            ) {
-                Text(
-                    stringResource(R.string.tabs),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f).padding(start = CONTENT_INSET),
-                )
-                IconButton(onClick = tabs.open, modifier = Modifier.testTag("new-tab")) {
-                    Icon(Icons.Filled.Add, stringResource(R.string.open_new_tab))
-                }
-            }
-            TabList(tabs, shape = CORNER, selectedColor = MaterialTheme.colorScheme.surface, modifier = Modifier.weight(1f).imePadding())
+            // "Pinned" comes first, once something is pinned. The "Tabs" label's text starts on
+            // the content line; the new-Tab button sits in the icon column at the end, under the
+            // collapse arrow. Both labels scroll with the list.
+            TabList(
+                tabs,
+                shape = CORNER,
+                selectedColor = MaterialTheme.colorScheme.surface,
+                contentPadding = PaddingValues(top = GUTTER),
+                modifier = Modifier.weight(1f).imePadding(),
+                tabsHeader = {
+                    SectionLabel(stringResource(R.string.tabs)) {
+                        IconButton(onClick = tabs.open, modifier = Modifier.testTag("new-tab")) {
+                            Icon(Icons.Filled.Add, stringResource(R.string.open_new_tab))
+                        }
+                    }
+                },
+            )
             }
         }
         ProfileSwitcher(profiles)

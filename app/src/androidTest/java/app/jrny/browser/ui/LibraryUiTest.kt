@@ -7,6 +7,7 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -24,6 +25,8 @@ import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.TestServer
 import app.jrny.browser.library.Bookmark
+import app.jrny.browser.library.Folder
+import app.jrny.browser.library.PinnedItem
 import app.jrny.browser.library.Visit
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -31,6 +34,7 @@ import app.jrny.browser.tab.Tab
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -52,6 +56,8 @@ class LibraryUiTest {
     private val deletedVisits = mutableListOf<Visit>()
     private val deletedBookmarks = mutableListOf<Bookmark>()
     private var cleared = 0
+    private val openedPinned = mutableListOf<Bookmark>()
+    private var folders by mutableStateOf(emptyList<Folder>())
     private var incomingLink by mutableStateOf(false)
 
     @Before
@@ -86,7 +92,10 @@ class LibraryUiTest {
             JrnyTheme {
                 BrowserWindow(
                     tab,
-                    TestTabs.ui(incomingLink = incomingLink),
+                    TestTabs.ui(
+                        incomingLink = incomingLink,
+                        pins = PinsUi(items = folders.map { PinnedItem.Group(it) }, open = { openedPinned += it }),
+                    ),
                     TestProfiles.ui(),
                     LibraryUi(
                         visits = visits,
@@ -191,9 +200,27 @@ class LibraryUiTest {
         compose.onNodeWithContentDescription("Remove the bookmark News").performClick()
         assertEquals(listOf(bookmarks[0]), deletedBookmarks)
 
+        // A bookmark opens as its Pinned Tab. The page in the shown Tab stays.
         compose.onNodeWithText("News").performClick()
         compose.onNodeWithTag("panel-Bookmarks").assertDoesNotExist()
-        compose.waitUntil(15_000) { !tab.isLoading && tab.url == server.url("/news") && tab.title == "News" }
+        assertEquals(listOf(bookmarks[0]), openedPinned)
+        assertEquals(server.url("/start"), tab.url)
+    }
+
+    @Test
+    fun theBookmarksPanelListsEachFolderUnderItsName() {
+        val mail = Bookmark(6, server.url("/mail"), "Mail", folderId = 9)
+        bookmarks = bookmarks + mail + Bookmark(7, server.url("/start"), "Start", folderId = 404)
+        folders = listOf(Folder(9, "Every morning", bookmarks = listOf(mail)))
+        show(PHONE_PORTRAIT)
+        openFromMenu("menu-bookmarks")
+
+        // The bookmarks outside a Folder come first, one whose Folder is gone among them.
+        val news = compose.onNodeWithText("News").fetchSemanticsNode().boundsInRoot.top
+        val start = compose.onNodeWithText("Start").fetchSemanticsNode().boundsInRoot.top
+        val folder = compose.onNodeWithTag("bookmark-folder").assertTextEquals("Every morning").fetchSemanticsNode().boundsInRoot.top
+        val inFolder = compose.onNodeWithText("Mail").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("News $news, Start $start, folder $folder, Mail $inFolder", news < start && start < folder && folder < inFolder)
     }
 
     @Test
@@ -218,7 +245,7 @@ class LibraryUiTest {
         compose.onNodeWithTag("clear-history").assertDoesNotExist()
         compose.onNodeWithTag("close-panel").performClick()
         openFromMenu("menu-bookmarks")
-        compose.onNodeWithText("Pages you bookmark in this Profile show here.").assertExists()
+        compose.onNodeWithText("Pages you bookmark or pin in this Profile show here.").assertExists()
     }
 
     private companion object {

@@ -60,6 +60,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     // Some(null) creates a Profile, Some(profile) changes one.
     var editing by remember { mutableStateOf<EditorTarget?>(null) }
     val profiles = ProfilesUi(all, profile, pending, browser::switchTo, edit = { editing = EditorTarget(it) })
+    val pinned by browser.pinned.collectAsState()
     val tabs = TabsUi(
         all = current.tabs,
         selected = current.selected,
@@ -72,6 +73,26 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         linkOffer = browser.linkOffer?.takeIf { it.tab == current.selected.id },
         dismissIncomingLink = browser::dismissIncomingLink,
         acceptRuleOffer = browser::acceptRuleOffer,
+        pins = PinsUi(
+            items = pinned,
+            open = { browser.openPinned(profile, it) },
+            pin = browser::pinTab,
+            unpin = browser::deleteBookmark,
+            reset = { bookmark ->
+                current.tabs.firstOrNull { it.bookmarkId == bookmark.id }?.let { open ->
+                    browser.tabFor(open).load(bookmark.url)
+                    browser.selectTab(profile, open.id)
+                }
+            },
+            rename = browser::renameBookmark,
+            move = browser::moveBookmark,
+            addFolder = { name, first -> browser.addFolder(profile, name, first) },
+            renameFolder = browser::renameFolder,
+            setCollapsed = browser::setFolderCollapsed,
+            deleteFolder = browser::deleteFolder,
+            reorder = { browser.reorderPinned(profile, it) },
+            reorderIn = { browser.reorderFolder(profile, it) },
+        ),
     )
 
     val visits by browser.visits.collectAsState()
@@ -80,7 +101,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     val library = LibraryUi(
         visits = visits,
         bookmarks = bookmarks,
-        toggleBookmark = { url, title -> browser.toggleBookmark(profile, url, title) },
+        toggleBookmark = { url, title -> browser.toggleBookmark(current.selected, url, title) },
         deleteBookmark = browser::deleteBookmark,
         deleteVisit = browser::deleteVisit,
         clearHistory = { browser.clearHistory(profile) },
@@ -299,6 +320,11 @@ fun BrowserWindow(
                             },
                             onClose = { panel = null },
                             contentPadding = padding,
+                            pins = tabs.pins,
+                            onOpenBookmark = {
+                                tabs.pins.open(it)
+                                panel = null
+                            },
                         )
                     }
                 },

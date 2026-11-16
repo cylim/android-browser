@@ -51,6 +51,7 @@ import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.library.Bookmark
+import app.jrny.browser.library.Folder
 import app.jrny.browser.library.Visit
 import app.jrny.browser.tab.displayHost
 import kotlinx.coroutines.delay
@@ -84,8 +85,9 @@ class LibraryUi(
 }
 
 /**
- * The history or the bookmarks of [profileName], in the page's place. Choosing a row opens its
- * address in the shown Tab ([onOpen]) and closes the panel.
+ * The history, bookmarks or downloads of [profileName], in the page's place. Choosing a visit
+ * opens its address in the shown Tab ([onOpen]); choosing a bookmark opens its Pinned Tab
+ * ([onOpenBookmark]). Either closes the panel.
  *
  * The content is one column, at most [PANEL_MAX_WIDTH] wide and centered, so rows stay readable
  * on a tablet. In it, text starts [PANEL_TEXT_INSET] in and each row's icon button ends
@@ -101,6 +103,10 @@ fun LibraryPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
+    /** The Profile's Folders, which group the bookmarks. */
+    pins: PinsUi = PinsUi(),
+    /** Opens a bookmark as its Pinned Tab. */
+    onOpenBookmark: (Bookmark) -> Unit = { onOpen(it.url) },
 ) {
     var confirmClear by remember { mutableStateOf(false) }
     val title = when (panel) {
@@ -140,20 +146,41 @@ fun LibraryPanel(
                             onDelete = { library.deleteVisit(visit) },
                         )
                     }
-                    Panel.Bookmarks -> PanelList(
-                        items = library.bookmarks,
-                        key = { it.id },
-                        emptyText = R.string.bookmarks_empty,
-                        contentPadding = contentPadding,
-                    ) { bookmark ->
-                        PanelRow(
-                            title = bookmark.title,
-                            url = bookmark.url,
-                            detail = null,
-                            deleteLabel = R.string.delete_bookmark,
-                            onOpen = { onOpen(bookmark.url) },
-                            onDelete = { library.deleteBookmark(bookmark) },
-                        )
+                    Panel.Bookmarks -> {
+                        // The bookmarks outside a Folder first, then each Folder under its name.
+                        val folders = pins.folders
+                        val inFolders = folders.map { it.id }.toSet()
+                        val rows: List<Any> = library.bookmarks.filter { it.folderId !in inFolders } +
+                            folders.flatMap { folder -> listOf(folder) + library.bookmarks.filter { it.folderId == folder.id } }
+                        PanelList(
+                            items = rows,
+                            key = { if (it is Folder) "folder-${it.id}" else (it as Bookmark).id },
+                            emptyText = R.string.bookmarks_empty,
+                            contentPadding = contentPadding,
+                        ) { row ->
+                            when (row) {
+                                is Folder -> Text(
+                                    row.name,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .padding(start = PANEL_TEXT_INSET, end = PANEL_TEXT_INSET, top = 24.dp, bottom = 8.dp)
+                                        .semantics { heading() }
+                                        .testTag("bookmark-folder"),
+                                )
+                                is Bookmark -> PanelRow(
+                                    title = row.title,
+                                    url = row.url,
+                                    detail = null,
+                                    deleteLabel = R.string.delete_bookmark,
+                                    // A bookmark opens as its Pinned Tab, not over the page in the shown Tab.
+                                    onOpen = { onOpenBookmark(row) },
+                                    onDelete = { library.deleteBookmark(row) },
+                                )
+                            }
+                        }
                     }
                     Panel.Downloads -> DownloadList(library, contentPadding)
                     // These have their own panels (SettingsPanel, SiteRulesPanel).

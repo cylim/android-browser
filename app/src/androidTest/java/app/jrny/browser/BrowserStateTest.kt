@@ -18,6 +18,7 @@ import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.rules.SiteRule
+import app.jrny.browser.library.PinnedItem
 import app.jrny.browser.library.Visit
 import app.jrny.browser.settings.SearchEngine
 import app.jrny.browser.settings.SearchSuggestions
@@ -551,8 +552,11 @@ class BrowserStateTest {
     fun aBookmarkIsToggledInTheActiveProfileOnly() {
         val browser = newBrowser()
         val personal = active(browser).profile
-        onMain { browser.toggleBookmark(personal, "https://example.com/", "Example") }
+        val shown = active(browser).selected
+        onMain { browser.toggleBookmark(shown, "https://example.com/", "Example") }
         await("bookmarked") { browser.bookmarks.value.map { it.url } == listOf("https://example.com/") }
+        // The Tab that showed the page is the bookmark's Pinned Tab now.
+        await("pinned") { browser.active.value?.selected?.bookmarkId == browser.bookmarks.value.single().id }
 
         val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
         await("work active") { browser.active.value?.profile?.id == work.id }
@@ -560,8 +564,78 @@ class BrowserStateTest {
 
         runBlocking { profiles.activate(personal.id) }
         await("personal's bookmark is back") { browser.bookmarks.value.size == 1 }
-        onMain { browser.toggleBookmark(personal, "https://example.com/", "Example") }
+        onMain { browser.toggleBookmark(shown, "https://example.com/", "Example") }
         await("removed") { browser.bookmarks.value.isEmpty() }
+        // Its Tab stays open, as an ordinary Tab.
+        await("unpinned") { browser.active.value?.tabs?.single { it.id == shown.id }?.isPinned == false }
+    }
+
+    @Test
+    fun aPinnedTabIsClosedAndOpenedAgainWhileItsBookmarkStays() {
+        TestServer(mapOf("/pin" to "<title>Pinned page</title>", "/other" to "<title>Other page</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val id = runBlocking { tabs.open(personal.id) }
+            val tab = show(browser, id)
+            load(tab, server.url("/pin"), "Pinned page")
+
+            // Pinned from the page the Tab shows now, which can be newer than its saved row.
+            val unsaved = active(browser).tabs.single { it.id == id }.copy(url = null, title = "")
+            onMain { browser.pinTab(unsaved) }
+            await("pinned") { browser.bookmarks.value.map { it.url to it.title } == listOf(server.url("/pin") to "Pinned page") }
+            val bookmark = onMain { browser.bookmarks.value.single() }
+            await("the Tab is its Pinned Tab") { browser.active.value?.tabs?.single { it.id == id }?.bookmarkId == bookmark.id }
+            assertEquals(listOf(PinnedItem.Page(bookmark)), onMain { browser.pinned.value })
+
+            // Closing the Pinned Tab closes its Tab. The bookmark stays, closed.
+            onMain { browser.closeTab(id) }
+            await("closed") { browser.active.value?.tabs?.none { it.id == id } == true }
+            assertEquals(listOf(bookmark), onMain { browser.bookmarks.value })
+            assertTrue(active(browser).tabs.none { it.isPinned })
+
+            // Opening it gives it a new Tab, which loads the bookmark's address.
+            onMain { browser.openPinned(personal, bookmark) }
+            await("opened again") { browser.active.value?.selected?.bookmarkId == bookmark.id }
+            val reopened = active(browser).selected
+            assertEquals(server.url("/pin"), reopened.url)
+            val page = show(browser, reopened.id)
+            await("loaded") { !page.isLoading && page.title == "Pinned page" }
+
+            // Opening it again only shows that Tab.
+            val other = runBlocking { tabs.open(personal.id) }
+            show(browser, other)
+            onMain { browser.openPinned(personal, bookmark) }
+            await("shown again") { browser.active.value?.selected?.id == reopened.id }
+            assertEquals(1, active(browser).tabs.count { it.bookmarkId == bookmark.id })
+
+            // Unpinned, its Tab stays open as an ordinary Tab.
+            onMain { browser.deleteBookmark(bookmark) }
+            await("unpinned") { browser.bookmarks.value.isEmpty() && browser.active.value?.tabs?.none { it.isPinned } == true }
+            assertTrue(active(browser).tabs.any { it.id == reopened.id })
+        }
+    }
+
+    @Test
+    fun aPrivateTabIsNeverPinnedAndFoldersBelongToTheirProfile() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        onMain { browser.openPrivateTab(personal) }
+        await("private tab shown") { browser.active.value?.selected?.isPrivate == true }
+        val private = active(browser).selected.copy(url = "https://example.com/secret", title = "Secret")
+        onMain { browser.pinTab(private) }
+        // Bookmarking its page is the person's own choice, and leaves the Tab private.
+        onMain { browser.toggleBookmark(private, "https://example.com/kept", "Kept") }
+        await("bookmarked") { browser.bookmarks.value.map { it.url } == listOf("https://example.com/kept") }
+        assertTrue(active(browser).tabs.none { it.isPinned })
+
+        val kept = onMain { browser.bookmarks.value.single() }
+        onMain { browser.addFolder(personal, "  Reading  ", first = kept) }
+        await("in its Folder") { (browser.pinned.value.singleOrNull() as? PinnedItem.Group)?.folder?.bookmarks?.map { it.id } == listOf(kept.id) }
+        assertEquals("Reading", (onMain { browser.pinned.value }.single() as PinnedItem.Group).folder.name)
+
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        await("work has nothing pinned") { browser.pinned.value.isEmpty() }
     }
 
     @Test

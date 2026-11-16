@@ -9,6 +9,7 @@ An Android browser with separate Profiles, so you can stay signed in to a differ
 - **Profiles**, each with its own cookies, site data, tabs, history, bookmarks and downloads.
 - **Move a tab to another Profile** to open the same page signed in as a different account.
 - **Links from other apps** open in the Profile you were last using, or, with a Site Rule, always in the Profile you chose for that site.
+- **Pinned tabs and folders**: each Profile's bookmarks sit at the top of its tab list, open or closed, and closing one keeps it.
 - **Tablet layout** with an Arc-style sidebar of tabs and the Profile switcher at the bottom.
 - **Phone layout** with a Safari-style bottom bar for search and switching Profiles.
 - **No telemetry**, no Google Play Services, no trackers.

@@ -21,7 +21,12 @@ data class SavedTab(
     /** The Tab the Profile shows: its most recently selected one. */
     val selected: Boolean,
     val isPrivate: Boolean = false,
+    /** The bookmark this Tab is the open Pinned Tab of, or null for an ordinary Tab. */
+    val bookmarkId: Long? = null,
 ) {
+    /** True for a bookmark's open Pinned Tab, which the Sidebar lists under "Pinned". */
+    val isPinned: Boolean get() = bookmarkId != null
+
     val pageTitle: String? get() = pageTitle(title, url)
     val displayHost: String get() = displayHost(url)
 }
