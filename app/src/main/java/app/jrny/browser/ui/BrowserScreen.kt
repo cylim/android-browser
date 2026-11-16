@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,6 +27,7 @@ import app.jrny.browser.settings.Suggestion
 import kotlinx.coroutines.delay
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
+import app.jrny.browser.ui.theme.ProfileTheme
 
 /** The address field, placed by a layout with its own modifier and shape. */
 typealias AddressFieldSlot = @Composable (Modifier, Shape) -> Unit
@@ -124,23 +126,30 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
-    BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules)
+    // The browser wears the Active Profile's color: its accents here, its tint in the layouts.
+    ProfileTheme(profile.color.color) {
+        BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules)
 
-    editing?.let { target ->
-        val existing = target.profile
-        ProfileEditorDialog(
-            profile = existing,
-            canDelete = all.size > 1,
-            onSave = { name, color, icon ->
-                if (existing == null) browser.create(name, color, icon) else browser.update(existing.copy(name = name, color = color, icon = icon))
-                editing = null
-            },
-            onDelete = {
-                existing?.let(browser::delete)
-                editing = null
-            },
-            onDismiss = { editing = null },
-        )
+        editing?.let { target ->
+            val existing = target.profile
+            ProfileEditorDialog(
+                profile = existing,
+                canDelete = all.size > 1,
+                onSave = { name, look ->
+                    if (existing == null) {
+                        browser.create(name, look)
+                    } else {
+                        browser.update(existing.copy(name = name, color = look.color, icon = look.icon, emoji = look.emoji, tint = look.tint))
+                    }
+                    editing = null
+                },
+                onDelete = {
+                    existing?.let(browser::delete)
+                    editing = null
+                },
+                onDismiss = { editing = null },
+            )
+        }
     }
 }
 
@@ -219,6 +228,8 @@ fun BrowserWindow(
     // What a Private Tab shows can't be captured (SPEC, "Private Tabs").
     SecureWindow(private)
 
+    // One line a row or two, as the settings say, for every Tab list in the window.
+    CompositionLocalProvider(LocalCompactTabs provides settings.settings.compactTabs) {
     Surface(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val layout = BrowserLayout.forWindowWidth(maxWidth.value)
@@ -336,6 +347,7 @@ fun BrowserWindow(
                     BottomBarLayout(tab, tabs, profiles, slots, showForward = forwardInBar, editingAddress = draft.value != null)
             }
         }
+    }
     }
 
     // A page can only offer a file. It downloads once the person agrees.

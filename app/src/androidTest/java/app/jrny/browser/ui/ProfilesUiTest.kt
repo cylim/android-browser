@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -32,6 +33,8 @@ import app.jrny.browser.TestPages.titled
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
+import app.jrny.browser.profile.ProfileLook
+import app.jrny.browser.profile.ProfileTint
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.Tab
@@ -137,7 +140,7 @@ class ProfilesUiTest {
     fun theEditorsButtonsStayAboveTheKeyboard() {
         compose.setContent {
             JrnyTheme {
-                ProfileEditorDialog(null, canDelete = false, onSave = { _, _, _ -> }, onDelete = {}, onDismiss = {})
+                ProfileEditorDialog(null, canDelete = false, onSave = { _, _ -> }, onDelete = {}, onDismiss = {})
             }
         }
         // Typing a name brings up the keyboard, which on a landscape tablet takes half the screen.
@@ -172,10 +175,10 @@ class ProfilesUiTest {
 
     @Test
     fun theEditorCreatesAProfileWithItsNameColorAndIcon() {
-        var saved: Triple<String, ProfileColor, ProfileIcon>? = null
+        var saved: Pair<String, ProfileLook>? = null
         compose.setContent {
             JrnyTheme {
-                ProfileEditorDialog(null, canDelete = false, onSave = { n, c, i -> saved = Triple(n, c, i) }, onDelete = {}, onDismiss = {})
+                ProfileEditorDialog(null, canDelete = false, onSave = { name, look -> saved = name to look }, onDelete = {}, onDismiss = {})
             }
         }
         compose.onNodeWithTag("save-profile").assertIsNotEnabled()
@@ -183,7 +186,43 @@ class ProfilesUiTest {
         compose.onNodeWithTag("color-Amber").performScrollTo().performClick()
         compose.onNodeWithTag("icon-Star").performScrollTo().performClick()
         compose.onNodeWithTag("save-profile").assertIsEnabled().performClick()
-        assertEquals(Triple("School", ProfileColor.Amber, ProfileIcon.Star), saved)
+        assertEquals("School" to ProfileLook(ProfileColor.Amber, ProfileIcon.Star), saved)
+    }
+
+    @Test
+    fun theEditorSetsAnEmojiAndHowStronglyTheColorShows() {
+        var saved: Pair<String, ProfileLook>? = null
+        compose.setContent {
+            JrnyTheme {
+                ProfileEditorDialog(TestProfiles.work, canDelete = true, onSave = { name, look -> saved = name to look }, onDelete = {}, onDismiss = {})
+            }
+        }
+        // As it is: its icon, and the middle strength.
+        compose.onNodeWithTag("icon-Build").performScrollTo().assertIsSelected()
+        compose.onNodeWithTag("tint-Medium").performScrollTo().assertIsSelected()
+
+        compose.onNodeWithTag("tint-Strong").performClick()
+        compose.onNodeWithTag("emoji-🚀").performScrollTo().performClick()
+        compose.onNodeWithTag("emoji-🚀").assertIsSelected()
+        // An emoji takes the icon's place, so no icon is the chosen one.
+        compose.onNodeWithTag("icon-Build").performScrollTo().assertIsNotSelected()
+        compose.onNodeWithTag("save-profile").performClick()
+        assertEquals("Work" to ProfileLook(ProfileColor.Teal, ProfileIcon.Build, "🚀", ProfileTint.Strong), saved)
+
+        // Any emoji can be typed. Only the first counts, and plain text is not one.
+        compose.onNodeWithTag("profile-emoji-field").performScrollTo().performTextReplacement("🦊🐻")
+        compose.onNodeWithTag("emoji-🚀").performScrollTo().assertIsNotSelected()
+        compose.onNodeWithTag("save-profile").performClick()
+        assertEquals("🦊", saved?.second?.emoji)
+        compose.onNodeWithTag("profile-emoji-field").performScrollTo().performTextReplacement("fox")
+        compose.onNodeWithText("That isn't an emoji.", substring = true).assertExists()
+        compose.onNodeWithTag("save-profile").performClick()
+        assertEquals("🦊", saved?.second?.emoji)
+
+        // Choosing an icon gives the emoji up, and clears what was typed for one.
+        compose.onNodeWithTag("icon-Star").performScrollTo().performClick()
+        compose.onNodeWithTag("save-profile").performClick()
+        assertEquals("Work" to ProfileLook(ProfileColor.Teal, ProfileIcon.Star, null, ProfileTint.Strong), saved)
     }
 
     @Test
@@ -192,7 +231,7 @@ class ProfilesUiTest {
         var canDelete by mutableStateOf(false)
         compose.setContent {
             JrnyTheme {
-                ProfileEditorDialog(TestProfiles.work, canDelete = canDelete, onSave = { _, _, _ -> }, onDelete = { deleted++ }, onDismiss = {})
+                ProfileEditorDialog(TestProfiles.work, canDelete = canDelete, onSave = { _, _ -> }, onDelete = { deleted++ }, onDismiss = {})
             }
         }
         compose.onNodeWithTag("delete-profile").performScrollTo().assertIsNotEnabled()

@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
@@ -36,7 +37,9 @@ import app.jrny.browser.settings.Settings
 import app.jrny.browser.settings.Suggestion
 import app.jrny.browser.settings.ThemeChoice
 import app.jrny.browser.tab.Tab
+import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.ui.theme.JrnyTheme
+import app.jrny.browser.ui.theme.ProfileTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -115,7 +118,10 @@ class SettingsUiTest {
         compose.onNodeWithTag("setting-safe-browsing").performScrollTo().performClick()
         compose.onNodeWithTag("theme-Dark").performScrollTo().performClick()
 
-        assertEquals(Settings(SearchEngine.DuckDuckGo, suggestions = false, safeBrowsing = false, theme = ThemeChoice.Dark), settings)
+        compose.onNodeWithTag("setting-compact-tabs").performScrollTo().assertIsOff().performClick()
+
+        assertEquals(Settings(SearchEngine.DuckDuckGo, suggestions = false, safeBrowsing = false, theme = ThemeChoice.Dark, compactTabs = true), settings)
+        compose.onNodeWithTag("setting-compact-tabs").assertIsOn()
         compose.onNodeWithTag("engine-DuckDuckGo").performScrollTo().assertIsSelected()
         compose.onNodeWithTag("setting-suggestions").assertIsOff()
         // The explanation names the engine the text would go to.
@@ -139,6 +145,33 @@ class SettingsUiTest {
         show(TABLET_LANDSCAPE)
         openSettings()
         compose.onNodeWithTag("settings-pending-removal").assertDoesNotExist()
+    }
+
+    @Test
+    fun theBrowserTakesItsAccentsFromTheActiveProfilesColor() {
+        var primary = Color.Unspecified
+        var onPrimary = Color.Unspecified
+        var theme by mutableStateOf(ThemeChoice.Light)
+        var color by mutableStateOf(ProfileColor.Teal.color)
+        compose.mainClock.autoAdvance = true
+        compose.setContent {
+            JrnyTheme(theme) {
+                ProfileTheme(color) {
+                    primary = MaterialTheme.colorScheme.primary
+                    onPrimary = MaterialTheme.colorScheme.onPrimary
+                }
+            }
+        }
+        // On a light surface the accent is the Profile's own color, with white on it.
+        compose.waitUntil(5_000) { primary == ProfileColor.Teal.color }
+        assertEquals(Color.White, onPrimary)
+        // Another Profile, another accent.
+        color = ProfileColor.Red.color
+        compose.waitUntil(5_000) { primary == ProfileColor.Red.color }
+        // On a dark surface it is lightened to stay readable, and what sits on it is dark.
+        theme = ThemeChoice.Dark
+        compose.waitUntil(5_000) { primary.luminance() > ProfileColor.Red.color.luminance() + 0.2f }
+        assertTrue("on a dark surface: $onPrimary", onPrimary.luminance() < 0.2f)
     }
 
     @Test

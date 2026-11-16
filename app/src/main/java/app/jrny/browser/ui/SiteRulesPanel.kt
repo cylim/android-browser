@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -283,7 +284,7 @@ fun SiteRuleEditorDialog(
                             when {
                                 text.isBlank() -> stringResource(R.string.rule_site_help)
                                 pattern == null && text.trim().length > SitePattern.MAX_LENGTH ->
-                                    stringResource(R.string.rule_too_long, SitePattern.MAX_LENGTH)
+                                    pluralStringResource(R.plurals.rule_too_long, SitePattern.MAX_LENGTH, SitePattern.MAX_LENGTH)
                                 pattern == null -> stringResource(R.string.rule_not_a_site)
                                 replaced != null && replacedProfile != null ->
                                     stringResource(R.string.rule_replaces, pattern.text, replacedProfile.name)

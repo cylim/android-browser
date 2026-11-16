@@ -23,15 +23,18 @@ class SettingsRepositoryTest {
 
     @Test
     fun theDefaultsAreGoogleWithSuggestionsAndSafeBrowsingOn() {
-        assertEquals(Settings(SearchEngine.Google, suggestions = true, safeBrowsing = true, theme = ThemeChoice.System), SettingsRepository(preferences).settings.value)
+        assertEquals(
+            Settings(SearchEngine.Google, suggestions = true, safeBrowsing = true, theme = ThemeChoice.System, compactTabs = false),
+            SettingsRepository(preferences).settings.value,
+        )
     }
 
     @Test
     fun changesAreKept() {
         val repository = SettingsRepository(preferences)
         repository.update { it.copy(searchEngine = SearchEngine.DuckDuckGo, suggestions = false) }
-        repository.update { it.copy(safeBrowsing = false, theme = ThemeChoice.Dark) }
-        val changed = Settings(SearchEngine.DuckDuckGo, suggestions = false, safeBrowsing = false, theme = ThemeChoice.Dark)
+        repository.update { it.copy(safeBrowsing = false, theme = ThemeChoice.Dark, compactTabs = true) }
+        val changed = Settings(SearchEngine.DuckDuckGo, suggestions = false, safeBrowsing = false, theme = ThemeChoice.Dark, compactTabs = true)
         assertEquals(changed, repository.settings.value)
         // As after the app restarts: read again from the same file.
         assertEquals(changed, SettingsRepository(preferences).settings.value)

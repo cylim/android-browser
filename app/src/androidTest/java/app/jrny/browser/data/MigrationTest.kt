@@ -129,6 +129,25 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version7GivesEveryProfileTheMiddleColorStrength() {
+        helper.createDatabase(DB, 6).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0)")
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion) VALUES (2, 'Work', 'Teal', 'Build', 2, 0)")
+            db.execSQL("INSERT INTO folders (id, profileId, name, position, collapsed, createdAt) VALUES (1, 1, 'Reading', 1, 0, 5)")
+        }
+        helper.runMigrationsAndValidate(DB, 7, true).use { db ->
+            db.query("SELECT name, color, icon, tint FROM profiles ORDER BY id").use { rows ->
+                val kept = buildList { while (rows.moveToNext()) add(listOf(rows.getString(0), rows.getString(1), rows.getString(2), rows.getString(3))) }
+                assertEquals(listOf(listOf("Personal", "Blue", "Person", "Medium"), listOf("Work", "Teal", "Build", "Medium")), kept)
+            }
+            db.query("SELECT COUNT(*) FROM folders").use { rows ->
+                rows.moveToFirst()
+                assertEquals(1, rows.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

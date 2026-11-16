@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -35,10 +36,13 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -241,6 +245,7 @@ private fun TabRow(
 ) {
     val label = if (named) tabLabel(tab) else stringResource(R.string.private_tab)
     var menu by remember { mutableStateOf(false) }
+    val compact = LocalCompactTabs.current
     Box {
         Surface(
             color = if (selected) selectedColor else Color.Transparent,
@@ -258,7 +263,7 @@ private fun TabRow(
                 .semantics { this.selected = selected }
                 .testTag("tab-row-${tab.id.value}"),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = ROW_HEIGHT)) {
+            ListRow(height = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT) {
                 if (tab.isPrivate) {
                     // The lock sits where another row's site mark does.
                     Box(Modifier.padding(start = LIST_TEXT_INSET).size(SITE_ICON_SIZE), contentAlignment = Alignment.Center) {
@@ -274,10 +279,10 @@ private fun TabRow(
                 }
                 Column(
                     verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP, top = 8.dp, bottom = 8.dp),
+                    modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP).padding(vertical = if (compact) 0.dp else 8.dp),
                 ) {
                     Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (named && tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
+                    if (!compact && named && tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
                         Text(
                             tab.displayHost,
                             style = MaterialTheme.typography.bodySmall,
@@ -287,7 +292,7 @@ private fun TabRow(
                         )
                     }
                 }
-                IconButton(onClick = onClose, modifier = Modifier.padding(end = LIST_ICON_INSET).testTag("close-tab")) {
+                IconButton(onClick = onClose, modifier = Modifier.padding(end = closeButtonInset()).testTag("close-tab")) {
                     Icon(Icons.Filled.Close, stringResource(R.string.close_tab_named, label))
                 }
             }
@@ -372,8 +377,32 @@ fun Modifier.horizontalSwipe(vararg key: Any?, beforeChildren: Boolean = false, 
 /** How far a swipe has to travel to switch Tabs or Profiles. */
 private val SWIPE_DISTANCE = 64.dp
 
-/** Height of a Tab row. */
+/** Height of a Tab row: its title and, under it, its site. */
 private val ROW_HEIGHT: Dp = 56.dp
+
+/** Height of every row of the Tab list with compact rows (SPEC, "Styling"): one line. */
+val COMPACT_ROW_HEIGHT: Dp = 40.dp
+
+/**
+ * Where a row's close button ends. With compact rows the button is 40dp, not 48dp, and sits 4dp
+ * further in, so its icon stays in the column of the 48dp buttons above and below the list.
+ */
+@Composable
+fun closeButtonInset(): Dp = if (LocalCompactTabs.current) LIST_ICON_INSET + 4.dp else LIST_ICON_INSET
+
+/** Whether the Tab list's rows take one line, as the person set it. */
+val LocalCompactTabs = compositionLocalOf { false }
+
+/**
+ * A row of the Tab list, [height] tall at least. In a row lower than 48dp, the buttons in it are
+ * that low too: otherwise a close button's touch target would push the row back to 48dp.
+ */
+@Composable
+fun ListRow(height: Dp, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides minOf(height, 48.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.heightIn(min = height), content = content)
+    }
+}
 
 /** Where a list row's site mark starts, and a section label's text. */
 val LIST_TEXT_INSET: Dp = 16.dp

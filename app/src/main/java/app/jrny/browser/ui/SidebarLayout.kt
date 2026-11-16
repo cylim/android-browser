@@ -52,7 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import app.jrny.browser.profile.Profile
+import app.jrny.browser.profile.ProfileColor
+import app.jrny.browser.profile.ProfileTint
 import app.jrny.browser.tab.Tab
 
 // The Sidebar layout's spacing. Every gap is one of these, so the edges line up.
@@ -300,7 +304,18 @@ private fun ProfileMenu(profiles: ProfilesUi, expanded: Boolean, onDismiss: () -
     }
 }
 
-/** The surface color, tinted 10% toward the Profile's color. */
+/**
+ * The surface color under the Active Profile's Tab list, tinted toward the Profile's color as
+ * strongly as the Profile says. It glides to the next Profile's color when Profiles switch.
+ */
 @Composable
 fun profileTint(profile: Profile): Color =
-    lerp(MaterialTheme.colorScheme.surfaceContainer, profile.color.color, 0.10f)
+    animateColorAsState(profileTint(profile.color, profile.tint), tween(PROFILE_SWITCH_MS), label = "profile tint").value
+
+/** The surface color tinted toward [color], by [tint]'s share. */
+@Composable
+fun profileTint(color: ProfileColor, tint: ProfileTint): Color =
+    lerp(MaterialTheme.colorScheme.surfaceContainer, color.color, tint.fraction)
+
+/** How long the browser takes to change its colors to another Profile's. */
+const val PROFILE_SWITCH_MS = 250
