@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewFeature
@@ -136,6 +138,17 @@ class PinnedUiTest {
         }
     }
 
+    /**
+     * Confirms the name dialog and waits for its keyboard to go. A tablet-sized window forced
+     * onto a phone's screen has no room for the list while the keyboard is up, and a slow device
+     * takes a moment to put it away.
+     */
+    private fun confirmName() {
+        compose.onNodeWithTag("confirm-name").performClick()
+        Espresso.closeSoftKeyboard()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("tab-row-11").fetchSemanticsNodes().isNotEmpty() }
+    }
+
     private fun pin(bookmark: Bookmark) = compose.onNodeWithTag("pinned-row-${bookmark.id}")
     private fun folder(folder: Folder) = compose.onNodeWithTag("folder-row-${folder.id}")
     private fun top(tag: String) = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot().top
@@ -223,7 +236,8 @@ class PinnedUiTest {
         compose.onNodeWithTag("name-field").performTextReplacement("   ")
         compose.onNodeWithTag("confirm-name").assertIsNotEnabled()
         compose.onNodeWithTag("name-field").performTextReplacement(" Inbox ")
-        compose.onNodeWithTag("confirm-name").assertIsEnabled().performClick()
+        compose.onNodeWithTag("confirm-name").assertIsEnabled()
+        confirmName()
         compose.onNodeWithTag("name-dialog").assertDoesNotExist()
         assertEquals(listOf(mail to "Inbox"), renamed)
 
@@ -249,7 +263,7 @@ class PinnedUiTest {
         compose.onNodeWithTag("move-to-new-folder").performClick()
         compose.onNodeWithText("New Folder").assertExists()
         compose.onNodeWithTag("name-field").performTextReplacement("Trips")
-        compose.onNodeWithTag("confirm-name").performClick()
+        confirmName()
         assertEquals(listOf<Pair<String, Bookmark?>>("Trips" to board), addedFolders)
     }
 
@@ -277,7 +291,7 @@ class PinnedUiTest {
         compose.onNodeWithText("Rename Folder").assertExists()
         compose.onNodeWithTag("name-field").assertTextContains("Work")
         compose.onNodeWithTag("name-field").performTextReplacement("Projects")
-        compose.onNodeWithTag("confirm-name").performClick()
+        confirmName()
         assertEquals(listOf(work to "Projects"), renamedFolders)
 
         folder(work).performTouchInput { longClick() }
@@ -287,7 +301,7 @@ class PinnedUiTest {
         compose.onNodeWithTag("new-folder").performClick()
         compose.onNodeWithTag("confirm-name").assertIsNotEnabled()
         compose.onNodeWithTag("name-field").performTextReplacement("Trips")
-        compose.onNodeWithTag("confirm-name").performClick()
+        confirmName()
         assertEquals(listOf<Pair<String, Bookmark?>>("Trips" to null), addedFolders)
     }
 
