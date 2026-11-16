@@ -1,6 +1,8 @@
 package app.jrny.browser.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -98,6 +100,11 @@ fun BottomBarLayout(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSl
 @Composable
 private fun ProfileSheet(profiles: ProfilesUi, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("profile-sheet")) {
-        ProfileList(profiles, onDone = onDismiss, modifier = Modifier.padding(bottom = BAR_GAP))
+        // Many Profiles can outgrow the sheet, so the list scrolls.
+        ProfileList(
+            profiles,
+            onDone = onDismiss,
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(bottom = BAR_GAP),
+        )
     }
 }

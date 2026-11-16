@@ -63,7 +63,11 @@ class ProfilesUi(
     val edit: (Profile?) -> Unit,
 ) {
     /** The Profile after the active one, or before it with [step] -1, for swiping. Null at either end. */
-    fun neighbour(step: Int): Profile? = all.getOrNull(all.indexOf(active) + step)
+    fun neighbour(step: Int): Profile? {
+        // By id: a rename can reach the list before it reaches the Active Profile.
+        val index = all.indexOfFirst { it.id == active.id }
+        return if (index < 0) null else all.getOrNull(index + step)
+    }
 }
 
 /**

@@ -27,8 +27,11 @@ class BrowserState(
     private val repository: ProfileRepository,
     private val scope: CoroutineScope,
     /** Addresses to reload after the activity was recreated, by Profile id. */
-    private val restored: Map<ProfileId, String> = emptyMap(),
+    restored: Map<ProfileId, String> = emptyMap(),
 ) {
+    /** Kept until the Profile is deleted, so a Profile not shown since is still restored next time. */
+    private val restored = restored.toMutableMap()
+
     val profiles: StateFlow<List<Profile>> = repository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activeProfile: StateFlow<Profile?> = repository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
     val pendingDeletionCount: StateFlow<Int> = repository.pendingDeletionCount.stateIn(scope, SharingStarted.Eagerly, 0)
@@ -40,9 +43,12 @@ class BrowserState(
         Tab(context, WebProfile.of(profile.id)).also { tab -> restored[profile.id]?.let(tab::load) }
     }
 
-    /** The address each open Tab shows, by Profile, to restore after the activity is recreated. */
+    /**
+     * The address each Profile's Tab shows, to restore after the activity is recreated. A Profile
+     * whose Tab hasn't been created since the last recreation keeps its restored address.
+     */
     fun addresses(): Map<ProfileId, String> =
-        tabs.mapNotNull { (id, tab) -> tab.url?.let { id to it } }.toMap()
+        restored + tabs.mapNotNull { (id, tab) -> tab.url?.let { id to it } }
 
     fun switchTo(profile: Profile) {
         scope.launch { repository.activate(profile.id) }
@@ -62,7 +68,10 @@ class BrowserState(
      */
     fun delete(profile: Profile) {
         scope.launch {
-            if (repository.delete(profile.id)) tabs.remove(profile.id)?.destroy()
+            if (repository.delete(profile.id)) {
+                restored.remove(profile.id)
+                tabs.remove(profile.id)?.destroy()
+            }
         }
     }
 

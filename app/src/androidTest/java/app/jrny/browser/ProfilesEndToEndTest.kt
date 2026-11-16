@@ -118,7 +118,8 @@ class ProfilesEndToEndTest {
             compose.onNodeWithTag("confirm-delete").performClick()
             compose.waitUntil(10_000) { browser().profiles.value.none { it.id == created.id } }
             assertEquals(first.id, active().id)
-            assertTrue(browser().pendingDeletionCount.value >= 1)
+            // The pending count is a separate query, so it can arrive after the list update.
+            compose.waitUntil(10_000) { browser().pendingDeletionCount.value >= 1 }
             openProfileList()
             compose.onNodeWithTag("pending-removal").assertExists()
             compose.onNodeWithTag("profile-row-${created.id.value}").assertDoesNotExist()
