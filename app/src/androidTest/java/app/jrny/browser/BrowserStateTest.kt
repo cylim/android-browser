@@ -10,11 +10,9 @@ import app.jrny.browser.TestPages.titled
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
-import app.jrny.browser.profile.ProfileRepository
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import app.jrny.browser.tab.TabId
-import app.jrny.browser.tab.TabRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,8 +40,9 @@ class BrowserStateTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val database = JrnyDatabase.inMemory(context)
-    private val profiles = ProfileRepository(database.profiles())
-    private val tabs = TabRepository(database.tabs())
+    private val repositories = Repositories(database)
+    private val profiles = repositories.profiles
+    private val tabs = repositories.tabs
     private val scopes = mutableListOf<CoroutineScope>()
     private val browsers = mutableListOf<BrowserState>()
 
@@ -66,7 +65,7 @@ class BrowserStateTest {
     private fun newBrowser(): BrowserState {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
-        return onMain { BrowserState(context, profiles, tabs, scope) }.also { browsers += it }
+        return onMain { BrowserState(context, repositories, scope) }.also { browsers += it }
     }
 
     /** The Active Profile and its Tabs, once the database has given them. */
@@ -234,6 +233,75 @@ class BrowserStateTest {
         assertNotSame(tab, shown)
         assertFalse(onMain { browser.isLive(id) })
         assertTrue(runBlocking { tabs.tabs(personal).first() }.none { it.id == id })
+    }
+
+    @Test
+    fun visitsGoIntoTheHistoryOfTheirOwnProfileButRestoredPagesAndReloadsDoNot() {
+        // /hop sends the page on from a script, before it has a title: a redirect's stop on the way.
+        val pages = mapOf(
+            "/a" to "<title>Page A</title>",
+            "/b" to "<title>Page B</title>",
+            "/hop" to "<script>location.replace('/b')</script>",
+            "/untitled" to "<p>A page that never gives itself a title.</p>",
+        )
+        TestServer(pages).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile.id
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal) }
+            await("personal active") { browser.active.value?.profile?.id == personal }
+
+            val id = runBlocking { tabs.open(personal) }
+            val tab = show(browser, id)
+            // A page without a title is still a page the person saw: it stays when the next one loads.
+            onMain { tab.load(server.url("/untitled")) }
+            await("untitled visited") { browser.visits.value.any { it.url == server.url("/untitled") } }
+            await("untitled loaded") { !tab.isLoading && tab.url == server.url("/untitled") }
+            load(tab, server.url("/a"), "Page A")
+            await("untitled stays") { browser.visits.value.map { it.url } == listOf(server.url("/a"), server.url("/untitled")) }
+            onMain { browser.deleteVisit(browser.visits.value.last()) }
+            await("removed for the checks below") { browser.visits.value.size == 1 }
+            load(tab, server.url("/hop"), "Page B")
+            onMain { tab.reload() }
+            await("reloaded") { !tab.isLoading }
+            try {
+                await("history has both, titled") { browser.visits.value.map { it.title } == listOf("Page B", "Page A") }
+            } catch (e: AssertionError) {
+                throw AssertionError("history: " + onMain { browser.visits.value.map { it.url.substringAfterLast('/') + "=" + it.title } })
+            }
+            assertEquals(listOf(server.url("/b"), server.url("/a")), onMain { browser.visits.value.map { it.url } })
+
+            // A fresh BrowserState restores the Tab: the page loads again, and that is no new visit.
+            val restarted = newBrowser()
+            val restored = show(restarted, id)
+            await("restored") { !restored.isLoading && restored.title == "Page B" }
+            Thread.sleep(500)
+            assertEquals(2, onMain { restarted.visits.value.size })
+
+            // The other Profile has its own history: empty until the page is opened there.
+            val saved = active(restarted).selected
+            onMain { restarted.openInProfile(saved, work) }
+            await("work active") { restarted.active.value?.profile?.id == work.id }
+            await("work history") { restarted.visits.value.map { it.url } == listOf(server.url("/b")) }
+            assertEquals(2, runBlocking { repositories.history.visits(personal).first() }.size)
+        }
+    }
+
+    @Test
+    fun aBookmarkIsToggledInTheActiveProfileOnly() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        onMain { browser.toggleBookmark(personal, "https://example.com/", "Example") }
+        await("bookmarked") { browser.bookmarks.value.map { it.url } == listOf("https://example.com/") }
+
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        await("work has none") { browser.bookmarks.value.isEmpty() }
+
+        runBlocking { profiles.activate(personal.id) }
+        await("personal's bookmark is back") { browser.bookmarks.value.size == 1 }
+        onMain { browser.toggleBookmark(personal, "https://example.com/", "Example") }
+        await("removed") { browser.bookmarks.value.isEmpty() }
     }
 
     @Test

@@ -2,6 +2,7 @@ package app.jrny.browser
 
 import android.annotation.SuppressLint
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -9,7 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.webkit.WebViewFeature
-import app.jrny.browser.TestPages.titled
+import app.jrny.browser.TestPages.page
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import org.junit.Assert.assertEquals
@@ -74,7 +75,11 @@ class TabsEndToEndTest {
 
     @Test
     fun aNewTabComesBackAfterRecreationAndCanBeClosed() {
-        load(titled("first"), "first navigate")
+        // Pages whose title never changes: a title that changes while the page loads would make
+        // the Tab's row, which the test finds by name, come and go.
+        val firstPage = page("<title>first page</title>")
+        val secondPage = page("<title>second page</title>")
+        load(firstPage, "first page")
         val first = selected().id
         val before = tabs().size
 
@@ -84,21 +89,22 @@ class TabsEndToEndTest {
         assertNull(added.url)
         // A new Tab opens with the keyboard up for an address. The test types none.
         Espresso.closeSoftKeyboard()
-        load(titled("second"), "second navigate")
+        load(secondPage, "second page")
 
         compose.activityRule.scenario.recreate()
 
         compose.waitUntil(10_000) { tabs().size == before + 1 }
         assertEquals(added.id, selected().id)
-        assertEquals(titled("first"), tabs().single { it.id == first }.url)
+        assertEquals(firstPage, tabs().single { it.id == first }.url)
         val restored = shownTab()
-        compose.waitUntil(15_000) { !restored.isLoading && restored.url == titled("second") && restored.title == "second navigate" }
+        compose.waitUntil(15_000) { !restored.isLoading && restored.url == secondPage && restored.title == "second page" }
 
         // Close it from the UI: the Tab shown before it comes back.
         if (compose.onAllNodesWithTag("tab-count").fetchSemanticsNodes().isNotEmpty()) {
             compose.onNodeWithTag("tab-count").performClick()
         }
-        compose.onNodeWithContentDescription("Close second navigate").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Close second page").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Close second page").performClick()
         compose.waitUntil(10_000) { tabs().size == before }
         assertEquals(first, selected().id)
     }

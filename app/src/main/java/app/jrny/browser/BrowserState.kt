@@ -4,15 +4,16 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.jrny.browser.data.RecordedVisit
+import app.jrny.browser.library.Bookmark
+import app.jrny.browser.library.Visit
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
-import app.jrny.browser.profile.ProfileRepository
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import app.jrny.browser.tab.TabId
-import app.jrny.browser.tab.TabRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -28,6 +29,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The Active Profile with its Tabs, read together so they always belong to each other. */
 data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
@@ -47,10 +50,14 @@ data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
 @OptIn(ExperimentalCoroutinesApi::class)
 class BrowserState(
     private val context: Context,
-    private val profileRepository: ProfileRepository,
-    private val tabRepository: TabRepository,
+    repositories: Repositories,
     private val scope: CoroutineScope,
 ) {
+    private val profileRepository = repositories.profiles
+    private val tabRepository = repositories.tabs
+    private val history = repositories.history
+    private val bookmarkRepository = repositories.bookmarks
+
     val profiles: StateFlow<List<Profile>> = profileRepository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
     val pendingDeletionCount: StateFlow<Int> = profileRepository.pendingDeletionCount.stateIn(scope, SharingStarted.Eagerly, 0)
@@ -66,10 +73,23 @@ class BrowserState(
         }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
+    /** The Active Profile's history, newest first. */
+    val visits: StateFlow<List<Visit>> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { history.visits(it.id) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** The Active Profile's bookmarks, newest first. */
+    val bookmarks: StateFlow<List<Bookmark>> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { bookmarkRepository.bookmarks(it.id) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
     /** Live Tabs, least recently shown first. */
     private val live = LinkedHashMap<TabId, LiveTab>(MAX_LIVE_TABS + 1, 0.75f, true)
 
     private class LiveTab(val tab: Tab, val saving: Job)
+
 
     /** The Tab on screen. Its WebView can't be destroyed until another Tab replaces it. */
     private var shownId: TabId? = null
@@ -105,7 +125,34 @@ class BrowserState(
         // Keep the saved address and title current, so a kill loses at most the scroll position.
         // Saved one at a time, latest first: a burst of changes during a load writes only the last.
         val page = MutableStateFlow(saved.url to saved.title)
-        val tab = Tab(context, WebProfile.of(saved.profileId)) { page.value = it.url to it.title }
+        // The Tab's newest visit until the Tab reports its page as seen: it got a title, or it
+        // finished loading. If the next visit arrives first, it was only a redirect's stop on the
+        // way, and leaves the history again.
+        var unconfirmed: Pair<RecordedVisit, String>? = null
+        // A visit is written before its title, and before the visit after it: one at a time, in
+        // the order the Tab reported them. Without this, a title could arrive before its row.
+        val historyOrder = Mutex()
+        val tab = Tab(
+            context,
+            WebProfile.of(saved.profileId),
+            onPageChanged = { page.value = it.url to it.title },
+            onVisited = { url ->
+                scope.launch {
+                    historyOrder.withLock {
+                        unconfirmed?.let { (recorded, _) -> history.takeBack(recorded) }
+                        unconfirmed = history.record(saved.profileId, url)?.let { it to url }
+                    }
+                }
+            },
+            onPageSeen = { url, title ->
+                scope.launch {
+                    historyOrder.withLock {
+                        history.setTitle(saved.profileId, url, title)
+                        if (unconfirmed?.second == url) unconfirmed = null
+                    }
+                }
+            },
+        )
         val saving = scope.launch {
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
         }
@@ -180,6 +227,7 @@ class BrowserState(
             if (tabRepository.move(tab.id, profile.id, url) != null) {
                 if (incomingLinkTab == tab.id) dismissIncomingLink()
                 retire(tab.id)
+                history.record(profile.id, url)
             }
         }
     }
@@ -187,7 +235,9 @@ class BrowserState(
     /** Open in Profile: opens [tab]'s current address as a new Tab in [profile] and shows it. [tab] stays. */
     fun openInProfile(tab: SavedTab, profile: Profile) {
         val url = currentUrl(tab) ?: return
-        scope.launch { tabRepository.openIn(profile.id, url) }
+        scope.launch {
+            if (tabRepository.openIn(profile.id, url) != null) history.record(profile.id, url)
+        }
     }
 
     /**
@@ -204,10 +254,28 @@ class BrowserState(
                 if (opened != null) {
                     incomingLinkSeen = false
                     incomingLinkTab = opened
+                    history.record(profile.id, url)
                     return@launch
                 }
             }
         }
+    }
+
+    /** Bookmarks [url] in [profile], or removes the bookmark if that Profile has one. */
+    fun toggleBookmark(profile: Profile, url: String, title: String) {
+        scope.launch { bookmarkRepository.toggle(profile.id, url, title) }
+    }
+
+    fun deleteBookmark(bookmark: Bookmark) {
+        scope.launch { bookmarkRepository.delete(bookmark) }
+    }
+
+    fun deleteVisit(visit: Visit) {
+        scope.launch { history.delete(visit) }
+    }
+
+    fun clearHistory(profile: Profile) {
+        scope.launch { history.clear(profile.id) }
     }
 
     fun dismissIncomingLink() {

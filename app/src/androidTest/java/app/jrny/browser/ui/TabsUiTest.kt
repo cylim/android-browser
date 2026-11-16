@@ -1,5 +1,8 @@
 package app.jrny.browser.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsNotFocused
@@ -48,6 +51,7 @@ class TabsUiTest {
     private val selected = mutableListOf<TabId>()
     private val closed = mutableListOf<TabId>()
     private val opened = mutableListOf<Unit>()
+    private var incomingLink by mutableStateOf(false)
 
     private val news = TestTabs.tab(1, "News of the day", "https://news.example.com/today")
     private val mail = TestTabs.tab(2, "Inbox", "https://mail.example.com/", selected = true)
@@ -73,7 +77,7 @@ class TabsUiTest {
             JrnyTheme {
                 BrowserWindow(
                     tab,
-                    TestTabs.ui(all, selectedIds = selected, closed = closed, opened = opened),
+                    TestTabs.ui(all, selectedIds = selected, closed = closed, opened = opened, incomingLink = incomingLink),
                     TestProfiles.ui(),
                 )
             }
@@ -146,6 +150,17 @@ class TabsUiTest {
         compose.onNodeWithTag("new-tab").performClick()
         assertEquals(1, opened.size)
         compose.onNodeWithTag("tab-overview").assertDoesNotExist()
+    }
+
+    @Test
+    fun aLinkFromAnotherAppClosesTheOverviewSoItsPageShows() {
+        show(PHONE_PORTRAIT)
+        compose.onNodeWithTag("tab-count").performClick()
+        compose.onNodeWithTag("tab-overview").assertExists()
+
+        incomingLink = true
+        compose.onNodeWithTag("tab-overview").assertDoesNotExist()
+        compose.onNodeWithTag("page").assertExists()
     }
 
     @Test

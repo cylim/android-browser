@@ -17,12 +17,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +48,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
+import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
 
@@ -53,17 +56,20 @@ import app.jrny.browser.tab.Tab
 enum class ProfilePick { Move, OpenIn }
 
 /**
- * The page menu behind the "More" button, for the shown Tab: a new Tab, Move, Open in Profile,
- * and making JRNY browser the default browser while it isn't. [showForward] adds Forward, for the
- * narrow Bottom Bar, which has no room for its button.
+ * The page menu behind the "More" button, for the shown Tab: a new Tab, bookmarking the page, the
+ * Active Profile's bookmarks and history, Move, Open in Profile, and making JRNY browser the
+ * default browser while it isn't. [showForward] adds Forward, for the narrow Bottom Bar, which has
+ * no room for its button.
  */
 @Composable
 fun PageMenu(
     tab: Tab,
     tabs: TabsUi,
     profiles: ProfilesUi,
+    library: LibraryUi,
     showForward: Boolean,
     onPick: (ProfilePick) -> Unit,
+    onPanel: (Panel) -> Unit,
     onSetDefaultBrowser: (() -> Unit)?,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -91,6 +97,19 @@ fun PageMenu(
                 Item(R.string.forward, Icons.AutoMirrored.Filled.ArrowForward, "menu-forward", enabled = tab.canGoForward, onClick = tab::goForward)
             }
             Item(R.string.new_tab, Icons.Filled.Add, "menu-new-tab", onClick = tabs.open)
+            HorizontalDivider()
+            // Only web pages can be bookmarked.
+            val url = tab.url
+            val bookmarked = library.isBookmarked(url)
+            Item(
+                if (bookmarked) R.string.remove_bookmark else R.string.bookmark_page,
+                if (bookmarked) Icons.Filled.Star else JrnyIcons.StarBorder,
+                "menu-bookmark",
+                enabled = WebAddress.isWebAddress(url),
+            ) { library.toggleBookmark(url!!, tab.pageTitle.orEmpty()) }
+            Item(R.string.bookmarks, Icons.Filled.Star, "menu-bookmarks") { onPanel(Panel.Bookmarks) }
+            Item(R.string.history, JrnyIcons.History, "menu-history") { onPanel(Panel.History) }
+            HorizontalDivider()
             Item(R.string.move_to_profile, Icons.AutoMirrored.Filled.ExitToApp, "menu-move", enabled = canUseOtherProfile) {
                 onPick(ProfilePick.Move)
             }
@@ -98,7 +117,8 @@ fun PageMenu(
                 onPick(ProfilePick.OpenIn)
             }
             if (onSetDefaultBrowser != null) {
-                Item(R.string.set_default_browser, Icons.Filled.Star, "menu-default-browser", onClick = onSetDefaultBrowser)
+                HorizontalDivider()
+                Item(R.string.set_default_browser, Icons.Filled.CheckCircle, "menu-default-browser", onClick = onSetDefaultBrowser)
             }
         }
     }

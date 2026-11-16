@@ -3,6 +3,7 @@ package app.jrny.browser.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -127,14 +128,20 @@ fun SidebarLayout(
                     .imePadding()
                     .clip(PAGE_SHAPE),
             ) {
-                PageView(tab, Modifier.fillMaxSize()) {
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(start = PROMPT_GAP, end = PROMPT_GAP, bottom = floatingBottomSpace(PROMPT_GAP)),
-                    ) { slots.pagePrompt() }
+                val panel = slots.panel
+                if (panel != null) {
+                    // In the page's place, next to the Sidebar. Its list ends clear of the gesture handle.
+                    panel(PaddingValues(bottom = floatingBottomSpace(GUTTER)))
+                } else {
+                    PageView(tab, Modifier.fillMaxSize()) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(start = PROMPT_GAP, end = PROMPT_GAP, bottom = floatingBottomSpace(PROMPT_GAP)),
+                        ) { slots.pagePrompt() }
+                    }
+                    LoadProgress(tab, Modifier.align(Alignment.TopCenter))
                 }
-                LoadProgress(tab, Modifier.align(Alignment.TopCenter))
             }
         }
     }

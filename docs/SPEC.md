@@ -64,6 +64,9 @@ The layout depends on window width, not device type. It switches live when the w
 ## Browsing features
 
 - History, bookmarks and downloads, each per Profile.
+  - History keeps web pages the person goes to, not reloads, Back, Forward, or pages restored with a Tab. A redirect's stops on the way are left out. Each Profile keeps its latest 5,000 visits.
+  - History and bookmarks open in the page's place: beside the Sidebar, or full screen above the Bottom Bar layout.
+  - Deleting a Profile removes its history and bookmarks at once.
 - Search: Google by default, and the engine can be changed in settings. Address-bar suggestions are on by default and can be turned off.
 - Safe Browsing: on by default and can be turned off.
 - Password managers work through the Android Autofill framework. JRNY browser does not store passwords itself.

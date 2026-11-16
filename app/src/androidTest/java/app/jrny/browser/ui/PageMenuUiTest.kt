@@ -174,6 +174,7 @@ class PageMenuUiTest {
 
     @Test
     fun theMenuOpensANewTab() {
+        loadPage()
         show(TABLET_LANDSCAPE)
         openMenu()
         compose.onNodeWithTag("menu-new-tab").performClick()
@@ -182,6 +183,7 @@ class PageMenuUiTest {
 
     @Test
     fun forwardIsInTheMenuOnlyWhereTheBarHasNoRoomForIt() {
+        loadPage()
         show(PHONE_PORTRAIT)
         compose.onNodeWithContentDescription("Forward").assertDoesNotExist()
         openMenu()
@@ -190,6 +192,7 @@ class PageMenuUiTest {
 
     @Test
     fun aTabletInPortraitKeepsTheForwardButtonInTheBar() {
+        loadPage()
         show(TABLET_PORTRAIT)
         compose.onNodeWithTag("bottom-bar-layout").assertExists()
         compose.onNodeWithContentDescription("Forward").assertExists()
@@ -199,6 +202,7 @@ class PageMenuUiTest {
 
     @Test
     fun theSidebarAndTheRailHaveTheMenuWithoutForward() {
+        loadPage()
         show(TABLET_LANDSCAPE)
         compose.onNodeWithContentDescription("Forward").assertExists()
         openMenu()
@@ -208,6 +212,8 @@ class PageMenuUiTest {
 
     @Test
     fun theDefaultBrowserItemShowsOnlyWhenItCanBeAsked() {
+        // With a page, so the address field doesn't open the keyboard over the menu.
+        loadPage()
         show(PHONE_PORTRAIT, offerDefaultBrowser = true)
         openMenu()
         compose.onNodeWithTag("menu-default-browser").performClick()
@@ -216,6 +222,7 @@ class PageMenuUiTest {
 
     @Test
     fun withoutTheOfferThereIsNoDefaultBrowserItem() {
+        loadPage()
         show(PHONE_PORTRAIT)
         openMenu()
         compose.onNodeWithTag("menu-default-browser").assertDoesNotExist()

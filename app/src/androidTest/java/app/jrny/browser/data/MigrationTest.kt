@@ -33,6 +33,26 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version3AddsHistoryAndBookmarksAndKeepsProfilesAndTabs() {
+        helper.createDatabase(DB, 2).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0)")
+            db.execSQL("INSERT INTO tabs (id, profileId, url, title, scrollY, lastUsed) VALUES (7, 1, 'https://example.com/', 'Example', 120, 1)")
+        }
+        helper.runMigrationsAndValidate(DB, 3, true).use { db ->
+            db.query("SELECT url, title, scrollY FROM tabs WHERE id = 7").use { rows ->
+                rows.moveToFirst()
+                assertEquals(Triple("https://example.com/", "Example", 120), Triple(rows.getString(0), rows.getString(1), rows.getInt(2)))
+            }
+            for (table in listOf("history", "bookmarks")) {
+                db.query("SELECT COUNT(*) FROM $table").use { rows ->
+                    rows.moveToFirst()
+                    assertEquals(0, rows.getInt(0))
+                }
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }
