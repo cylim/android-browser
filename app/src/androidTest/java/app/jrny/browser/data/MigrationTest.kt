@@ -53,6 +53,23 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version4AddsDownloadsAndKeepsHistoryAndBookmarks() {
+        helper.createDatabase(DB, 3).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0)")
+            db.execSQL("INSERT INTO history (id, profileId, url, title, visitedAt) VALUES (1, 1, 'https://example.com/', 'Example', 5)")
+            db.execSQL("INSERT INTO bookmarks (id, profileId, url, title, createdAt) VALUES (1, 1, 'https://example.org/', 'Org', 6)")
+        }
+        helper.runMigrationsAndValidate(DB, 4, true).use { db ->
+            for ((table, expected) in listOf("history" to 1, "bookmarks" to 1, "downloads" to 0)) {
+                db.query("SELECT COUNT(*) FROM $table").use { rows ->
+                    rows.moveToFirst()
+                    assertEquals(table, expected, rows.getInt(0))
+                }
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

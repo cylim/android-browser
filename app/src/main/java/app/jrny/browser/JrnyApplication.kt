@@ -5,6 +5,8 @@ import android.app.Application
 import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewFeature
 import app.jrny.browser.data.JrnyDatabase
+import app.jrny.browser.download.Downloader
+import app.jrny.browser.download.SystemDownloader
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.WebProfile
 import kotlinx.coroutines.runBlocking
@@ -13,6 +15,7 @@ class JrnyApplication : Application() {
 
     val database: JrnyDatabase by lazy { JrnyDatabase.open(this) }
     val repositories: Repositories by lazy { Repositories(database) }
+    val downloader: Downloader by lazy { SystemDownloader(this) }
 
     /**
      * Before any activity, and so before any WebView loads a Profile: creates the first Profile on

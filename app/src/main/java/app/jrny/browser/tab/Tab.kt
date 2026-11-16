@@ -7,6 +7,7 @@ import android.os.Message
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.webkit.WebViewCompat
 import app.jrny.browser.address.WebAddress
+import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.profile.WebProfile
 
 /**
@@ -63,6 +65,13 @@ class Tab(
      * a sign-in form under the page's address.
      */
     var popupUrl: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * A file the page offers for download, until the person has answered. Nothing is fetched
+     * before they agree.
+     */
+    var download: DownloadRequest? by mutableStateOf(null)
         private set
 
     /** The page's address, or null before anything has loaded. Set as soon as a load starts. */
@@ -126,6 +135,7 @@ class Tab(
         restoreDone = false
         restoring = false
         restoringTitle = null
+        addressRequested = true
         url = address
         onPageChanged(this)
         webView.loadUrl(address)
@@ -168,6 +178,9 @@ class Tab(
     /** True from a page load starting until the new page takes over. A move within one page never sets it. */
     private var pageStarting = false
 
+    /** True from [load] until its page arrives: the address came from the person, not from a link on the page. */
+    private var addressRequested = false
+
     fun reload() {
         val address = url
         if (crashed && address != null) {
@@ -180,6 +193,11 @@ class Tab(
     }
 
     fun stop() = webView.stopLoading()
+
+    /** Ends the [download] offer, after the person has answered it. */
+    fun dismissDownload() {
+        download = null
+    }
 
     /** Closes the [popup], if one is open. */
     fun closePopup() {
@@ -222,6 +240,15 @@ class Tab(
         }
         // Sign-in flows rely on third-party cookies (the Milestone 0 spike signed in with them on).
         profile.cookieManager.setAcceptThirdPartyCookies(view, true)
+        view.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            val suggested = DownloadRequest.suggestedFileName(contentDisposition) ?: URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val name = DownloadRequest.safeFileName(suggested)
+            // The page the link was on, as a page's own request for the file would say: only a
+            // web page, without its fragment, which never leaves the browser. An address the
+            // person typed, or one another app sent, was linked from nowhere.
+            val referrer = shownPage(view)?.takeIf { !addressRequested && WebAddress.isWebAddress(it) && it != url }?.substringBefore('#')
+            offerDownload(view, DownloadRequest(url, userAgent.orEmpty(), name, mimeType.orEmpty(), contentLength, referrer))
+        }
         view.webViewClient = if (popup) PopupViewClient() else PageViewClient()
         view.webChromeClient = if (popup) PopupChromeClient() else PageChromeClient()
         return view
@@ -243,6 +270,33 @@ class Tab(
             },
         )
     }
+
+    /**
+     * A link turned out to be a file, not a page. The Tab offers the download and still shows the
+     * page before, so its address and loading state go back to that page. A popup that only
+     * started a download has nothing to show, and closes.
+     */
+    private fun offerDownload(view: WebView, request: DownloadRequest) {
+        when (view) {
+            webView -> {
+                isLoading = false
+                pageStarting = false
+                addressRequested = false
+                url = shownPage(view)
+                updateHistory()
+                onPageChanged(this)
+            }
+            popup -> closePopup()
+            else -> return
+        }
+        download = request
+    }
+
+    /**
+     * The address of the page [view] really shows: the last one that loaded. `WebView.getUrl` is
+     * no use here, because while a load is on its way it already gives the address being loaded.
+     */
+    private fun shownPage(view: WebView): String? = view.copyBackForwardList().currentItem?.url
 
     private fun updateHistory() {
         canGoBack = webView.canGoBack()
@@ -325,11 +379,17 @@ class Tab(
             // a saved page coming back and a move within the page keep theirs.
             val newPage = pageStarting
             pageStarting = false
+            addressRequested = false
             if (newPage && !isReload && !restoring) title = ""
             onPageChanged(this@Tab)
             val step = historyStep
             historyStep = false
-            if (!isReload && !restoring && !step) onVisited(url)
+            if (!isReload && !restoring && !step) {
+                onVisited(url)
+                // A move within the page (a new address, the same document) keeps the page's
+                // title, and nothing else will report it.
+                if (!newPage && title.isNotBlank()) onPageSeen(url, title)
+            }
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {

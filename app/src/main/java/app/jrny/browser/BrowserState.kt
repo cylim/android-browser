@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.jrny.browser.data.RecordedVisit
+import app.jrny.browser.download.Download
+import app.jrny.browser.download.DownloadRequest
+import app.jrny.browser.download.DownloadStatus
+import app.jrny.browser.download.Downloader
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Visit
 import app.jrny.browser.profile.Profile
@@ -15,6 +19,7 @@ import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import app.jrny.browser.tab.TabId
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +36,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** The Active Profile with its Tabs, read together so they always belong to each other. */
 data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
@@ -51,12 +57,14 @@ data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
 class BrowserState(
     private val context: Context,
     repositories: Repositories,
+    private val downloader: Downloader,
     private val scope: CoroutineScope,
 ) {
     private val profileRepository = repositories.profiles
     private val tabRepository = repositories.tabs
     private val history = repositories.history
     private val bookmarkRepository = repositories.bookmarks
+    private val downloadRepository = repositories.downloads
 
     val profiles: StateFlow<List<Profile>> = profileRepository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
@@ -83,6 +91,12 @@ class BrowserState(
     val bookmarks: StateFlow<List<Bookmark>> = profileRepository.activeProfile
         .filterNotNull()
         .flatMapLatest { bookmarkRepository.bookmarks(it.id) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** The Active Profile's downloads, newest first. */
+    val downloads: StateFlow<List<Download>> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { downloadRepository.downloads(it.id) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** Live Tabs, least recently shown first. */
@@ -276,6 +290,37 @@ class BrowserState(
 
     fun clearHistory(profile: Profile) {
         scope.launch { history.clear(profile.id) }
+    }
+
+    /**
+     * Starts the download the person agreed to, in [profile]: with that Profile's cookies, so a
+     * file behind its sign-in arrives as the page would get it, and on that Profile's list.
+     */
+    fun startDownload(profile: Profile, request: DownloadRequest) {
+        if (!request.supported) return
+        val cookies = WebProfile.of(profile.id).cookieManager.getCookie(request.url)
+        scope.launch {
+            val id = withContext(Dispatchers.IO) { downloader.start(request, cookies) }
+            // The Profile was deleted meanwhile: nothing of it is fetched or listed any more.
+            if (!downloadRepository.add(profile.id, id, request)) withContext(Dispatchers.IO) { downloader.cancel(id) }
+        }
+    }
+
+    /** Where each of [downloads] stands, by its list id. */
+    suspend fun downloadStatuses(downloads: List<Download>): Map<Long, DownloadStatus> {
+        val byDownloadId = withContext(Dispatchers.IO) { downloader.statuses(downloads.map { it.downloadId }) }
+        return downloads.associate { it.id to (byDownloadId[it.downloadId] ?: DownloadStatus.Gone) }
+    }
+
+    /** Opens a finished download. False when no app can show it, or the file is gone. */
+    fun openDownload(download: Download): Boolean = downloader.open(download)
+
+    /** Takes [download] off the list. One that is still running is stopped; a finished file stays on the device. */
+    fun removeDownload(download: Download, running: Boolean) {
+        scope.launch {
+            if (running) withContext(Dispatchers.IO) { downloader.cancel(download.downloadId) }
+            downloadRepository.remove(download)
+        }
     }
 
     fun dismissIncomingLink() {

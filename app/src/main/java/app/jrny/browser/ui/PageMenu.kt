@@ -1,5 +1,6 @@
 package app.jrny.browser.ui
 
+import android.text.format.Formatter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
 import app.jrny.browser.address.WebAddress
+import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
 
@@ -109,6 +112,7 @@ fun PageMenu(
             ) { library.toggleBookmark(url!!, tab.pageTitle.orEmpty()) }
             Item(R.string.bookmarks, Icons.Filled.Star, "menu-bookmarks") { onPanel(Panel.Bookmarks) }
             Item(R.string.history, JrnyIcons.History, "menu-history") { onPanel(Panel.History) }
+            Item(R.string.downloads, JrnyIcons.Download, "menu-downloads") { onPanel(Panel.Downloads) }
             HorizontalDivider()
             Item(R.string.move_to_profile, Icons.AutoMirrored.Filled.ExitToApp, "menu-move", enabled = canUseOtherProfile) {
                 onPick(ProfilePick.Move)
@@ -187,26 +191,95 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
  */
 @Composable
 fun IncomingLinkPrompt(profileName: String, onMove: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = stringResource(R.string.incoming_link_opened_in, profileName),
+        action = stringResource(R.string.move_to_profile),
+        onAction = onMove,
+        onDismiss = onDismiss,
+        tag = "incoming-link",
+        modifier = modifier,
+    )
+}
+
+/** Shown over the page once a download has started: the file's name, and a way to the Downloads list. */
+@Composable
+fun DownloadStartedPrompt(fileName: String, onShow: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = stringResource(R.string.downloading_file, fileName),
+        action = stringResource(R.string.show),
+        onAction = onShow,
+        onDismiss = onDismiss,
+        tag = "download-started",
+        modifier = modifier,
+    )
+}
+
+/**
+ * A short message floating over the page with one action and a close button. Text starts 16dp
+ * in; the close icon ends 16dp in.
+ */
+@Composable
+private fun PagePrompt(text: String, action: String, onAction: () -> Unit, onDismiss: () -> Unit, tag: String, modifier: Modifier = Modifier) {
     Surface(
         color = MaterialTheme.colorScheme.inverseSurface,
         shape = RoundedCornerShape(12.dp),
         shadowElevation = 6.dp,
-        modifier = modifier.widthIn(max = 480.dp).testTag("incoming-link-prompt"),
+        modifier = modifier.widthIn(max = 480.dp).testTag("$tag-prompt"),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp)) {
             Text(
-                stringResource(R.string.incoming_link_opened_in, profileName),
+                text,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.MiddleEllipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            TextButton(onClick = onMove, modifier = Modifier.padding(start = 8.dp).testTag("incoming-link-move")) {
-                Text(stringResource(R.string.move_to_profile), color = MaterialTheme.colorScheme.inversePrimary, maxLines = 1)
+            TextButton(onClick = onAction, modifier = Modifier.padding(start = 8.dp).testTag("$tag-action")) {
+                Text(action, color = MaterialTheme.colorScheme.inversePrimary, maxLines = 1)
             }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
             }
         }
     }
+}
+
+/**
+ * Asks before a file is downloaded: its name, the site it comes from and its size. A page can't
+ * start a download by itself. A file the download service can't fetch only gets an explanation.
+ */
+@Composable
+fun DownloadDialog(request: DownloadRequest, onDownload: () -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val site = WebAddress.hostOf(request.url).ifEmpty { request.url.substringBefore(':') }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("download-dialog"),
+        title = { Text(stringResource(R.string.download_title, request.fileName)) },
+        text = {
+            Column {
+                Text(
+                    if (request.size > 0) {
+                        stringResource(R.string.download_from_with_size, site, Formatter.formatShortFileSize(context, request.size))
+                    } else {
+                        stringResource(R.string.download_from, site)
+                    },
+                )
+                Text(
+                    stringResource(if (request.supported) R.string.download_destination else R.string.download_unsupported),
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            if (request.supported) {
+                TextButton(onClick = onDownload, modifier = Modifier.testTag("confirm-download")) { Text(stringResource(R.string.download)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) }
+            }
+        },
+        dismissButton = {
+            if (request.supported) TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }

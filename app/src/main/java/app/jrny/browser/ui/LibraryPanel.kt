@@ -1,6 +1,7 @@
 package app.jrny.browser.ui
 
 import android.text.format.DateUtils
+import android.text.format.Formatter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -43,14 +46,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
+import app.jrny.browser.download.Download
+import app.jrny.browser.download.DownloadRequest
+import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Visit
 import app.jrny.browser.tab.displayHost
+import kotlinx.coroutines.delay
 
-/** A list that takes the page's place: the Active Profile's history or bookmarks. */
-enum class Panel { History, Bookmarks }
+/** A list that takes the page's place: the Active Profile's history, bookmarks or downloads. */
+enum class Panel { History, Bookmarks, Downloads }
 
-/** The Active Profile's history and bookmarks, and what can be done with them. */
+/** The Active Profile's history, bookmarks and downloads, and what can be done with them. */
 class LibraryUi(
     val visits: List<Visit> = emptyList(),
     val bookmarks: List<Bookmark> = emptyList(),
@@ -59,6 +66,15 @@ class LibraryUi(
     val deleteBookmark: (Bookmark) -> Unit = {},
     val deleteVisit: (Visit) -> Unit = {},
     val clearHistory: () -> Unit = {},
+    val downloads: List<Download> = emptyList(),
+    /** Starts the download the person agreed to. */
+    val startDownload: (DownloadRequest) -> Unit = {},
+    /** Where each of the downloads stands, by its list id. */
+    val downloadStatuses: suspend (List<Download>) -> Map<Long, DownloadStatus> = { emptyMap() },
+    /** Opens a finished download. False when nothing on the device can show it. */
+    val openDownload: (Download) -> Boolean = { false },
+    /** Takes a download off the list, stopping it first if it is still [running]. */
+    val removeDownload: (Download, running: Boolean) -> Unit = { _, _ -> },
 ) {
     fun isBookmarked(url: String?): Boolean = url != null && bookmarks.any { it.url == url }
 }
@@ -92,7 +108,13 @@ fun LibraryPanel(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            stringResource(if (panel == Panel.History) R.string.history else R.string.bookmarks),
+                            stringResource(
+                                when (panel) {
+                                    Panel.History -> R.string.history
+                                    Panel.Bookmarks -> R.string.bookmarks
+                                    Panel.Downloads -> R.string.downloads
+                                },
+                            ),
                             style = MaterialTheme.typography.titleLarge,
                             modifier = Modifier.semantics { heading() },
                         )
@@ -138,6 +160,7 @@ fun LibraryPanel(
                             onDelete = { library.deleteBookmark(bookmark) },
                         )
                     }
+                    Panel.Downloads -> DownloadList(library, contentPadding)
                 }
             }
         }
@@ -184,9 +207,21 @@ private fun <T> PanelList(
     }
 }
 
-/** A page in a panel list: its title, then its site and [detail]; a tap opens it, the bin removes it. */
+/**
+ * A page or file in a panel list: its title, then its site and [detail]. A tap opens it, unless
+ * it isn't [enabled] yet, and the button at the end removes it.
+ */
 @Composable
-private fun PanelRow(title: String, url: String, detail: String?, deleteLabel: Int, onOpen: () -> Unit, onDelete: () -> Unit) {
+private fun PanelRow(
+    title: String,
+    url: String,
+    detail: String?,
+    deleteLabel: Int,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
+    deleteIcon: ImageVector = Icons.Filled.Delete,
+    enabled: Boolean = true,
+) {
     val host = displayHost(url)
     val name = title.ifBlank { host.ifEmpty { url } }
     Row(
@@ -195,7 +230,7 @@ private fun PanelRow(title: String, url: String, detail: String?, deleteLabel: I
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onOpen)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onOpen)
             .testTag("panel-row"),
     ) {
         Column(
@@ -215,8 +250,57 @@ private fun PanelRow(title: String, url: String, detail: String?, deleteLabel: I
             }
         }
         IconButton(onClick = onDelete, modifier = Modifier.padding(end = PANEL_ICON_INSET)) {
-            Icon(Icons.Filled.Delete, stringResource(deleteLabel, name))
+            Icon(deleteIcon, stringResource(deleteLabel, name))
         }
+    }
+}
+
+/**
+ * The Profile's downloads with where each stands, asked again every second while the list shows.
+ * A tap opens a finished file; the row's button stops a running download or takes a finished one
+ * off the list (the file stays on the device).
+ */
+@Composable
+private fun DownloadList(library: LibraryUi, contentPadding: PaddingValues) {
+    val context = LocalContext.current
+    var statuses by remember { mutableStateOf(emptyMap<Long, DownloadStatus>()) }
+    var cantOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(library.downloads) {
+        while (true) {
+            statuses = library.downloadStatuses(library.downloads)
+            // Nothing changes any more once every download has ended.
+            if (statuses.values.none { it is DownloadStatus.Running }) break
+            delay(1_000)
+        }
+    }
+    PanelList(items = library.downloads, key = { it.id }, emptyText = R.string.downloads_empty, contentPadding = contentPadding) { download ->
+        val status = statuses[download.id]
+        val running = status is DownloadStatus.Running
+        val state = when (status) {
+            is DownloadStatus.Running ->
+                status.fraction?.let { stringResource(R.string.download_running_percent, (it * 100).toInt()) } ?: stringResource(R.string.download_running)
+            is DownloadStatus.Done -> Formatter.formatShortFileSize(context, status.bytes)
+            DownloadStatus.Failed -> stringResource(R.string.download_failed)
+            DownloadStatus.Gone -> stringResource(R.string.download_gone)
+            null -> null
+        }
+        PanelRow(
+            title = download.fileName,
+            url = download.url,
+            detail = listOfNotNull(state, visitTime(download.startedAt)).joinToString(" · "),
+            deleteLabel = if (running) R.string.cancel_download else R.string.remove_download,
+            deleteIcon = if (running) Icons.Filled.Close else Icons.Filled.Delete,
+            enabled = status is DownloadStatus.Done,
+            onOpen = { if (!library.openDownload(download)) cantOpen = true },
+            onDelete = { library.removeDownload(download, running) },
+        )
+    }
+    if (cantOpen) {
+        AlertDialog(
+            onDismissRequest = { cantOpen = false },
+            text = { Text(stringResource(R.string.cant_open_file)) },
+            confirmButton = { TextButton(onClick = { cantOpen = false }) { Text(stringResource(R.string.ok)) } },
+        )
     }
 }
 

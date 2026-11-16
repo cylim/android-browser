@@ -8,6 +8,10 @@ import app.jrny.browser.TestPages.await
 import app.jrny.browser.TestPages.onMain
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.data.JrnyDatabase
+import app.jrny.browser.download.Download
+import app.jrny.browser.download.DownloadRequest
+import app.jrny.browser.download.DownloadStatus
+import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
 import app.jrny.browser.tab.SavedTab
@@ -43,6 +47,7 @@ class BrowserStateTest {
     private val repositories = Repositories(database)
     private val profiles = repositories.profiles
     private val tabs = repositories.tabs
+    private val downloader = FakeDownloader()
     private val scopes = mutableListOf<CoroutineScope>()
     private val browsers = mutableListOf<BrowserState>()
 
@@ -65,7 +70,7 @@ class BrowserStateTest {
     private fun newBrowser(): BrowserState {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
-        return onMain { BrowserState(context, repositories, scope) }.also { browsers += it }
+        return onMain { BrowserState(context, repositories, downloader, scope) }.also { browsers += it }
     }
 
     /** The Active Profile and its Tabs, once the database has given them. */
@@ -302,6 +307,57 @@ class BrowserStateTest {
         await("personal's bookmark is back") { browser.bookmarks.value.size == 1 }
         onMain { browser.toggleBookmark(personal, "https://example.com/", "Example") }
         await("removed") { browser.bookmarks.value.isEmpty() }
+    }
+
+    @Test
+    fun aDownloadUsesItsProfilesCookiesAndIsListedInThatProfileOnly() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        val file = DownloadRequest("https://example.com/files/report.pdf", "TestAgent", "report.pdf", "application/pdf", 2048)
+        val cookie = "jrny_download=${System.nanoTime()}"
+        val set = java.util.concurrent.CountDownLatch(1)
+        onMain { WebProfile.of(personal.id).cookieManager.setCookie("https://example.com", "$cookie; Max-Age=600; Secure; Path=/") { set.countDown() } }
+        assertTrue(set.await(5, java.util.concurrent.TimeUnit.SECONDS))
+
+        onMain { browser.startDownload(personal, file) }
+        await("listed") { browser.downloads.value.map { it.fileName } == listOf("report.pdf") }
+        val started = downloader.started.single()
+        assertEquals(file, started.request)
+        assertTrue(started.cookies, started.cookies!!.contains(cookie))
+        val listed = onMain { browser.downloads.value.single() }
+        assertEquals(started.id, listed.downloadId)
+        assertEquals(mapOf(listed.id to DownloadStatus.Running(null)), runBlocking { browser.downloadStatuses(listOf(listed)) })
+
+        // Another Profile has its own list, and its downloads don't carry the first Profile's cookies.
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        await("work has none") { browser.downloads.value.isEmpty() }
+        onMain { browser.startDownload(work, file) }
+        await("work listed") { browser.downloads.value.size == 1 }
+        assertFalse(downloader.started[1].cookies.orEmpty().contains(cookie))
+
+        // Removing a running download stops it. A file that isn't a web address is never started.
+        val running = onMain { browser.downloads.value.single() }
+        onMain { browser.removeDownload(running, running = true) }
+        await("removed") { browser.downloads.value.isEmpty() }
+        assertEquals(listOf(running.downloadId), downloader.cancelled.toList())
+        onMain { browser.startDownload(work, file.copy(url = "blob:https://example.com/abc")) }
+        Thread.sleep(300)
+        assertEquals(2, downloader.started.size)
+    }
+
+    @Test
+    fun deletingAProfileEmptiesItsListOfDownloads() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        onMain { browser.startDownload(work, DownloadRequest("https://example.com/a.zip", "", "a.zip", "application/zip", -1)) }
+        await("listed") { browser.downloads.value.size == 1 }
+
+        onMain { browser.delete(work) }
+        await("personal active") { browser.active.value?.profile?.id == personal.id }
+        assertEquals(emptyList<Download>(), runBlocking { repositories.downloads.downloads(work.id).first() })
     }
 
     @Test
