@@ -8,7 +8,9 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -43,7 +45,7 @@ class LibraryUiTest {
     val compose = createComposeRule()
 
     private lateinit var tab: Tab
-    private val server = TestServer(mapOf("/news" to "<title>News</title>", "/mail" to "<title>Mail</title>"))
+    private val server = TestServer(mapOf("/start" to "<title>Start</title>", "/news" to "<title>News</title>", "/mail" to "<title>Mail</title>"))
     private var visits by mutableStateOf(emptyList<Visit>())
     private var bookmarks by mutableStateOf(emptyList<Bookmark>())
     private val toggled = mutableListOf<Pair<String, String>>()
@@ -57,6 +59,9 @@ class LibraryUiTest {
         compose.runOnUiThread {
             tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-library")))
         }
+        // A Tab with a page: an empty one focuses the address field, and the keyboard that opens
+        // squeezes a tablet-sized window forced onto a phone's screen.
+        load("/start", "Start")
         visits = listOf(
             Visit(2, server.url("/mail"), "Mail", visitedAt = 1_700_000_100_000),
             Visit(1, server.url("/news"), "", visitedAt = 1_700_000_000_000),
@@ -133,7 +138,8 @@ class LibraryUiTest {
         // A visit without a title shows its site; one with a title shows both.
         compose.onNodeWithText("Mail").assertExists()
         val site = server.url("/news").removePrefix("http://").substringBefore(':')
-        assertEquals(2, compose.onAllNodesWithText(site, substring = true).fetchSemanticsNodes().size)
+        val inPanel = hasText(site, substring = true) and hasAnyAncestor(hasTestTag("panel-History"))
+        assertEquals(2, compose.onAllNodes(inPanel).fetchSemanticsNodes().size)
 
         compose.onNodeWithTag("close-panel").performClick()
         compose.onNodeWithTag("panel-History").assertDoesNotExist()
