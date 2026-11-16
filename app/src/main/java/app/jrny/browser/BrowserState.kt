@@ -587,7 +587,12 @@ class BrowserState(
     fun clearHistory(profile: Profile) {
         scope.launch {
             history.clear(profile.id)
-            val kept = bookmarkRepository.bookmarks(profile.id).first().map { it.url } + tabRepository.tabs(profile.id).first().mapNotNull { it.url }
+            // What its live Tabs show now counts too: a page just opened may not be in its Tab's
+            // saved row yet. A closed Tab still on screen is not one of them.
+            val showing = live.entries
+                .filter { (id, tab) -> id !in retired && tab.saved.profileId == profile.id && !tab.saved.isPrivate }
+                .mapNotNull { it.value.tab.url }
+            val kept = bookmarkRepository.bookmarks(profile.id).first().map { it.url } + tabRepository.tabs(profile.id).first().mapNotNull { it.url } + showing
             siteIcons.keepOnly(profile.id, kept)
         }
     }

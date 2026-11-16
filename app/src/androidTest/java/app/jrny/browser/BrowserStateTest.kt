@@ -639,6 +639,8 @@ class BrowserStateTest {
             val before = onMain { browser.siteIcons.version.value }
 
             // Clearing the history takes the icon along, unless a bookmark or an open Tab still names the site.
+            // The page the Tab shows now is what counts, even while its saved row still says another.
+            runBlocking { tabs.savePage(id, "https://stale.example/", "Stale") }
             onMain { browser.clearHistory(personal) }
             await("history cleared") { browser.siteIcons.version.value > before }
             assertTrue(runBlocking { siteIcons.load(personal.id, server.url("/")) } != null)
