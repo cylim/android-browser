@@ -513,6 +513,32 @@ class BrowserStateTest {
     }
 
     @Test
+    fun closingTheAppsWindowEndsEveryPrivateTabEvenIfTheProcessLivesOn() {
+        val cookie = "jrny_closed=${System.nanoTime()}"
+        TestServer(mapOf("/set" to "set-cookie:$cookie", "/echo" to "echo-cookies")).use { server ->
+            val first = newBrowser()
+            show(first, active(first).selected.id)
+            val (_, tab) = openPrivate(first)
+            loadUntil(tab, server.url("/set")) { it == "cookie set" }
+
+            // What the activity does when it finishes: the same process and PrivateTabs go on.
+            onMain {
+                first.closeAllPrivateTabs()
+                first.destroy()
+            }
+            assertEquals(0, onMain { first.liveTabCount })
+
+            val reopened = newBrowser()
+            assertTrue(active(reopened).tabs.none { it.isPrivate })
+            show(reopened, active(reopened).selected.id)
+            // A Private Tab opened now starts with nothing of the one before.
+            val (_, fresh) = openPrivate(reopened)
+            loadUntil(fresh, server.url("/echo")) { it.startsWith("cookies:") }
+            assertFalse(onMain { fresh.title }, onMain { fresh.title }.contains(cookie))
+        }
+    }
+
+    @Test
     fun aPrivateTabStaysPrivate() {
         val browser = newBrowser()
         val personal = active(browser).profile

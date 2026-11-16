@@ -110,6 +110,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // Finishing means the person closed the window (it left Recents, or the task ended), not
+        // that Android is rebuilding it. Private Tabs end with it (SPEC, "Private Tabs").
+        if (isFinishing) browser?.closeAllPrivateTabs()
         browser?.destroy()
         browser = null
         super.onDestroy()

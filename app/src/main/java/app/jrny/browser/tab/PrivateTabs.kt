@@ -19,9 +19,11 @@ data class PrivateSession(
 )
 
 /**
- * Every Profile's Private Tabs (SPEC, "Private Tabs"). They are kept only here, in memory, for as
- * long as the app's process lives: never in the database, so they are never restored after the
- * app is killed. One instance serves the whole app, so they survive the activity being recreated.
+ * Every Profile's Private Tabs (SPEC, "Private Tabs"). They are kept only here, in memory: never
+ * in the database, so they are never restored after the app is killed. One instance serves the
+ * whole app, so they survive the window being rebuilt (a rotation Android doesn't handle in
+ * place, or Android reclaiming the window in the background). When the person closes the app's
+ * window, they are closed with it ([closeAll]), even if Android keeps the process around.
  *
  * A Profile's selected Private Tab, while it has one, is what the Profile shows instead of its
  * selected normal Tab.
@@ -80,6 +82,14 @@ class PrivateTabs {
         val session = sessions.value[profile] ?: return null
         sessions.update { it - profile }
         return session
+    }
+
+    /** Closes every Profile's Private Tabs. Returns the sessions that ended. */
+    @Synchronized
+    fun closeAll(): List<PrivateSession> {
+        val ended = sessions.value.values.toList()
+        sessions.value = emptyMap()
+        return ended
     }
 
     private fun change(profile: ProfileId, tabs: (List<SavedTab>) -> List<SavedTab>) = sessions.update { all ->

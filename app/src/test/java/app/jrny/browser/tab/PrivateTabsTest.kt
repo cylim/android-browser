@@ -73,4 +73,16 @@ class PrivateTabsTest {
         assertNull(tabs.closeAll(work))
         assertEquals(1, open(personal).size)
     }
+
+    @Test
+    fun closingEverythingEndsEverySession() {
+        tabs.open(personal)
+        tabs.open(personal)
+        tabs.open(work)
+        val ended = tabs.closeAll()
+        assertEquals(setOf(personal, work), ended.map { it.profile }.toSet())
+        assertNull(tabs.current(personal))
+        assertNull(tabs.current(work))
+        assertEquals(emptyList<PrivateSession>(), tabs.closeAll())
+    }
 }

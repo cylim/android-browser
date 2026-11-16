@@ -453,6 +453,19 @@ class BrowserState(
         live.keys.toList().forEach(::destroy)
     }
 
+    /**
+     * Closes every Profile's Private Tabs and discards their stores, when the person closes the
+     * app's window. Android may keep the process for a while, and nothing private may be there
+     * when the app opens again.
+     */
+    fun closeAllPrivateTabs() {
+        privateTabs.closeAll().forEach { session ->
+            // Destroyed at once, even the one on screen: the window is going away.
+            session.tabs.forEach { destroy(it.id) }
+            discard(session)
+        }
+    }
+
     /** Destroys a closed Tab, or, if it's on screen, once another Tab replaces it. */
     private fun retire(id: TabId) {
         if (id == shownId) retired += id else destroy(id)
