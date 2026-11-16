@@ -82,6 +82,9 @@ abstract class ProfileDao {
     @Query("DELETE FROM downloads WHERE profileId = :id")
     protected abstract suspend fun deleteDownloads(id: Long)
 
+    @Query("DELETE FROM site_rules WHERE profileId = :id")
+    protected abstract suspend fun deleteSiteRules(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -96,7 +99,8 @@ abstract class ProfileDao {
     /**
      * Marks [id] for deletion unless it's the last live Profile, and removes its Tabs, history,
      * bookmarks and list of downloads at once, so no address from it outlives it on disk. The
-     * downloaded files are the person's own and stay. Returns whether it did.
+     * downloaded files are the person's own and stay. The Site Rules that sent links to it go
+     * too: those links open in the Active Profile again. Returns whether it did.
      */
     @Transaction
     open suspend fun markPendingUnlessLast(id: Long): Boolean {
@@ -106,6 +110,7 @@ abstract class ProfileDao {
         deleteHistory(id)
         deleteBookmarks(id)
         deleteDownloads(id)
+        deleteSiteRules(id)
         return true
     }
 }
@@ -417,11 +422,75 @@ abstract class DownloadDao {
     protected abstract suspend fun profileIsLive(profileId: Long): Boolean
 }
 
+/**
+ * One row per Site Rule: Incoming Links whose address [pattern] covers open in [profileId]
+ * (SPEC, "Site Rules"). A pattern has one rule, so it never names two Profiles.
+ */
+@Entity(
+    tableName = "site_rules",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index(value = ["pattern"], unique = true), Index("profileId")],
+)
+data class SiteRuleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val pattern: String,
+    val profileId: Long,
+    val createdAt: Long,
+)
+
+@Dao
+abstract class SiteRuleDao {
+    /** Every rule, oldest first. */
+    @Query("SELECT * FROM site_rules ORDER BY id")
+    abstract fun observe(): Flow<List<SiteRuleEntity>>
+
+    @Query("SELECT * FROM site_rules ORDER BY id")
+    abstract suspend fun all(): List<SiteRuleEntity>
+
+    @Insert
+    protected abstract suspend fun insertRow(rule: SiteRuleEntity): Long
+
+    @Query("UPDATE site_rules SET pattern = :pattern, profileId = :profileId WHERE id = :id")
+    protected abstract suspend fun updateRow(id: Long, pattern: String, profileId: Long): Int
+
+    @Query("DELETE FROM site_rules WHERE pattern = :pattern AND id != :exceptId")
+    protected abstract suspend fun deleteOthersWith(pattern: String, exceptId: Long)
+
+    @Query("DELETE FROM site_rules WHERE id = :id")
+    abstract suspend fun delete(id: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+
+    /**
+     * Saves a rule: the one with [id] is changed, and without an [id], or when that rule is gone,
+     * a new one is added. Another rule with the same pattern is replaced. Returns the rule's id,
+     * or null, with nothing saved, when the Profile is gone.
+     */
+    @Transaction
+    open suspend fun save(id: Long?, pattern: String, profileId: Long, createdAt: Long): Long? {
+        if (!profileIsLive(profileId)) return null
+        deleteOthersWith(pattern, exceptId = id ?: 0)
+        if (id != null && updateRow(id, pattern, profileId) > 0) return id
+        return insertRow(SiteRuleEntity(pattern = pattern, profileId = profileId, createdAt = createdAt))
+    }
+}
+
 @Database(
-    entities = [ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class],
-    version = 4,
+    entities = [
+        ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class,
+        SiteRuleEntity::class,
+    ],
+    version = 5,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+    ],
 )
 abstract class JrnyDatabase : RoomDatabase() {
     abstract fun profiles(): ProfileDao
@@ -429,6 +498,7 @@ abstract class JrnyDatabase : RoomDatabase() {
     abstract fun history(): HistoryDao
     abstract fun bookmarks(): BookmarkDao
     abstract fun downloads(): DownloadDao
+    abstract fun siteRules(): SiteRuleDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

@@ -16,6 +16,8 @@ import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
+import app.jrny.browser.rules.SitePattern
+import app.jrny.browser.rules.SiteRule
 import app.jrny.browser.library.Visit
 import app.jrny.browser.settings.SearchEngine
 import app.jrny.browser.settings.SearchSuggestions
@@ -247,6 +249,146 @@ class BrowserStateTest {
         runBlocking { tabs.select(before) }
         show(browser, before)
         assertEquals(null, onMain { browser.incomingLinkTab })
+    }
+
+    @Test
+    fun aSiteRuleSendsAnIncomingLinkToItsProfileWhichBecomesTheActiveProfile() {
+        TestServer(mapOf("/work/board" to "<title>board</title>", "/news" to "<title>news</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            val site = SitePattern.forSiteOf(server.url("/"))!!.text
+            onMain { browser.saveSiteRule(null, SitePattern.parse("$site/work")!!, work) }
+            await("rule saved") { browser.siteRules.value.size == 1 }
+            // A Private Tab is what the person left the app from, in the Profile the rule names.
+            onMain { browser.openPrivateTab(work) }
+
+            // No rule covers this one: it opens in the Active Profile.
+            onMain { browser.openIncomingLink(server.url("/news")) }
+            await("news opened") { browser.active.value?.selected?.url == server.url("/news") }
+            assertEquals(personal.id, active(browser).profile.id)
+            assertEquals(null, (onMain { browser.linkOffer } as LinkOffer.Opened).rule)
+
+            // The rule covers this one: it opens in Work, which becomes the Active Profile, in a
+            // saved Tab and not the Private Tab.
+            onMain { browser.openIncomingLink(server.url("/work/board?card=7")) }
+            await("board opened in Work") {
+                browser.active.value?.let { it.profile.id == work.id && it.selected.url == server.url("/work/board?card=7") } == true
+            }
+            assertFalse(active(browser).selected.isPrivate)
+            val offer = onMain { browser.linkOffer } as LinkOffer.Opened
+            assertEquals(active(browser).selected.id, offer.tab)
+            assertEquals("$site/work", offer.rule?.pattern?.text)
+            // The visit is in Work's history, and Personal has only its own link.
+            await("visit recorded") { browser.visits.value.any { it.url == server.url("/work/board?card=7") } }
+            assertEquals(listOf(server.url("/news")), runBlocking { repositories.history.visits(personal.id).first() }.map { it.url })
+        }
+    }
+
+    @Test
+    fun movingAnIncomingLinkOffersARuleForItsSiteAndTakingItSendsTheNextLinkThere() {
+        TestServer(mapOf("/a" to "<title>a</title>", "/b" to "<title>b</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            val site = SitePattern.forSiteOf(server.url("/"))!!
+
+            onMain { browser.openIncomingLink(server.url("/a")) }
+            await("link opened") { browser.incomingLinkTab != null }
+            val link = onMain { browser.incomingLinkTab!! }
+            show(browser, link)
+            val moving1 = active(browser).selected
+            onMain { browser.moveTab(moving1, work) }
+
+            await("rule offered") { browser.linkOffer is LinkOffer.Always }
+            val offer = onMain { browser.linkOffer } as LinkOffer.Always
+            assertEquals(site to work.id, offer.pattern to offer.profile.id)
+            await("moved Tab selected") { browser.active.value?.selected?.id == offer.tab }
+            assertEquals(work.id, active(browser).profile.id)
+            show(browser, offer.tab)
+            // Nothing is saved before the person agrees.
+            assertEquals(emptyList<SiteRule>(), onMain { browser.siteRules.value })
+
+            onMain { browser.acceptRuleOffer() }
+            await("rule saved") { browser.linkOffer is LinkOffer.RuleSaved }
+            assertEquals(listOf(site to work.id), onMain { browser.siteRules.value }.map { it.pattern to it.profileId })
+
+            // From Personal, the next link to that site opens in Work, and moving isn't offered a rule again.
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            show(browser, active(browser).selected.id)
+            assertEquals(null, onMain { browser.linkOffer })
+            onMain { browser.openIncomingLink(server.url("/b")) }
+            await("b opened in Work") { browser.active.value?.let { it.profile.id == work.id && it.selected.url == server.url("/b") } == true }
+
+            // Moved to Personal by hand, against the rule: a rule for Personal is offered, and
+            // taking it replaces the one for Work.
+            show(browser, active(browser).selected.id)
+            val moving2 = active(browser).selected
+            onMain { browser.moveTab(moving2, personal) }
+            await("rule for Personal offered") { (browser.linkOffer as? LinkOffer.Always)?.profile?.id == personal.id }
+            onMain { browser.acceptRuleOffer() }
+            await("rule replaced") { browser.siteRules.value.map { it.pattern to it.profileId } == listOf(site to personal.id) }
+        }
+    }
+
+    @Test
+    fun aMoveFromTheMenuOrToTheRulesOwnProfileOffersNoRule() {
+        TestServer(mapOf("/a" to "<title>a</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+
+            // An ordinary Tab, moved from the page menu.
+            val id = runBlocking { tabs.open(personal.id, server.url("/a")) }
+            show(browser, id)
+            val moving3 = active(browser).selected
+            onMain { browser.moveTab(moving3, work) }
+            await("moved to Work") { browser.active.value?.profile?.id == work.id }
+            Thread.sleep(300)
+            assertEquals(null, onMain { browser.linkOffer })
+
+            // An Incoming Link, moved to the Profile that a rule made meanwhile already names.
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            show(browser, active(browser).selected.id)
+            onMain { browser.openIncomingLink(server.url("/a")) }
+            await("link opened") { browser.incomingLinkTab != null }
+            show(browser, onMain { browser.incomingLinkTab!! })
+            onMain { browser.saveSiteRule(null, SitePattern.forSiteOf(server.url("/"))!!, work) }
+            await("rule saved") { browser.siteRules.value.size == 1 }
+            val moving4 = active(browser).selected
+            onMain { browser.moveTab(moving4, work) }
+            await("moved to Work") { browser.active.value?.profile?.id == work.id }
+            Thread.sleep(300)
+            assertEquals(null, onMain { browser.linkOffer })
+        }
+    }
+
+    @Test
+    fun aRuleForADeletedProfileIsGoneAndTheLinkOpensInTheActiveProfile() {
+        TestServer(mapOf("/a" to "<title>a</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            onMain { browser.saveSiteRule(null, SitePattern.forSiteOf(server.url("/"))!!, work) }
+            await("rule saved") { browser.siteRules.value.size == 1 }
+
+            onMain { browser.delete(work) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            await("rule gone") { browser.siteRules.value.isEmpty() }
+
+            onMain { browser.openIncomingLink(server.url("/a")) }
+            await("opened in Personal") { browser.active.value?.selected?.url == server.url("/a") }
+            assertEquals(personal.id, active(browser).profile.id)
+            assertEquals(null, (onMain { browser.linkOffer } as LinkOffer.Opened).rule)
+        }
     }
 
     @Test

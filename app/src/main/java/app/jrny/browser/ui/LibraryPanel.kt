@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -54,8 +55,11 @@ import app.jrny.browser.library.Visit
 import app.jrny.browser.tab.displayHost
 import kotlinx.coroutines.delay
 
-/** What takes the page's place: the Active Profile's history, bookmarks or downloads, or the app's settings. */
-enum class Panel { History, Bookmarks, Downloads, Settings }
+/**
+ * What takes the page's place: the Active Profile's history, bookmarks or downloads, the app's
+ * settings, or the Site Rules, which are reached from the settings.
+ */
+enum class Panel { History, Bookmarks, Downloads, Settings, SiteRules }
 
 /** The Active Profile's history, bookmarks and downloads, and what can be done with them. */
 class LibraryUi(
@@ -104,6 +108,7 @@ fun LibraryPanel(
         Panel.Bookmarks -> R.string.bookmarks
         Panel.Downloads -> R.string.downloads
         Panel.Settings -> R.string.settings
+        Panel.SiteRules -> R.string.site_rules
     }
     PanelFrame(
         tag = "panel-${panel.name}",
@@ -151,8 +156,8 @@ fun LibraryPanel(
                         )
                     }
                     Panel.Downloads -> DownloadList(library, contentPadding)
-                    // The settings have their own panel (SettingsPanel).
-                    Panel.Settings -> Unit
+                    // These have their own panels (SettingsPanel, SiteRulesPanel).
+                    Panel.Settings, Panel.SiteRules -> Unit
                 }
     }
 
@@ -177,7 +182,9 @@ fun LibraryPanel(
 
 /**
  * The frame every panel shares: one column, at most [PANEL_MAX_WIDTH] wide and centered, with a
- * header (title, what it belongs to, an optional action, close) above the [content].
+ * header (title, what it belongs to, an optional action, close) above the [content]. A panel
+ * reached from another one has [onBack], which leads there again: its arrow starts on the text
+ * line, and the title follows it.
  */
 @Composable
 fun PanelFrame(
@@ -186,6 +193,7 @@ fun PanelFrame(
     subtitle: String?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
     action: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -194,8 +202,16 @@ fun PanelFrame(
             Column(Modifier.widthIn(max = PANEL_MAX_WIDTH).padding(horizontal = PANEL_GUTTER)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = PANEL_TEXT_INSET, end = PANEL_ICON_INSET),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 64.dp)
+                        .padding(start = if (onBack != null) PANEL_ICON_INSET else PANEL_TEXT_INSET, end = PANEL_ICON_INSET),
                 ) {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack, modifier = Modifier.padding(end = 4.dp).testTag("panel-back")) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
+                        }
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                         if (subtitle != null) {
@@ -349,5 +365,5 @@ private val PANEL_GUTTER = 8.dp
 /** Where text starts inside the column. */
 val PANEL_TEXT_INSET = 16.dp
 
-/** Where a 48dp icon-button slot ends inside the column, so its icon ends 16dp in. */
-private val PANEL_ICON_INSET = 4.dp
+/** Where a 48dp icon-button slot starts or ends inside the column, so its icon sits 16dp in. */
+val PANEL_ICON_INSET = 4.dp

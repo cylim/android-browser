@@ -70,6 +70,37 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version5AddsSiteRulesAndKeepsEverythingElse() {
+        helper.createDatabase(DB, 4).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0)")
+            db.execSQL("INSERT INTO tabs (id, profileId, url, title, scrollY, lastUsed) VALUES (7, 1, 'https://example.com/', 'Example', 120, 1)")
+            db.execSQL("INSERT INTO history (id, profileId, url, title, visitedAt) VALUES (1, 1, 'https://example.com/', 'Example', 5)")
+            db.execSQL("INSERT INTO bookmarks (id, profileId, url, title, createdAt) VALUES (1, 1, 'https://example.org/', 'Org', 6)")
+            db.execSQL("INSERT INTO downloads (id, profileId, downloadId, url, fileName, mimeType, startedAt) VALUES (1, 1, 9, 'https://example.org/a.pdf', 'a.pdf', 'application/pdf', 7)")
+        }
+        helper.runMigrationsAndValidate(DB, 5, true).use { db ->
+            for ((table, expected) in listOf("profiles" to 1, "tabs" to 1, "history" to 1, "bookmarks" to 1, "downloads" to 1, "site_rules" to 0)) {
+                db.query("SELECT COUNT(*) FROM $table").use { rows ->
+                    rows.moveToFirst()
+                    assertEquals(table, expected, rows.getInt(0))
+                }
+            }
+            // A rule goes with its Profile's row.
+            db.execSQL("INSERT INTO site_rules (pattern, profileId, createdAt) VALUES ('example.com', 1, 8)")
+            db.execSQL("PRAGMA foreign_keys = ON")
+            db.execSQL("DELETE FROM tabs")
+            db.execSQL("DELETE FROM history")
+            db.execSQL("DELETE FROM bookmarks")
+            db.execSQL("DELETE FROM downloads")
+            db.execSQL("DELETE FROM profiles")
+            db.query("SELECT COUNT(*) FROM site_rules").use { rows ->
+                rows.moveToFirst()
+                assertEquals(0, rows.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

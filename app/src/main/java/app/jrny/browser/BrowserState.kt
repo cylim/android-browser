@@ -18,6 +18,8 @@ import app.jrny.browser.settings.Suggestion
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.rules.SitePattern
+import app.jrny.browser.rules.SiteRule
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.PrivateSession
 import app.jrny.browser.tab.Tab
@@ -50,6 +52,26 @@ data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
     val selected: SavedTab get() = tabs.first { it.selected }
 }
 
+/** What the window offers for a Tab that an Incoming Link opened (SPEC, "Incoming Links"). */
+sealed interface LinkOffer {
+    val tab: TabId
+
+    /**
+     * The link opened in this Tab: in the Profile [rule] names, or without one in the Active
+     * Profile. The window says so and offers "Move to Profile…".
+     */
+    data class Opened(override val tab: TabId, val rule: SiteRule? = null) : LinkOffer
+
+    /**
+     * The person just moved the link to [profile]. The window offers a Site Rule, so links to
+     * [pattern] open there from now on.
+     */
+    data class Always(override val tab: TabId, val pattern: SitePattern, val profile: Profile) : LinkOffer
+
+    /** That rule was just made. The window says so, with a way to the Site Rules. */
+    data class RuleSaved(override val tab: TabId, val pattern: SitePattern, val profile: Profile) : LinkOffer
+}
+
 /**
  * What the browser window shows: the Profiles, the Active Profile and its Tabs.
  *
@@ -75,6 +97,7 @@ class BrowserState(
     private val history = repositories.history
     private val bookmarkRepository = repositories.bookmarks
     private val downloadRepository = repositories.downloads
+    private val siteRuleRepository = repositories.siteRules
 
     val profiles: StateFlow<List<Profile>> = profileRepository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
@@ -117,6 +140,9 @@ class BrowserState(
         .flatMapLatest { downloadRepository.downloads(it.id) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    /** The Site Rules, oldest first. They belong to the app, not to one Profile. */
+    val siteRules: StateFlow<List<SiteRule>> = siteRuleRepository.rules.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
     /** The app's settings, shared by all Profiles. */
     val settings: StateFlow<Settings> = settingsRepository.settings
 
@@ -147,18 +173,27 @@ class BrowserState(
     private val retired = mutableSetOf<TabId>()
 
     /**
-     * The Tab an Incoming Link just opened, which offers "Move to Profile…" (SPEC, "Incoming
-     * Links"), until it's dismissed, moved, or the person goes on to another Tab.
+     * What the window offers for the Tab an Incoming Link just opened (SPEC, "Incoming Links"),
+     * until it's dismissed or taken up, or the person goes on to another Tab.
      */
-    var incomingLinkTab: TabId? by mutableStateOf(null)
+    var linkOffer: LinkOffer? by mutableStateOf(null)
         private set
 
+    /** The Tab an Incoming Link just opened, while it offers "Move to Profile…". */
+    val incomingLinkTab: TabId? get() = (linkOffer as? LinkOffer.Opened)?.tab
+
     /**
-     * True once [incomingLinkTab] has been on screen. Only then does showing another Tab end the
-     * offer: the Tab shown before the link can still report itself shown a moment after the link
-     * arrived, most of all when the link is what started the app.
+     * True once the [linkOffer]'s Tab has been on screen. Only then does showing another Tab end
+     * the offer: the Tab shown before the link can still report itself shown a moment after the
+     * link arrived, most of all when the link is what started the app.
      */
-    private var incomingLinkSeen = false
+    private var linkOfferSeen = false
+
+    private fun offer(offer: LinkOffer) {
+        // Its Tab can be on screen already, when the window was quicker than this.
+        linkOfferSeen = offer.tab == shownId
+        linkOffer = offer
+    }
 
     /** How many Tabs have a WebView now. */
     val liveTabCount: Int get() = live.size
@@ -233,9 +268,9 @@ class BrowserState(
     fun shown(id: TabId) {
         live[id] ?: return
         shownId = id
-        if (id == incomingLinkTab) {
-            incomingLinkSeen = true
-        } else if (incomingLinkSeen) {
+        if (id == linkOffer?.tab) {
+            linkOfferSeen = true
+        } else if (linkOfferSeen) {
             dismissIncomingLink()
         }
         retired.filter { it != id }.forEach { destroy(it); retired.remove(it) }
@@ -345,13 +380,38 @@ class BrowserState(
         if (tab.isPrivate) return
         val url = currentUrl(tab) ?: return
         scope.launch {
-            if (tabRepository.move(tab.id, profile.id, url) != null) {
-                if (incomingLinkTab == tab.id) dismissIncomingLink()
-                retire(tab.id)
-                privateTabs.select(profile.id, null)
-                history.record(profile.id, url)
+            val moved = tabRepository.move(tab.id, profile.id, url) ?: return@launch
+            val wasIncomingLink = incomingLinkTab == tab.id
+            if (linkOffer?.tab == tab.id) dismissIncomingLink()
+            retire(tab.id)
+            privateTabs.select(profile.id, null)
+            history.record(profile.id, url)
+            // Moving a link by hand is when a rule for its site is wanted, unless one already
+            // sends it to that Profile.
+            val pattern = SitePattern.forSiteOf(url)
+            if (wasIncomingLink && pattern != null && siteRuleRepository.ruleFor(url)?.profileId != profile.id) {
+                offer(LinkOffer.Always(moved, pattern, profile))
             }
         }
+    }
+
+    /** Takes up the offered Site Rule ([LinkOffer.Always]): links to that site open in that Profile from now on. */
+    fun acceptRuleOffer() {
+        val offered = linkOffer as? LinkOffer.Always ?: return
+        scope.launch {
+            val saved = siteRuleRepository.save(existing = null, offered.pattern, offered.profile.id)
+            // Still the same offer: the person may have gone on meanwhile.
+            if (linkOffer == offered) linkOffer = if (saved) LinkOffer.RuleSaved(offered.tab, offered.pattern, offered.profile) else null
+        }
+    }
+
+    /** Adds a Site Rule, or changes [existing]: links that [pattern] covers open in [profile]. */
+    fun saveSiteRule(existing: SiteRule?, pattern: SitePattern, profile: Profile) {
+        scope.launch { siteRuleRepository.save(existing, pattern, profile.id) }
+    }
+
+    fun deleteSiteRule(rule: SiteRule) {
+        scope.launch { siteRuleRepository.delete(rule) }
     }
 
     /** Open in Profile: opens [tab]'s current address as a new Tab in [profile] and shows it. [tab] stays. */
@@ -367,22 +427,24 @@ class BrowserState(
     }
 
     /**
-     * Opens an Incoming Link, an address another app handed over, as a new Tab in the Active
-     * Profile, and offers to move it. The caller checks that [url] is a web address.
+     * Opens an Incoming Link, an address another app handed over, as a new Tab, and offers to
+     * move it. A Site Rule that covers the address names the Profile, which becomes the Active
+     * Profile; without one the link opens in the Active Profile. The caller checks that [url] is
+     * a web address.
      */
     fun openIncomingLink(url: String) {
         scope.launch {
-            // The Active Profile can be deleted between reading it and opening the Tab. Then
-            // nothing is opened there, and the Profile that is active now takes the link.
+            // The Profile can be deleted between choosing it and opening the Tab. Then nothing is
+            // opened there, its rules are gone with it, and the next try chooses again.
             repeat(INCOMING_LINK_ATTEMPTS) {
-                val profile = profileRepository.activeProfile.filterNotNull().first()
-                val opened = tabRepository.openUrl(profile.id, url)
+                val rule = siteRuleRepository.ruleFor(url)
+                val target = rule?.profileId ?: profileRepository.activeProfile.filterNotNull().first().id
+                val opened = if (rule != null) tabRepository.openIn(target, url) else tabRepository.openUrl(target, url)
                 if (opened != null) {
-                    incomingLinkSeen = false
-                    incomingLinkTab = opened
+                    offer(LinkOffer.Opened(opened, rule))
                     // Never in a Private Tab, even if that is what the person left the app from.
-                    privateTabs.select(profile.id, null)
-                    history.record(profile.id, url)
+                    privateTabs.select(target, null)
+                    history.record(target, url)
                     return@launch
                 }
             }
@@ -494,9 +556,10 @@ class BrowserState(
         }
     }
 
+    /** Ends the [linkOffer], whichever it is. */
     fun dismissIncomingLink() {
-        incomingLinkTab = null
-        incomingLinkSeen = false
+        linkOffer = null
+        linkOfferSeen = false
     }
 
     /** The address [tab] shows now: the live page's, which can be newer than the saved one. */

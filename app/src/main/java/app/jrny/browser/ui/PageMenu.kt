@@ -181,27 +181,56 @@ fun ProfilePickerDialog(pick: ProfilePick, others: List<Profile>, onChoose: (Pro
 }
 
 /** How far an avatar's 32dp circle sits inside its 48dp slot. */
-private val AVATAR_INSET = 8.dp
+internal val AVATAR_INSET = 8.dp
 
 /** Lets the content be [by] wider than its place on each side. */
-private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints ->
+internal fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints ->
     val extra = by.roundToPx()
     val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = constraints.maxWidth + 2 * extra))
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
 }
 
 /**
- * Shown over a page an Incoming Link just opened: which Profile it opened in, and a one-tap
- * "Move to Profile…" (SPEC, "Incoming Links"). Text starts 16dp in; the close icon ends 16dp in.
+ * Shown over a page an Incoming Link just opened: which Profile it opened in, whether a Site Rule
+ * sent it there ([byRule]), and a one-tap "Move to Profile…" (SPEC, "Incoming Links").
  */
 @Composable
-fun IncomingLinkPrompt(profileName: String, onMove: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun IncomingLinkPrompt(profileName: String, onMove: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier, byRule: Boolean = false) {
     PagePrompt(
-        text = stringResource(R.string.incoming_link_opened_in, profileName),
+        text = stringResource(if (byRule) R.string.incoming_link_opened_by_rule else R.string.incoming_link_opened_in, profileName),
         action = stringResource(R.string.move_to_profile),
         onAction = onMove,
         onDismiss = onDismiss,
         tag = "incoming-link",
+        modifier = modifier,
+    )
+}
+
+/**
+ * Shown once an Incoming Link was moved to another Profile: offers the Site Rule that sends the
+ * links for [site] there from now on (SPEC, "Site Rules").
+ */
+@Composable
+fun SiteRuleOfferPrompt(site: String, profileName: String, onAlways: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = stringResource(R.string.always_open_offer, site, profileName),
+        action = stringResource(R.string.always),
+        onAction = onAlways,
+        onDismiss = onDismiss,
+        tag = "site-rule-offer",
+        modifier = modifier,
+    )
+}
+
+/** Shown once that rule is made: what it does now, and the way to the Site Rules. */
+@Composable
+fun SiteRuleSavedPrompt(site: String, profileName: String, onShow: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = stringResource(R.string.rule_saved_prompt, site, profileName),
+        action = stringResource(R.string.site_rules),
+        onAction = onShow,
+        onDismiss = onDismiss,
+        tag = "site-rule-saved",
         modifier = modifier,
     )
 }
@@ -221,7 +250,7 @@ fun DownloadStartedPrompt(fileName: String, onShow: () -> Unit, onDismiss: () ->
 
 /**
  * A short message floating over the page with one action and a close button. Text starts 16dp
- * in; the close icon ends 16dp in.
+ * in and takes a second line when it needs one; the close icon ends 16dp in.
  */
 @Composable
 private fun PagePrompt(text: String, action: String, onAction: () -> Unit, onDismiss: () -> Unit, tag: String, modifier: Modifier = Modifier) {
@@ -235,9 +264,9 @@ private fun PagePrompt(text: String, action: String, onAction: () -> Unit, onDis
             Text(
                 text,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).padding(vertical = 8.dp),
             )
             TextButton(onClick = onAction, modifier = Modifier.padding(start = 8.dp).testTag("$tag-action")) {
                 Text(action, color = MaterialTheme.colorScheme.inversePrimary, maxLines = 1)

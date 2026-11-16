@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
 import app.jrny.browser.BuildConfig
+import app.jrny.browser.LinkOffer
 import app.jrny.browser.address.AddressInput
 import app.jrny.browser.settings.Suggestion
 import kotlinx.coroutines.delay
@@ -68,8 +69,9 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         openPrivate = { browser.openPrivateTab(profile) },
         move = { browser.moveTab(current.selected, it) },
         openIn = { browser.openInProfile(current.selected, it) },
-        incomingLink = browser.incomingLinkTab == current.selected.id,
+        linkOffer = browser.linkOffer?.takeIf { it.tab == current.selected.id },
         dismissIncomingLink = browser::dismissIncomingLink,
+        acceptRuleOffer = browser::acceptRuleOffer,
     )
 
     val visits by browser.visits.collectAsState()
@@ -95,10 +97,13 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     val appSettings by browser.settings.collectAsState()
     val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME)
 
+    val rules by browser.siteRules.collectAsState()
+    val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
+
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
-    BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) })
+    BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules)
 
     editing?.let { target ->
         val existing = target.profile
@@ -135,6 +140,7 @@ fun BrowserWindow(
     settings: SettingsUi = SettingsUi(),
     /** What to offer for the text typed in the address field so far. */
     suggest: suspend (String) -> List<Suggestion> = { emptyList() },
+    siteRules: SiteRulesUi = SiteRulesUi(),
 ) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
@@ -149,7 +155,8 @@ fun BrowserWindow(
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
     // The file whose download just started, named over the page with a way to the Downloads list.
     var downloading by remember(tab) { mutableStateOf<String?>(null) }
-    BackHandler(enabled = panel != null) { panel = null }
+    // The Site Rules are reached from the settings, and Back leads there again.
+    BackHandler(enabled = panel != null) { panel = if (panel == Panel.SiteRules) Panel.Settings else null }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
     LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
     HideStatusBar()
@@ -233,9 +240,28 @@ fun BrowserWindow(
                             },
                             onDismiss = { downloading = null },
                         )
-                    } else if (tabs.incomingLink && profiles.all.size > 1) {
+                    } else when (val offer = tabs.linkOffer) {
                         // With one Profile there's nowhere to move the page to, so nothing to offer.
-                        IncomingLinkPrompt(profiles.active.name, onMove = { pick = ProfilePick.Move }, onDismiss = tabs.dismissIncomingLink)
+                        is LinkOffer.Opened -> if (profiles.all.size > 1) {
+                            IncomingLinkPrompt(
+                                profiles.active.name,
+                                onMove = { pick = ProfilePick.Move },
+                                onDismiss = tabs.dismissIncomingLink,
+                                byRule = offer.rule != null,
+                            )
+                        }
+                        is LinkOffer.Always ->
+                            SiteRuleOfferPrompt(offer.pattern.text, offer.profile.name, onAlways = tabs.acceptRuleOffer, onDismiss = tabs.dismissIncomingLink)
+                        is LinkOffer.RuleSaved -> SiteRuleSavedPrompt(
+                            offer.pattern.text,
+                            offer.profile.name,
+                            onShow = {
+                                panel = Panel.SiteRules
+                                tabs.dismissIncomingLink()
+                            },
+                            onDismiss = tabs.dismissIncomingLink,
+                        )
+                        null -> Unit
                     }
                 },
                 suggestions = if (suggestions.isNotEmpty() && draft.value != null) {
@@ -246,7 +272,23 @@ fun BrowserWindow(
                 panel = panel?.let { open ->
                     { padding ->
                         if (open == Panel.Settings) {
-                            SettingsPanel(settings, onClose = { panel = null }, contentPadding = padding)
+                            SettingsPanel(
+                                settings,
+                                onClose = { panel = null },
+                                contentPadding = padding,
+                                siteRules = siteRules.rules.size,
+                                onSiteRules = { panel = Panel.SiteRules },
+                            )
+                        } else if (open == Panel.SiteRules) {
+                            SiteRulesPanel(
+                                siteRules,
+                                profiles,
+                                // A Private Tab's page is named nowhere outside it.
+                                pageUrl = if (private) null else tab.url,
+                                onBack = { panel = Panel.Settings },
+                                onClose = { panel = null },
+                                contentPadding = padding,
+                            )
                         } else LibraryPanel(
                             panel = open,
                             library = library,
