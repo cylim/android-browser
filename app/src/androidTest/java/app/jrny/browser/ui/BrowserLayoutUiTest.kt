@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.FontScale
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -259,7 +260,8 @@ class BrowserLayoutUiTest {
             // The bar above the popup names the popup's own address, not the page's.
             compose.waitUntil(10_000) { tab.popupUrl == popupAddress }
             compose.onNodeWithTag("popup-address", useUnmergedTree = true).assertTextEquals(popupAddress)
-            compose.onNodeWithTag("popup-host", useUnmergedTree = true).assertTextEquals(WebAddress.hostOf(popupAddress))
+            // An IP address has no registrable domain, so the whole host is the site.
+            compose.onNodeWithTag("popup-site", useUnmergedTree = true).assertTextEquals(WebAddress.hostOf(popupAddress))
             // The popup's page really loaded, rather than an error page at that address.
             var popupTitle = ""
             compose.waitUntil(10_000) {
@@ -279,20 +281,48 @@ class BrowserLayoutUiTest {
     }
 
     @Test
-    fun aLongPopupHostKeepsItsDomainVisibleAndATapShowsTheFullAddress() {
-        val host = "accounts.google.com." + "x".repeat(60) + ".attacker.example"
+    fun aLongPopupHostShowsItsSiteWholeAndATapShowsTheFullAddress() {
+        val host = "accounts.google.com." + "x".repeat(60) + ".attacker.com"
         val address = "https://$host/signin?continue=" + "y".repeat(80)
         compose.setContent {
             JrnyTheme { Box(Modifier.width(320.dp)) { PopupBar(address, onClose = {}) } }
         }
-        val hostLayout = textLayout("popup-host")
-        assertTrue("the host is cut", hostLayout.isLineEllipsized(0))
-        // Cut from the start: the visible text runs to the host's end, so "attacker.example" shows.
-        assertEquals(host.length, hostLayout.getLineEnd(0, visibleEnd = true))
+        // The site, attacker.com, shows whole.
+        compose.onNodeWithTag("popup-site", useUnmergedTree = true).assertTextEquals("attacker.com")
+        assertShownWhole(textLayout("popup-site"), "attacker.com")
+        // Only the part before it is cut, from the start, so the part next to the site stays.
+        val before = textLayout("popup-host-prefix")
+        assertTrue("the part before the site is cut", before.isLineEllipsized(0))
+        assertEquals(host.length - "attacker.com".length, before.getLineEnd(0, visibleEnd = true))
         assertEquals(1, textLayout("popup-address").lineCount)
 
-        compose.onNodeWithTag("popup-host", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("popup-site", useUnmergedTree = true).performClick()
         assertTrue("the full address wraps", textLayout("popup-address").lineCount > 1)
+    }
+
+    @Test
+    fun aLongRegisteredNameShowsWholeEvenAtTwiceTheFontSize() {
+        // 60 characters: DNS labels are at most 63.
+        val site = "a".repeat(55) + "-bank.com"
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(2f)) {
+                JrnyTheme { Box(Modifier.width(320.dp)) { PopupBar("https://login.$site/", onClose = {}) } }
+            }
+        }
+        compose.onNodeWithTag("popup-site", useUnmergedTree = true).assertTextEquals(site)
+        val layout = textLayout("popup-site")
+        assertTrue("a site this long wraps", layout.lineCount > 1)
+        assertShownWhole(layout, site)
+    }
+
+    /** Every character of [text] is laid out and visible: no ellipsis, nothing cut off. */
+    private fun assertShownWhole(layout: TextLayoutResult, text: String) {
+        assertEquals(text, layout.layoutInput.text.text)
+        for (line in 0 until layout.lineCount) assertTrue("line $line is cut", !layout.isLineEllipsized(line))
+        assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
+        // No wrapped line is cut off at the bottom. (Width isn't checked: a Text sized to its content
+        // reports didOverflowWidth while its paragraph was laid out at the full available width.)
+        assertTrue("lines are cut off at the bottom", !layout.didOverflowHeight)
     }
 
     private fun textLayout(tag: String): TextLayoutResult {

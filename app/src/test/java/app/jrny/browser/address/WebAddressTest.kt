@@ -32,4 +32,24 @@ class WebAddressTest {
         assertEquals("", WebAddress.hostOf("about:blank"))
         assertEquals("", WebAddress.hostOf(null))
     }
+
+    @Test
+    fun `the registrable domain follows the Public Suffix List`() {
+        assertEquals("accounts." to "google.com", WebAddress.splitAtRegistrableDomain("accounts.google.com"))
+        assertEquals("a.b." to "example.co.uk", WebAddress.splitAtRegistrableDomain("a.b.example.co.uk"))
+        assertEquals("" to "evil.github.io", WebAddress.splitAtRegistrableDomain("evil.github.io"))
+        assertEquals("Login." to "Example.COM", WebAddress.splitAtRegistrableDomain("Login.Example.COM"))
+        val spoof = "accounts.google.com." + "x".repeat(40) + ".attacker.com"
+        assertEquals("attacker.com", WebAddress.splitAtRegistrableDomain(spoof).second)
+    }
+
+    @Test
+    fun `hosts without a registrable domain are all domain`() {
+        assertEquals("" to "10.0.2.15", WebAddress.splitAtRegistrableDomain("10.0.2.15"))
+        assertEquals("" to "localhost", WebAddress.splitAtRegistrableDomain("localhost"))
+        assertEquals("" to "nas", WebAddress.splitAtRegistrableDomain("nas"))
+        // Not on the Public Suffix List (a reserved name): shown whole, never cut.
+        assertEquals("" to "a.b.example", WebAddress.splitAtRegistrableDomain("a.b.example"))
+        assertEquals("" to "[::1]", WebAddress.splitAtRegistrableDomain("[::1]"))
+    }
 }

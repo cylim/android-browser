@@ -65,8 +65,9 @@ fun PageView(tab: Tab, modifier: Modifier = Modifier) {
 
 /**
  * The bar above a popup, so a popup can't pass off a sign-in form as the page behind it:
- * - the popup's host, cut from the start when it's too long, so the registrable domain at its
- *   end always shows (`…accounts.google.com.example.net`, never `accounts.google.com…`);
+ * - the popup's host. Its registrable domain (who owns the site, from the Public Suffix List)
+ *   always shows in full, wrapping if it must. Only the part before it is cut, from the start:
+ *   `…google.com.xxxx.attacker.com` shows `attacker.com` whole, never `accounts.google.com…`;
  * - the full address below it, on one line, or in full after a tap;
  * - a close button.
  * Text starts 16dp in, and the close icon ends 16dp in.
@@ -89,13 +90,25 @@ fun PopupBar(address: String, onClose: () -> Unit) {
                     .clickable(onClickLabel = stringResource(R.string.show_full_address)) { expanded = !expanded }
                     .padding(vertical = 8.dp),
             ) {
-                Text(
-                    host.ifEmpty { address },
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.StartEllipsis,
-                    modifier = Modifier.testTag("popup-host"),
-                )
+                val (beforeSite, site) = WebAddress.splitAtRegistrableDomain(host.ifEmpty { address })
+                Row(Modifier.testTag("popup-host")) {
+                    // The site is measured first, at full width, so it is never cut; the part
+                    // before it gets what's left.
+                    if (beforeSite.isNotEmpty()) {
+                        Text(
+                            beforeSite,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.StartEllipsis,
+                            modifier = Modifier.weight(1f, fill = false).testTag("popup-host-prefix"),
+                        )
+                    }
+                    Text(
+                        site,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.testTag("popup-site"),
+                    )
+                }
                 if (host.isNotEmpty()) {
                     Text(
                         address,
