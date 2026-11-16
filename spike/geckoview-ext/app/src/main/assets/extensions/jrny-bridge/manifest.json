@@ -1,0 +1,46 @@
+{
+  "manifest_version": 2,
+  "name": "JRNY bridge (built-in test)",
+  "version": "1.5",
+  "description": "Built-in extension for the spike: native messaging, what an extension sees across Profiles, and an in-page Profile isolation check.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bridge@spike.jrny.app"
+    }
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "permissions": [
+    "nativeMessaging",
+    "geckoViewAddons",
+    "management",
+    "cookies",
+    "tabs",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "passkeys-unsupported.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    },
+    {
+      "matches": [
+        "https://httpbin.org/html*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
