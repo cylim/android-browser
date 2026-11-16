@@ -98,6 +98,72 @@ class TabRepositoryTest {
     }
 
     @Test
+    fun aMoveCarriesOnlyTheAddressClosesTheOriginalAndActivatesTheTarget() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        profiles.activate(personal)
+        val keep = tabs.open(personal, "https://example.com/keep")
+        val original = tabs.open(personal)
+        tabs.savePage(original, "https://example.com/inbox", "Inbox (3) for the Personal Account")
+        tabs.saveScroll(original, 900)
+
+        val moved = tabs.move(original, work, "https://example.com/inbox")!!
+
+        assertEquals(listOf(keep), tabsOf(personal).map { it.id })
+        val arrived = tabsOf(work).single { it.id == moved }
+        assertEquals("https://example.com/inbox", arrived.url)
+        // The title and scroll position belong to the source Profile's page (ADR 0003).
+        assertEquals("", arrived.title)
+        assertEquals(0, arrived.scrollY)
+        assertEquals(moved, selected(work))
+        assertEquals(work, profiles.activeProfile.first()!!.id)
+    }
+
+    @Test
+    fun movingAProfilesLastTabLeavesItAnEmptyOne() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        val only = tabs.open(personal, "https://example.com/")
+        tabs.move(only, work, "https://example.com/")
+        assertNull(tabsOf(personal).single().url)
+    }
+
+    @Test
+    fun aMoveToTheSameOrADeletedProfileDoesNothing() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        val tab = tabs.open(personal, "https://example.com/")
+        assertNull(tabs.move(tab, personal, "https://example.com/"))
+        profiles.delete(work)
+        assertNull(tabs.move(tab, work, "https://example.com/"))
+        assertNull(tabs.openIn(work, "https://example.com/"))
+        assertEquals(listOf(tab), tabsOf(personal).map { it.id })
+        assertEquals(emptyList<SavedTab>(), tabsOf(work))
+    }
+
+    @Test
+    fun openInProfileKeepsTheOriginalAndActivatesTheTarget() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        profiles.activate(personal)
+        val original = tabs.open(personal, "https://example.com/doc")
+
+        val copy = tabs.openIn(work, "https://example.com/doc")!!
+
+        assertEquals(listOf(original), tabsOf(personal).map { it.id })
+        assertEquals("https://example.com/doc", tabsOf(work).single { it.id == copy }.url)
+        assertEquals(copy, selected(work))
+        assertEquals(work, profiles.activeProfile.first()!!.id)
+    }
+
+    @Test
+    fun aLinkIsNotOpenedInADeletedProfile() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        val opened = tabs.openUrl(work, "https://example.com/")!!
+        assertEquals(opened, selected(work))
+
+        profiles.delete(work)
+        assertNull(tabs.openUrl(work, "https://example.com/late"))
+        assertEquals(emptyList<SavedTab>(), tabsOf(work))
+    }
+
+    @Test
     fun deletingAProfileClosesItsTabs() = runBlocking {
         val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
         tabs.open(work, "https://example.org/secret")

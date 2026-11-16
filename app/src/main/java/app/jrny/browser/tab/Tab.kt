@@ -242,7 +242,7 @@ class Tab(
         canGoForward = false
     }
 
-    /** Only web pages load. Handing other schemes to apps comes with Incoming Links (Milestone 4). */
+    /** Only web pages load. Other schemes (`mailto:`, `intent:`, app links) are dropped; nothing is handed to other apps yet. */
     private fun isBlocked(request: WebResourceRequest) = !WebAddress.isWebScheme(request.url.scheme)
 
     /** Navigation callbacks for the Tab's page. */

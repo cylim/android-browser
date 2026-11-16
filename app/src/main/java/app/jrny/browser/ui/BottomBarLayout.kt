@@ -1,6 +1,7 @@
 package app.jrny.browser.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.asPaddingValues
@@ -59,19 +60,31 @@ private val BAR_GAP = 8.dp
 /** Icon buttons are 48dp with a 24dp icon, so 4dp puts the outer icons 16dp from the screen edges. */
 private val BAR_SIDE_PADDING = 4.dp
 
+/** Between the Incoming Link prompt and the page's edges. */
+private val PROMPT_GAP = 16.dp
+
 /** Between the Tab Overview's cards and the screen's sides. */
 private val OVERVIEW_GUTTER = 8.dp
 private val OVERVIEW_ROW_SHAPE = RoundedCornerShape(12.dp)
 
 /**
- * The narrow-window layout: the page, with back, forward, the Active Profile's avatar, the
- * address field (reload sits inside it) and the Tab count along the bottom (SPEC, "Bottom Bar").
+ * The narrow-window layout: the page, with back, the Active Profile's avatar, the address field
+ * (reload sits inside it), the Tab count and the page menu along the bottom (SPEC, "Bottom Bar").
+ * Forward has its own button only where there's room; otherwise it's in the page menu.
  * Swiping along the bar switches Tabs, and the Tab count opens the Tab Overview. It runs edge to
  * edge: the page starts at the top edge (only a status bar kept under a camera cutout pushes it
  * down), and the bar leaves just enough room below for the gesture handle.
  */
 @Composable
-fun BottomBarLayout(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: AddressFieldSlot, editingAddress: Boolean = false) {
+fun BottomBarLayout(
+    tab: Tab,
+    tabs: TabsUi,
+    profiles: ProfilesUi,
+    slots: WindowSlots,
+    /** False in a narrow window, where Forward is in the page menu instead. */
+    showForward: Boolean,
+    editingAddress: Boolean = false,
+) {
     var sheet by remember { mutableStateOf(false) }
     var overview by rememberSaveable { mutableStateOf(false) }
     // The Tab Overview replaces the page and the bar. Left underneath, they would still take
@@ -79,7 +92,7 @@ fun BottomBarLayout(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: 
     if (overview) {
         TabOverview(tabs, profileTint(profiles.active), onClose = { overview = false })
     } else {
-        BarAndPage(tab, tabs, profiles, addressField, editingAddress, onProfiles = { sheet = true }, onTabs = { overview = true })
+        BarAndPage(tab, tabs, profiles, slots, showForward, editingAddress, onProfiles = { sheet = true }, onTabs = { overview = true })
     }
     if (sheet) ProfileSheet(profiles, onDismiss = { sheet = false })
 }
@@ -89,7 +102,8 @@ private fun BarAndPage(
     tab: Tab,
     tabs: TabsUi,
     profiles: ProfilesUi,
-    addressField: AddressFieldSlot,
+    slots: WindowSlots,
+    showForward: Boolean,
     editingAddress: Boolean,
     onProfiles: () -> Unit,
     onTabs: () -> Unit,
@@ -111,7 +125,9 @@ private fun BarAndPage(
                 // Zero when the status bar is hidden. Under a top cutout it shows and takes its strip.
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
-        )
+        ) {
+            Box(Modifier.align(Alignment.BottomCenter).padding(PROMPT_GAP)) { slots.pagePrompt() }
+        }
         // Tinted with the Active Profile's color, like the Sidebar.
         Surface(color = profileTint(profiles.active)) {
             Column(Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
@@ -133,11 +149,12 @@ private fun BarAndPage(
                         .testTag("bottom-bar"),
                 ) {
                     BackButton(tab)
-                    ForwardButton(tab)
+                    if (showForward) ForwardButton(tab)
                     // The Profile sheet: switch, create, edit (SPEC, "Bottom Bar").
                     ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile), onClick = onProfiles)
-                    addressField(Modifier.weight(1f), FIELD_SHAPE)
+                    slots.addressField(Modifier.weight(1f), FIELD_SHAPE)
                     TabCountButton(tabs.all.size, onClick = onTabs)
+                    slots.pageMenu()
                 }
             }
         }

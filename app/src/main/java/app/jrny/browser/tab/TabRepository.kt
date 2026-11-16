@@ -23,6 +23,22 @@ class TabRepository(private val dao: TabDao) {
     /** Closes [id]. The Profile's most recently used remaining Tab takes over; the last leaves an empty one. */
     suspend fun close(id: TabId) = dao.close(id.value)
 
+    /** Opens [url] as a new Tab in [profile] and selects it. Returns null, and opens nothing, when the Profile is gone. */
+    suspend fun openUrl(profile: ProfileId, url: String): TabId? = dao.openInLive(profile.toLong(), url)?.let(::TabId)
+
+    /**
+     * Open in Profile: opens [url] as a new Tab in [profile] and makes it the Active Profile.
+     * Returns null when the Profile is gone.
+     */
+    suspend fun openIn(profile: ProfileId, url: String): TabId? = dao.openAndActivate(profile.toLong(), url)?.let(::TabId)
+
+    /**
+     * Move: closes [id] and opens [url], its current address, as a new Tab in [profile], which
+     * becomes the Active Profile. Only the address is carried (ADR 0003). Returns null, and does
+     * nothing, when the Tab or Profile is gone or the Tab is already in [profile].
+     */
+    suspend fun move(id: TabId, profile: ProfileId, url: String): TabId? = dao.move(id.value, profile.toLong(), url)?.let(::TabId)
+
     /** Gives [profile] an empty Tab if it has none. */
     suspend fun ensureOne(profile: ProfileId) = dao.ensureOne(profile.toLong())
 

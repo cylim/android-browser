@@ -39,7 +39,8 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 ## Incoming Links
 
 - When JRNY browser is the default browser, an **Incoming Link** opens as a new normal Tab in the Active Profile. It never opens in a Private Tab, even if the person left the app from one.
-- A newly opened Incoming Link shows a one-tap "Move to Profile…" action.
+- A newly opened Incoming Link shows a one-tap "Move to Profile…" action, until it is dismissed or another Tab is shown.
+- Only `http` and `https` links are accepted. Anything else another app sends is ignored.
 - v1 does not provide a Custom Tabs service. Apps that ask for Custom Tabs fall back to opening a normal Tab.
 - **Site Rules** come after v1 (see [ROADMAP.md](ROADMAP.md)).
 
@@ -58,6 +59,7 @@ The layout depends on window width, not device type. It switches live when the w
 - A Safari-style address and search field along the bottom edge.
 - The Active Profile's avatar sits at the left of the field. Tapping it opens the Profile sheet (switch, create, manage).
 - Swiping along the bar switches between the Active Profile's Tabs. A tab overview button shows them all.
+- The page menu holds Move, Open in Profile and, in a window narrower than 600dp, Forward.
 
 ## Browsing features
 

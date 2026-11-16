@@ -1,6 +1,9 @@
 package app.jrny.browser
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -73,6 +77,20 @@ class BrowserState(
     /** Closed Tabs still on screen, destroyed once another Tab is shown. */
     private val retired = mutableSetOf<TabId>()
 
+    /**
+     * The Tab an Incoming Link just opened, which offers "Move to Profile…" (SPEC, "Incoming
+     * Links"), until it's dismissed, moved, or the person goes on to another Tab.
+     */
+    var incomingLinkTab: TabId? by mutableStateOf(null)
+        private set
+
+    /**
+     * True once [incomingLinkTab] has been on screen. Only then does showing another Tab end the
+     * offer: the Tab shown before the link can still report itself shown a moment after the link
+     * arrived, most of all when the link is what started the app.
+     */
+    private var incomingLinkSeen = false
+
     /** How many Tabs have a WebView now. */
     val liveTabCount: Int get() = live.size
 
@@ -100,6 +118,11 @@ class BrowserState(
     fun shown(id: TabId) {
         live[id] ?: return
         shownId = id
+        if (id == incomingLinkTab) {
+            incomingLinkSeen = true
+        } else if (incomingLinkSeen) {
+            dismissIncomingLink()
+        }
         retired.filter { it != id }.forEach { destroy(it); retired.remove(it) }
         while (live.size > MAX_LIVE_TABS) {
             val (oldest, _) = live.entries.first()
@@ -146,6 +169,55 @@ class BrowserState(
         scope.launch { tabRepository.close(id) }
     }
 
+    /**
+     * Move: closes [tab] and opens its current address as a new Tab in [profile], which becomes
+     * the Active Profile. Only the address goes along (ADR 0003). Nothing happens for a Tab
+     * without an address.
+     */
+    fun moveTab(tab: SavedTab, profile: Profile) {
+        val url = currentUrl(tab) ?: return
+        scope.launch {
+            if (tabRepository.move(tab.id, profile.id, url) != null) {
+                if (incomingLinkTab == tab.id) dismissIncomingLink()
+                retire(tab.id)
+            }
+        }
+    }
+
+    /** Open in Profile: opens [tab]'s current address as a new Tab in [profile] and shows it. [tab] stays. */
+    fun openInProfile(tab: SavedTab, profile: Profile) {
+        val url = currentUrl(tab) ?: return
+        scope.launch { tabRepository.openIn(profile.id, url) }
+    }
+
+    /**
+     * Opens an Incoming Link, an address another app handed over, as a new Tab in the Active
+     * Profile, and offers to move it. The caller checks that [url] is a web address.
+     */
+    fun openIncomingLink(url: String) {
+        scope.launch {
+            // The Active Profile can be deleted between reading it and opening the Tab. Then
+            // nothing is opened there, and the Profile that is active now takes the link.
+            repeat(INCOMING_LINK_ATTEMPTS) {
+                val profile = profileRepository.activeProfile.filterNotNull().first()
+                val opened = tabRepository.openUrl(profile.id, url)
+                if (opened != null) {
+                    incomingLinkSeen = false
+                    incomingLinkTab = opened
+                    return@launch
+                }
+            }
+        }
+    }
+
+    fun dismissIncomingLink() {
+        incomingLinkTab = null
+        incomingLinkSeen = false
+    }
+
+    /** The address [tab] shows now: the live page's, which can be newer than the saved one. */
+    private fun currentUrl(tab: SavedTab): String? = live[tab.id]?.tab?.url ?: tab.url
+
     /** Saves the live Tabs' scroll positions and writes every open Profile's cookies to disk. */
     fun flush() {
         live.forEach { (id, it) -> saveScroll(id, it.tab) }
@@ -180,6 +252,8 @@ class BrowserState(
     }
 
     companion object {
+        private const val INCOMING_LINK_ATTEMPTS = 3
+
         /** At most this many Tabs are live at once, across all Profiles (SPEC, "Tabs"). */
         const val MAX_LIVE_TABS = 5
     }
