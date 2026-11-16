@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import app.jrny.browser.R
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
@@ -164,7 +166,11 @@ fun ProfileEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.testTag("profile-editor"),
+        // The dialog lays itself out in the whole window and keeps clear of the system bars and
+        // the keyboard itself. Left to the platform, a landscape tablet's keyboard covers the
+        // lower half of the dialog, Create and Cancel included. The choices scroll in what is left.
+        properties = DialogProperties(decorFitsSystemWindows = false),
+        modifier = Modifier.safeDrawingPadding().padding(vertical = 8.dp).testTag("profile-editor"),
         icon = { ProfileBadge(color, icon, 56.dp) },
         title = { Text(stringResource(if (profile == null) R.string.new_profile else R.string.edit_profile)) },
         text = {

@@ -20,8 +20,11 @@ class FakeDownloader : Downloader {
 
     override fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String = redirects[url] ?: url
 
+    // Counted apart from the list: two downloads started at the same moment must not share an id.
+    private val nextId = java.util.concurrent.atomic.AtomicLong(100)
+
     override fun start(request: DownloadRequest, cookies: String?): Long {
-        val id = 100L + started.size
+        val id = nextId.getAndIncrement()
         started += Started(id, request, cookies)
         status[id] = DownloadStatus.Running(null)
         return id

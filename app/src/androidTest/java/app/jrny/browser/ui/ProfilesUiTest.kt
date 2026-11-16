@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -21,6 +23,8 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewFeature
@@ -34,6 +38,7 @@ import app.jrny.browser.tab.Tab
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -126,6 +131,43 @@ class ProfilesUiTest {
         show(TABLET_LANDSCAPE)
         compose.onNodeWithTag("sidebar-tabs").performTouchInput { swipeRight() }
         assertEquals(emptyList<Profile>(), switched)
+    }
+
+    @Test
+    fun theEditorsButtonsStayAboveTheKeyboard() {
+        compose.setContent {
+            JrnyTheme {
+                ProfileEditorDialog(null, canDelete = false, onSave = { _, _, _ -> }, onDelete = {}, onDismiss = {})
+            }
+        }
+        // Typing a name brings up the keyboard, which on a landscape tablet takes half the screen.
+        compose.onNodeWithTag("profile-name-field").performClick()
+        compose.waitForIdle()
+        val button = compose.onNodeWithTag("save-profile").fetchSemanticsNode()
+        val window = (button.root as ViewRootForTest).view.rootView
+        var keyboard = 0
+        // Not every test device shows a keyboard. Where one shows, give it time to come up.
+        runCatching {
+            compose.waitUntil(3_000) {
+                keyboard = ViewCompat.getRootWindowInsets(window)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+                keyboard > 0
+            }
+        }
+        assumeTrue("no on-screen keyboard on this device", keyboard > 0)
+
+        // The keyboard slides in, and the dialog follows it up.
+        fun createEndsAt() = compose.onNodeWithTag("save-profile").fetchSemanticsNode().boundsInWindow.bottom
+        fun keyboardStartsAt() = window.height - (ViewCompat.getRootWindowInsets(window)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0)
+        runCatching { compose.waitUntil(5_000) { createEndsAt() <= keyboardStartsAt() } }
+        assertTrue("Create ends at ${createEndsAt()}, the keyboard starts at ${keyboardStartsAt()}", createEndsAt() <= keyboardStartsAt())
+        // The dialog made room without giving up what matters: the button and the name being
+        // typed are both still on screen, inside the window.
+        compose.onNodeWithTag("save-profile").assertIsDisplayed()
+        compose.onNodeWithTag("profile-name-field").assertIsDisplayed()
+        assertTrue(compose.onNodeWithTag("profile-name-field").fetchSemanticsNode().boundsInWindow.top >= 0f)
+        // And it didn't collapse: counting the keyboard's height twice would leave it no room at all.
+        val dialog = compose.onNodeWithTag("profile-editor").fetchSemanticsNode().boundsInWindow
+        assertTrue("the dialog is only ${dialog.height}px tall", dialog.height >= 160 * window.resources.displayMetrics.density)
     }
 
     @Test

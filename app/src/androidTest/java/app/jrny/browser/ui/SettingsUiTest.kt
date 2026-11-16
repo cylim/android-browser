@@ -168,6 +168,9 @@ class SettingsUiTest {
 
     @Test
     fun typingOffersPagesAndSearchesInTheSidebarAndChoosingOneOpensIt() {
+        // Typing brings up the keyboard. Forced onto a phone's screen, a tablet-sized window
+        // would have none of the Sidebar's list left above it.
+        assumeTrue(fitsTheScreen(TABLET_LANDSCAPE))
         show(TABLET_LANDSCAPE)
         compose.onNodeWithTag("tab-list").assertExists()
         compose.onNodeWithTag("address").performClick()
@@ -186,6 +189,7 @@ class SettingsUiTest {
 
     @Test
     fun openingAPanelGivesUpTheAddressBeingTyped() {
+        assumeTrue(fitsTheScreen(TABLET_LANDSCAPE))
         show(TABLET_LANDSCAPE)
         compose.onNodeWithTag("address").performClick()
         compose.onNodeWithTag("address").performTextReplacement("kotlin")
@@ -210,6 +214,11 @@ class SettingsUiTest {
         compose.onNodeWithText("kotlin coroutines").performClick()
         assertEquals("https://www.bing.com/search?q=kotlin+coroutines", tab.url)
         compose.onNodeWithTag("suggestions").assertDoesNotExist()
+    }
+
+    private fun fitsTheScreen(size: DpSize): Boolean {
+        val metrics = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics
+        return size.width.value <= metrics.widthPixels / metrics.density && size.height.value <= metrics.heightPixels / metrics.density
     }
 
     private companion object {
