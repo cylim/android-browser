@@ -1,5 +1,6 @@
 package app.jrny.browser.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,9 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -47,7 +51,15 @@ class SettingsUi(
  * radio buttons end 16dp from the column's edge.
  */
 @Composable
-fun SettingsPanel(ui: SettingsUi, onClose: () -> Unit, modifier: Modifier = Modifier, contentPadding: PaddingValues = PaddingValues()) {
+fun SettingsPanel(
+    ui: SettingsUi,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
+    /** How many Site Rules there are, shown on the row that leads to them. */
+    siteRules: Int = 0,
+    onSiteRules: () -> Unit = {},
+) {
     val settings = ui.settings
     PanelFrame(
         tag = "panel-Settings",
@@ -71,6 +83,15 @@ fun SettingsPanel(ui: SettingsUi, onClose: () -> Unit, modifier: Modifier = Modi
                 checked = settings.suggestions,
                 tag = "setting-suggestions",
             ) { on -> ui.update { it.copy(suggestions = on) } }
+
+            Section(R.string.links_from_other_apps)
+            Link(
+                title = R.string.site_rules,
+                explanation = stringResource(R.string.site_rules_setting_explanation),
+                value = if (siteRules == 0) stringResource(R.string.site_rules_none) else pluralStringResource(R.plurals.site_rule_count, siteRules, siteRules),
+                tag = "setting-site-rules",
+                onClick = onSiteRules,
+            )
 
             Section(R.string.safety)
             Toggle(
@@ -140,6 +161,36 @@ private fun Choice(label: String, selected: Boolean, tag: String, onChoose: () -
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         RadioButton(selected = selected, onClick = null)
+    }
+}
+
+/**
+ * A row that leads to more settings, with what they are for underneath, and at its end what is
+ * set there now and an arrow. The arrow ends on the same line as the switches.
+ */
+@Composable
+private fun Link(title: Int, explanation: String, value: String, tag: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = PANEL_TEXT_INSET, vertical = 8.dp)
+            .testTag(tag),
+    ) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
+            Text(explanation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
     }
 }
 

@@ -38,11 +38,11 @@ _Avoid_: Duplicate, copy
 ### Links
 
 **Incoming Link**:
-A link that another app hands to JRNY browser. It opens as a normal Tab in the Active Profile, never as a Private Tab.
+A link that another app hands to JRNY browser. It opens as a normal Tab in the Active Profile, or in the Profile a Site Rule names, and never as a Private Tab.
 _Avoid_: External link, intent
 
-**Site Rule** (planned):
-A person's rule that sends Incoming Links for matching addresses to a specific Profile instead of the Active Profile.
+**Site Rule**:
+A person's rule that sends Incoming Links for matching addresses to a specific Profile instead of the Active Profile. It names a site, optionally with a path, and `*` stands for anything.
 _Avoid_: AirControl, Air Traffic Control, routing rule
 
 ### Layout

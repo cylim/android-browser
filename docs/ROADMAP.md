@@ -42,6 +42,14 @@ A throwaway app, kept on a separate branch and never merged, that answers one qu
 - Private Tabs.
 - Search engine choice, suggestions and the Safe Browsing setting.
 
+## Before the first release
+
+Added to v1 after Milestone 5:
+
+- Site Rules: send Incoming Links for matching addresses to a specific Profile.
+- Pinned Tabs and folders in the Sidebar, shared with each Profile's bookmarks.
+- Styling: Sidebar density, a theme per Profile, and emoji for Profiles.
+
 ## Milestone 6: First public release
 
 - Signed release APK built by GitHub Actions and published on GitHub Releases.
@@ -49,7 +57,6 @@ A throwaway app, kept on a separate branch and never merged, that answers one qu
 
 ## After v1
 
-- Site Rules: send Incoming Links for matching addresses to a specific Profile.
 - Passkeys, after approval as a privileged browser.
 - Custom Tabs service.
 - Biometric lock per Profile.

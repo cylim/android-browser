@@ -1,5 +1,6 @@
 package app.jrny.browser.ui
 
+import app.jrny.browser.LinkOffer
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
@@ -45,7 +46,7 @@ object TestTabs {
         open = { opened += Unit },
         move = { moved += it },
         openIn = { openedIn += it },
-        incomingLink = incomingLink,
+        linkOffer = if (incomingLink) LinkOffer.Opened(selected.id) else null,
         dismissIncomingLink = dismissIncomingLink,
     )
 }

@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.jrny.browser.LinkOffer
 import app.jrny.browser.R
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.SavedTab
@@ -62,10 +63,15 @@ class TabsUi(
     val openIn: (Profile) -> Unit = {},
     /** Opens an empty Private Tab and shows it. */
     val openPrivate: () -> Unit = {},
-    /** True while the selected Tab is one an Incoming Link just opened. */
-    val incomingLink: Boolean = false,
+    /** What the window offers for the selected Tab, while it is one an Incoming Link just opened. */
+    val linkOffer: LinkOffer? = null,
     val dismissIncomingLink: () -> Unit = {},
+    /** Takes up the offered Site Rule ([LinkOffer.Always]). */
+    val acceptRuleOffer: () -> Unit = {},
 ) {
+    /** True while the selected Tab is one an Incoming Link just opened. */
+    val incomingLink: Boolean get() = linkOffer is LinkOffer.Opened
+
     /** The Tab after the selected one, or before it with [step] -1, for swiping. Null at either end. */
     fun neighbour(step: Int): SavedTab? {
         val index = all.indexOfFirst { it.id == selected.id }
