@@ -18,6 +18,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.jrny.browser.ui.theme.JrnyTheme
+import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Rule
@@ -64,6 +65,25 @@ class SiteIconUiTest {
         icons = SiteIconSource(cached = { url -> red.takeIf { url == "https://example.org/" } }, load = { url -> red.takeIf { url == "https://example.org/" } })
         compose.waitForIdle()
         assertEquals(Color.Red.toArgb(), middleOf("unknown"))
+    }
+
+    @Test
+    fun aRowThatGoesOnToAnotherSiteDoesNotKeepTheFirstSitesIcon() {
+        var url by mutableStateOf("https://example.com/")
+        // example.com's icon is in memory. example.org's is still being read, and never arrives.
+        val icons = SiteIconSource(
+            cached = { asked -> red.takeIf { asked == "https://example.com/" } },
+            load = { asked -> if (asked == "https://example.com/") red else awaitCancellation() },
+        )
+        compose.setContent {
+            JrnyTheme {
+                CompositionLocalProvider(LocalSiteIcons provides icons) { Box(Modifier.testTag("mark")) { SiteIcon(url) } }
+            }
+        }
+        assertEquals(Color.Red.toArgb(), middleOf("mark"))
+        url = "https://example.org/"
+        compose.waitForIdle()
+        assertNotEquals(Color.Red.toArgb(), middleOf("mark"))
     }
 
     @Test

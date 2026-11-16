@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -38,7 +39,9 @@ fun SiteIcon(url: String?, modifier: Modifier = Modifier, size: Dp = SITE_ICON_S
     // The site's own icon, once the Profile has seen it. Until then, and for a site without one,
     // the letter stands in.
     val icons = LocalSiteIcons.current
-    val icon by produceState(icons?.cached?.invoke(url), url, icons) { value = icons?.load?.invoke(url) }
+    // Keyed, so a row that goes on to another site starts from that site's own icon or letter,
+    // not from the icon of the site it showed before.
+    val icon by key(url, icons) { produceState(icons?.cached?.invoke(url)) { value = icons?.load?.invoke(url) } }
     icon?.let { picture ->
         Image(
             bitmap = picture,

@@ -5,6 +5,9 @@ import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.jrny.browser.profile.ProfileId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -88,6 +91,32 @@ class SiteIconStoreTest {
         assertNull(store.load(work, "https://example.com/"))
         assertNull(SiteIconStore(root).load(work, "https://example.com/"))
         assertNotNull(store.load(personal, "https://example.com/"))
+    }
+
+    @Test
+    fun anIconThatCannotBeWrittenIsOnlyNotKept() = runBlocking {
+        // A file where the icons' folder should be: nothing can be written under it.
+        root.parentFile?.mkdirs()
+        root.writeText("in the way")
+        val store = SiteIconStore(root)
+        assertEquals(false, store.save(personal, "https://example.com/", icon(Color.RED)))
+        assertNull(store.cached(personal, "https://example.com/"))
+        assertNull(store.load(personal, "https://example.com/"))
+        assertEquals(0, store.version.value)
+        root.delete()
+        // Once it can be written, it is, and no draft is left beside it.
+        assertEquals(true, store.save(personal, "https://example.com/", icon(Color.RED)))
+        assertEquals(listOf(1), listOf(File(root, personal.value).list()?.size))
+    }
+
+    @Test
+    fun savesOfTheSameSiteAtOnceLeaveOneWholeIcon() = runBlocking {
+        val store = SiteIconStore(root)
+        (1..12).map { n -> launch(Dispatchers.IO) { store.save(personal, "https://example.com/", icon(if (n % 2 == 0) Color.RED else Color.BLUE, size = 96)) } }.joinAll()
+        val kept = SiteIconStore(root).load(personal, "https://example.com/")!!
+        assertEquals(96 to 96, kept.width to kept.height)
+        assertTrue(kept.getPixel(48, 48) in listOf(Color.RED, Color.BLUE))
+        assertEquals(listOf(1), listOf(File(root, personal.value).list()?.size))
     }
 
     @Test

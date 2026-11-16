@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 
 /**
@@ -45,26 +46,36 @@ class SiteIconStore(private val root: File, private val io: CoroutineDispatcher 
 
     /**
      * Keeps [icon] as the icon of the site of [url] in [profile], scaled down to [MAX_SIZE]. An
-     * address that isn't a web page's has no site, and nothing is kept.
+     * address that isn't a web page's has no site, and nothing is kept. Returns whether it was
+     * kept: an icon is a nicety, so a full disk only leaves the letter in its place.
      */
-    suspend fun save(profile: ProfileId, url: String, icon: Bitmap) {
-        val key = key(profile, url) ?: return
+    suspend fun save(profile: ProfileId, url: String, icon: Bitmap): Boolean {
+        val key = key(profile, url) ?: return false
         val small = if (icon.width <= MAX_SIZE && icon.height <= MAX_SIZE) {
             icon
         } else {
             val scale = MAX_SIZE.toFloat() / maxOf(icon.width, icon.height)
             Bitmap.createScaledBitmap(icon, (icon.width * scale).toInt().coerceAtLeast(1), (icon.height * scale).toInt().coerceAtLeast(1), true)
         }
-        withContext(io) {
+        val written = withContext(io) {
             val file = file(profile, displayHost(url))
-            file.parentFile?.mkdirs()
             // Written beside the file and moved over it, so a reader never sees half a picture.
-            val draft = File(file.path + ".tmp")
-            draft.outputStream().use { small.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            draft.renameTo(file)
+            // Each save has a draft of its own: two Tabs can report the same site's icon at once.
+            var draft: File? = null
+            try {
+                file.parentFile?.mkdirs()
+                draft = File.createTempFile("icon", ".tmp", file.parentFile)
+                draft.outputStream().use { small.compress(Bitmap.CompressFormat.PNG, 100, it) } && draft.renameTo(file)
+            } catch (_: IOException) {
+                false
+            } finally {
+                draft?.delete()
+            }
         }
+        if (!written) return false
         memory.put(key, small)
         changes.update { it + 1 }
+        return true
     }
 
     /**
