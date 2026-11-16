@@ -49,7 +49,11 @@ A throwaway app, kept on a separate branch and never merged, that answers one qu
 ## After v1
 
 - Site Rules: send Incoming Links for matching addresses to a specific Profile.
-- Passkeys, after approval as a privileged browser.
+- Passkeys, after approval as a privileged browser. Until then the app tells sites that passkeys are unsupported, so they fall back to passwords. Once the app is live:
+  1. Submit Google's [privileged-browser request form](https://docs.google.com/forms/d/e/1FAIpQLScRuk9tTg0QPfSWl9SbpbIorX8xx2FCXlmoUYftCX2MxG4qyg/viewform), linked from [Make Credential Manager calls on behalf of other parties](https://developer.android.com/identity/sign-in/privileged-apps). Approval adds the app to [Google Password Manager's allowlist](https://www.gstatic.com/gpm-passkeys-privileged-apps/apps.json).
+  2. List the package name with the SHA-256 fingerprint of **every** release signing certificate: our GitHub Releases key, and F-Droid's key if F-Droid signs its build.
+  3. Ask other credential providers to add the app to their own allowlists, for both passkeys and autofill. 1Password only fills in [browsers it recognizes](https://support.1password.com/android-autofill/). Bitwarden keeps [`fido2_privileged_community.json`](https://github.com/bitwarden/android/blob/main/app/src/main/assets/fido2_privileged_community.json).
+  4. Remove the "passkeys unsupported" behavior, then test passkey sign-in in two Profiles.
 - Custom Tabs service.
 - Biometric lock per Profile.
 - Content blocking.
