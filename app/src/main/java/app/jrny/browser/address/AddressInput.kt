@@ -9,7 +9,9 @@ import java.net.URLEncoder
  * Two rules keep private text away from the search engine:
  * - Anything that starts with `http://` or `https://` is never searched for. It loads, or,
  *   when it has no host at all, nothing happens.
- * - Anything with credentials (`user:password@host`) is never searched for either.
+ * - Anything shaped like credentials (`name:secret@host`) is never searched for either. It loads
+ *   over https at that host, unless `name` is a scheme such as `mailto`: then nothing happens,
+ *   because it isn't a web address and could still hide a password.
  *
  * Only `http` and `https` addresses are ever produced. Text with another scheme, such as
  * `javascript:` or `file:`, is searched for instead of being loaded.
@@ -30,15 +32,19 @@ object AddressInput {
             return text.takeIf { isAnyHost(WebAddress.authorityHost(afterScheme)) }
         }
         if (scheme == null && text.none(Char::isWhitespace)) {
+            if (WebAddress.hasCredentials(text)) {
+                // "mailto:secret@example.com" is ambiguous: a mail link, or user "mailto" with a
+                // password. Either way it never goes to the search engine. Handing mail links to
+                // apps comes with Incoming Links (Milestone 4).
+                val name = text.substringBefore(':').lowercase()
+                return if (name in NON_WEB_SCHEMES) null else "https://$text"
+            }
             webAddressWithoutScheme(text)?.let { return it }
         }
         return searchTemplate.replace("%s", URLEncoder.encode(text, Charsets.UTF_8))
     }
 
     private fun webAddressWithoutScheme(text: String): String? {
-        // mailto:me@example.com looks like user:password@host, but it's another scheme.
-        if (text.substringBefore(':', missingDelimiterValue = "").lowercase() in NON_WEB_SCHEMES) return null
-        if (WebAddress.hasCredentials(text)) return "https://$text"
         // A bare email address, such as me@example.com, is a search, not an address.
         if (text.substringBefore('/').contains('@')) return null
         val host = WebAddress.authorityHost(text)
@@ -65,7 +71,7 @@ object AddressInput {
         else -> ANY_HOST.matches(host)
     }
 
-    /** Schemes written without `//`, which must never be read as `user:password@host`. */
+    /** Schemes written without `//`, which are never loaded as `user:password@host`. */
     private val NON_WEB_SCHEMES = setOf(
         "about", "bitcoin", "blob", "chrome", "content", "data", "file", "geo", "intent", "javascript",
         "magnet", "mailto", "market", "mms", "news", "sms", "smsto", "tel", "urn", "webcal",

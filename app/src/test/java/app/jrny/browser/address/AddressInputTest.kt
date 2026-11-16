@@ -62,11 +62,23 @@ class AddressInputTest {
     }
 
     @Test
-    fun `other schemes written without slashes are never read as credentials`() {
-        assertEquals(search("mailto%3Ame%40example.com"), address("mailto:me@example.com"))
-        assertEquals(search("MAILTO%3Ame%40example.com"), address("MAILTO:me@example.com"))
-        assertEquals(search("sms%3Aa%3Ab%40example.com"), address("sms:a:b@example.com"))
+    fun `scheme-like credentials load nothing and are never searched for`() {
+        // Each could be a mail link or a user name with a password: never send it to the search engine.
+        assertNull(address("mailto:me@example.com"))
+        assertNull(address("mailto:secret@example.com"))
+        assertNull(address("MAILTO:me@example.com"))
+        assertNull(address("sms:a:b@example.com"))
+    }
+
+    @Test
+    fun `other names before a colon and an at sign are credentials and load`() {
+        assertEquals("https://ftp:me@example.com", address("ftp:me@example.com"))
+    }
+
+    @Test
+    fun `other schemes without credentials are searched for`() {
         assertEquals(search("tel%3A%2B15551234"), address("tel:+15551234"))
+        assertEquals(search("geo%3A1.5%2C2.5"), address("geo:1.5,2.5"))
     }
 
     @Test
