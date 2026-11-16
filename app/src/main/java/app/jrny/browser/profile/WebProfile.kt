@@ -23,6 +23,19 @@ class WebProfile private constructor(val name: String) {
      */
     fun flush() = cookieManager.flush()
 
+    /**
+     * Empties the store as far as WebView allows while the app runs: cookies, site storage and
+     * location permissions. WebView can't delete a store this process has loaded (ADR 0001), so
+     * the rest (its cache and folder) goes at the next cold start ([wipePrivateStores]).
+     */
+    fun clear() {
+        val store = ProfileStore.getInstance().getOrCreateProfile(name)
+        store.cookieManager.removeAllCookies(null)
+        store.webStorage.deleteAllData()
+        store.geolocationPermissions.clearAll()
+        store.cookieManager.flush()
+    }
+
     companion object {
         /**
          * The store for the Profile [id], named `jrny-profile-<id>` (ADR 0004). The name never
@@ -30,5 +43,30 @@ class WebProfile private constructor(val name: String) {
          * a Profile's data.
          */
         fun of(id: ProfileId): WebProfile = WebProfile("jrny-profile-${id.value}")
+
+        /** The store called [name], which one of the functions here gave out before. */
+        fun named(name: String): WebProfile = WebProfile(name)
+
+        /**
+         * The temporary store for one private session of the Profile [id] (SPEC, "Private Tabs").
+         * Each session has a store of its own, so a new session never meets what an earlier one
+         * left behind, whatever [clear] could not remove.
+         */
+        fun privateOf(id: ProfileId, session: Int): WebProfile = WebProfile("$PRIVATE_PREFIX${id.value}-$session")
+
+        /**
+         * Deletes every private store left on disk. Call it at cold start, before any WebView
+         * loads a store: only then can WebView delete them.
+         */
+        fun wipePrivateStores() {
+            val stores = ProfileStore.getInstance()
+            stores.allProfileNames.filter { it.startsWith(PRIVATE_PREFIX) }.forEach { name ->
+                // A store that is somehow in use can't be deleted now. It is tried again at the
+                // next cold start, and no session ever reuses its name within one run.
+                runCatching { stores.deleteProfile(name) }
+            }
+        }
+
+        private const val PRIVATE_PREFIX = "jrny-private-"
     }
 }

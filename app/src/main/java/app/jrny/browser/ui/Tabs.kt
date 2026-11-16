@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -59,6 +60,8 @@ class TabsUi(
     val move: (Profile) -> Unit = {},
     /** Open in Profile: the selected Tab's address opens there as a new Tab. */
     val openIn: (Profile) -> Unit = {},
+    /** Opens an empty Private Tab and shows it. */
+    val openPrivate: () -> Unit = {},
     /** True while the selected Tab is one an Incoming Link just opened. */
     val incomingLink: Boolean = false,
     val dismissIncomingLink: () -> Unit = {},
@@ -70,14 +73,19 @@ class TabsUi(
     }
 }
 
-/** A Tab's name in lists: its title, else its host, else "New Tab". */
+/** A Tab's name in lists: its title, else its host, else "New Tab" or "New Private Tab". */
 @Composable
-fun tabLabel(tab: SavedTab): String = tab.pageTitle ?: tab.displayHost.ifEmpty { stringResource(R.string.new_tab) }
+fun tabLabel(tab: SavedTab): String =
+    tab.pageTitle ?: tab.displayHost.ifEmpty { stringResource(if (tab.isPrivate) R.string.new_private_tab else R.string.new_tab) }
 
 /**
- * The Active Profile's Tabs, oldest first: the Sidebar's list and the Tab Overview. The selected
- * Tab sits on a [selectedColor] card. Rows are [ROW_HEIGHT] tall, text starts [TEXT_INSET] in, and
- * each close button sits in a 48dp slot [ICON_INSET] from the end.
+ * The Active Profile's Tabs, oldest first, then its Private Tabs, each marked with a lock: the
+ * Sidebar's list and the Tab Overview. The selected Tab sits on a [selectedColor] card. Rows are
+ * [ROW_HEIGHT] tall, text starts [TEXT_INSET] in, and each close button sits in a 48dp slot
+ * [ICON_INSET] from the end.
+ *
+ * A Private Tab's page is named only while a Private Tab is the one showing, which is when the
+ * window can't be captured ([SecureWindow]). Otherwise its row just says "Private Tab".
  */
 @Composable
 fun TabList(
@@ -93,6 +101,7 @@ fun TabList(
             TabRow(
                 tab,
                 selected = tab.id == tabs.selected.id,
+                named = !tab.isPrivate || tabs.selected.isPrivate,
                 shape = shape,
                 selectedColor = selectedColor,
                 onSelect = {
@@ -106,8 +115,16 @@ fun TabList(
 }
 
 @Composable
-private fun TabRow(tab: SavedTab, selected: Boolean, shape: Shape, selectedColor: Color, onSelect: () -> Unit, onClose: () -> Unit) {
-    val label = tabLabel(tab)
+private fun TabRow(
+    tab: SavedTab,
+    selected: Boolean,
+    named: Boolean,
+    shape: Shape,
+    selectedColor: Color,
+    onSelect: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val label = if (named) tabLabel(tab) else stringResource(R.string.private_tab)
     Surface(
         onClick = onSelect,
         color = if (selected) selectedColor else Color.Transparent,
@@ -119,14 +136,23 @@ private fun TabRow(tab: SavedTab, selected: Boolean, shape: Shape, selectedColor
             .testTag("tab-row-${tab.id.value}"),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = ROW_HEIGHT)) {
+            if (tab.isPrivate) {
+                // The lock starts on the text line, and the text follows 8dp after it.
+                Icon(
+                    Icons.Filled.Lock,
+                    contentDescription = if (named) stringResource(R.string.private_tab) else null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = TEXT_INSET).size(16.dp).testTag("private-tab-mark"),
+                )
+            }
             Column(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = TEXT_INSET, top = 8.dp, bottom = 8.dp),
+                    .padding(start = if (tab.isPrivate) 8.dp else TEXT_INSET, top = 8.dp, bottom = 8.dp),
             ) {
                 Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
+                if (named && tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
                     Text(
                         tab.displayHost,
                         style = MaterialTheme.typography.bodySmall,

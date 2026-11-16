@@ -9,6 +9,8 @@
     <string name="tabs">Tabs</string>
     <string name="new_tab">New Tab</string>
     <string name="open_new_tab">Open a new Tab</string>
+    <string name="new_private_tab">New Private Tab</string>
+    <string name="private_tab">Private Tab</string>
     <string name="close_tab_named">Close %1$s</string>
     <string name="done">Done</string>
     <plurals name="show_tabs">

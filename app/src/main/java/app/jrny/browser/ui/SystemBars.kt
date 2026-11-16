@@ -1,6 +1,7 @@
 package app.jrny.browser.ui
 
 import android.graphics.Color
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.LocalActivity
@@ -40,6 +41,20 @@ fun HideStatusBar() {
             controller.hide(WindowInsetsCompat.Type.statusBars())
         }
         onDispose { controller.show(WindowInsetsCompat.Type.statusBars()) }
+    }
+}
+
+/**
+ * While [secure], the window can't be captured: no screenshots, no screen recording, and a blank
+ * card in the recent-apps list (SPEC, "Private Tabs"). Dialogs, menus and sheets opened from the
+ * window take the same protection.
+ */
+@Composable
+fun SecureWindow(secure: Boolean) {
+    val window = LocalActivity.current?.window ?: return
+    DisposableEffect(window, secure) {
+        if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
 }
 

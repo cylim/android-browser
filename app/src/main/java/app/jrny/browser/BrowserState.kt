@@ -16,6 +16,8 @@ import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.SavedTab
+import app.jrny.browser.tab.PrivateSession
+import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.tab.Tab
 import app.jrny.browser.tab.TabId
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +26,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
@@ -58,6 +61,7 @@ class BrowserState(
     private val context: Context,
     repositories: Repositories,
     private val downloader: Downloader,
+    private val privateTabs: PrivateTabs,
     private val scope: CoroutineScope,
 ) {
     private val profileRepository = repositories.profiles
@@ -70,14 +74,22 @@ class BrowserState(
     val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
     val pendingDeletionCount: StateFlow<Int> = profileRepository.pendingDeletionCount.stateIn(scope, SharingStarted.Eagerly, 0)
 
-    /** The Active Profile and its Tabs. A Profile without Tabs gets an empty one first. */
+    /**
+     * The Active Profile and its Tabs: its saved Tabs, then its Private Tabs. A Profile without
+     * Tabs gets an empty one first. While one of its Private Tabs is selected, that is the Tab
+     * the Profile shows, and none of the saved ones is.
+     */
     val active: StateFlow<ActiveProfileTabs?> = profileRepository.activeProfile
         .filterNotNull()
         .flatMapLatest { profile ->
-            tabRepository.tabs(profile.id)
+            val saved = tabRepository.tabs(profile.id)
                 .onEach { if (it.isEmpty()) tabRepository.ensureOne(profile.id) }
                 .filter { it.isNotEmpty() }
-                .map { ActiveProfileTabs(profile, it) }
+            combine(saved, privateTabs.session(profile.id)) { normal, session ->
+                val private = session?.tabs.orEmpty()
+                val privateShown = private.any { it.selected }
+                ActiveProfileTabs(profile, normal.map { if (privateShown) it.copy(selected = false) else it } + private)
+            }
         }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -102,7 +114,10 @@ class BrowserState(
     /** Live Tabs, least recently shown first. */
     private val live = LinkedHashMap<TabId, LiveTab>(MAX_LIVE_TABS + 1, 0.75f, true)
 
-    private class LiveTab(val tab: Tab, val saving: Job)
+    private class LiveTab(val tab: Tab, val saving: Job?, val saved: SavedTab)
+
+    /** Private stores whose session has ended, emptied once their last WebView is gone. */
+    private val endedStores = mutableSetOf<String>()
 
 
     /** The Tab on screen. Its WebView can't be destroyed until another Tab replaces it. */
@@ -136,6 +151,7 @@ class BrowserState(
      */
     fun tabFor(saved: SavedTab): Tab {
         live[saved.id]?.let { return it.tab }
+        if (saved.isPrivate) return privateTabFor(saved)
         // Keep the saved address and title current, so a kill loses at most the scroll position.
         // Saved one at a time, latest first: a burst of changes during a load writes only the last.
         val page = MutableStateFlow(saved.url to saved.title)
@@ -171,7 +187,23 @@ class BrowserState(
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
         }
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
-        live[saved.id] = LiveTab(tab, saving)
+        live[saved.id] = LiveTab(tab, saving, saved)
+        return tab
+    }
+
+    /**
+     * A Private Tab's page lives in its session's temporary store, apart from the Profile's own.
+     * Its address and title are kept only in memory, and nothing it visits goes into the history.
+     */
+    private fun privateTabFor(saved: SavedTab): Tab {
+        val session = checkNotNull(privateTabs.current(saved.profileId)) { "No private session" }
+        val tab = Tab(
+            context,
+            WebProfile.privateOf(saved.profileId, session.session),
+            onPageChanged = { privateTabs.savePage(saved.profileId, saved.id, it.url, it.title) },
+        )
+        saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
+        live[saved.id] = LiveTab(tab, saving = null, saved)
         return tab
     }
 
@@ -210,24 +242,65 @@ class BrowserState(
     fun delete(profile: Profile) {
         scope.launch {
             if (profileRepository.delete(profile.id)) {
-                val store = WebProfile.of(profile.id).name
-                live.entries.filter { it.value.tab.profile.name == store }.map { it.key }.forEach(::retire)
+                live.entries.filter { it.value.saved.profileId == profile.id }.map { it.key }.forEach(::retire)
+                // Its Private Tabs close with it.
+                privateTabs.closeAll(profile.id)?.let(::discard)
             }
         }
     }
 
     /** Opens an empty Tab in the Active Profile and shows it. */
     fun openTab(profile: Profile) {
-        scope.launch { tabRepository.open(profile.id) }
+        scope.launch {
+            tabRepository.open(profile.id)
+            privateTabs.select(profile.id, null)
+        }
     }
 
-    fun selectTab(id: TabId) {
-        scope.launch { tabRepository.select(id) }
+    /** Opens an empty Private Tab in [profile] and shows it (SPEC, "Private Tabs"). */
+    fun openPrivateTab(profile: Profile) {
+        privateTabs.open(profile.id)
+    }
+
+    /** Shows the Tab [id], one of [profile]'s. */
+    fun selectTab(profile: Profile, id: TabId) {
+        if (id.isPrivate) {
+            privateTabs.select(profile.id, id)
+        } else {
+            scope.launch {
+                tabRepository.select(id)
+                privateTabs.select(profile.id, null)
+            }
+        }
     }
 
     fun closeTab(id: TabId) {
         retire(id)
-        scope.launch { tabRepository.close(id) }
+        if (id.isPrivate) {
+            // Its session ends with the last Private Tab, and the session's store is discarded.
+            val tab = privateTabs.find(id) ?: return
+            privateTabs.close(tab.profileId, id)?.let(::discard)
+        } else {
+            scope.launch { tabRepository.close(id) }
+        }
+    }
+
+    private val TabId.isPrivate: Boolean get() = value < 0
+
+    /**
+     * Discards an ended private session's store: now, if none of its pages is still on screen,
+     * or as soon as the last one is gone.
+     */
+    private fun discard(session: PrivateSession) {
+        val store = WebProfile.privateOf(session.profile, session.session).name
+        endedStores += store
+        emptyEndedStore(store)
+    }
+
+    private fun emptyEndedStore(store: String) {
+        if (store !in endedStores || live.values.any { it.tab.profile.name == store }) return
+        endedStores -= store
+        WebProfile.named(store).clear()
     }
 
     /**
@@ -236,11 +309,14 @@ class BrowserState(
      * without an address.
      */
     fun moveTab(tab: SavedTab, profile: Profile) {
+        // A Private Tab stays private: it can't become a saved Tab of another Profile.
+        if (tab.isPrivate) return
         val url = currentUrl(tab) ?: return
         scope.launch {
             if (tabRepository.move(tab.id, profile.id, url) != null) {
                 if (incomingLinkTab == tab.id) dismissIncomingLink()
                 retire(tab.id)
+                privateTabs.select(profile.id, null)
                 history.record(profile.id, url)
             }
         }
@@ -248,9 +324,13 @@ class BrowserState(
 
     /** Open in Profile: opens [tab]'s current address as a new Tab in [profile] and shows it. [tab] stays. */
     fun openInProfile(tab: SavedTab, profile: Profile) {
+        if (tab.isPrivate) return
         val url = currentUrl(tab) ?: return
         scope.launch {
-            if (tabRepository.openIn(profile.id, url) != null) history.record(profile.id, url)
+            if (tabRepository.openIn(profile.id, url) != null) {
+                privateTabs.select(profile.id, null)
+                history.record(profile.id, url)
+            }
         }
     }
 
@@ -268,6 +348,8 @@ class BrowserState(
                 if (opened != null) {
                     incomingLinkSeen = false
                     incomingLinkTab = opened
+                    // Never in a Private Tab, even if that is what the person left the app from.
+                    privateTabs.select(profile.id, null)
                     history.record(profile.id, url)
                     return@launch
                 }
@@ -316,6 +398,18 @@ class BrowserState(
         return downloader.start(request.copy(url = address), cookiesFor(address))
     }
 
+    /**
+     * Starts a download from the Private Tab [tab], with its session's cookies. The file is the
+     * person's to keep, but the download isn't put on the Profile's list: a Private Tab leaves
+     * nothing behind in the app.
+     */
+    fun startPrivateDownload(tab: SavedTab, request: DownloadRequest) {
+        if (!request.supported) return
+        val session = privateTabs.current(tab.profileId) ?: return
+        val cookieManager = WebProfile.privateOf(tab.profileId, session.session).cookieManager
+        scope.launch { withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) } }
+    }
+
     /** Where each of [downloads] stands, by its list id. */
     suspend fun downloadStatuses(downloads: List<Download>): Map<Long, DownloadStatus> {
         val byDownloadId = withContext(Dispatchers.IO) { downloader.statuses(downloads.map { it.downloadId }) }
@@ -350,8 +444,9 @@ class BrowserState(
 
     /** Saves the live Tabs' scroll positions and writes every open Profile's cookies to disk. */
     fun flush() {
-        live.forEach { (id, it) -> saveScroll(id, it.tab) }
-        live.values.map { it.tab.profile }.distinct().forEach { it.flush() }
+        live.values.forEach(::saveScroll)
+        // Not the private stores: nothing of them needs to reach the disk.
+        live.values.filter { !it.saved.isPrivate }.map { it.tab.profile.name }.distinct().forEach { WebProfile.named(it).flush() }
     }
 
     fun destroy() {
@@ -366,19 +461,25 @@ class BrowserState(
     /** Frees [id]'s WebView, keeping it saved so it loads again when shown. */
     private fun unload(id: TabId) {
         val entry = live[id] ?: return
-        saveScroll(id, entry.tab)
+        saveScroll(entry)
         destroy(id)
     }
 
     private fun destroy(id: TabId) {
         val entry = live.remove(id) ?: return
-        entry.saving.cancel()
+        entry.saving?.cancel()
         entry.tab.destroy()
+        emptyEndedStore(entry.tab.profile.name)
     }
 
-    private fun saveScroll(id: TabId, tab: Tab) {
-        val scrollY = tab.scrollY
-        scope.launch { tabRepository.saveScroll(id, scrollY) }
+    private fun saveScroll(entry: LiveTab) {
+        val saved = entry.saved
+        val scrollY = entry.tab.scrollY
+        if (saved.isPrivate) {
+            privateTabs.saveScroll(saved.profileId, saved.id, scrollY)
+        } else {
+            scope.launch { tabRepository.saveScroll(saved.id, scrollY) }
+        }
     }
 
     companion object {

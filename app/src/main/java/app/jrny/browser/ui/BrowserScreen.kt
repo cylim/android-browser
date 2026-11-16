@@ -55,9 +55,10 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     val tabs = TabsUi(
         all = current.tabs,
         selected = current.selected,
-        select = browser::selectTab,
+        select = { browser.selectTab(profile, it) },
         close = browser::closeTab,
         open = { browser.openTab(profile) },
+        openPrivate = { browser.openPrivateTab(profile) },
         move = { browser.moveTab(current.selected, it) },
         openIn = { browser.openInProfile(current.selected, it) },
         incomingLink = browser.incomingLinkTab == current.selected.id,
@@ -75,7 +76,10 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         deleteVisit = browser::deleteVisit,
         clearHistory = { browser.clearHistory(profile) },
         downloads = downloads,
-        startDownload = { browser.startDownload(profile, it) },
+        startDownload = {
+            val shown = current.selected
+            if (shown.isPrivate) browser.startPrivateDownload(shown, it) else browser.startDownload(profile, it)
+        },
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
         removeDownload = browser::removeDownload,
@@ -139,11 +143,14 @@ fun BrowserWindow(
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.
     val draft = remember(tab) { AddressDraft() }
-    val movableAddressField = remember(tab) {
+    val private = tabs.selected.isPrivate
+    val movableAddressField = remember(tab, private) {
         movableContentOf { modifier: Modifier, shape: Shape, layout: BrowserLayout ->
-            AddressField(tab, draft, modifier, shape, layout)
+            AddressField(tab, draft, modifier, shape, layout, private)
         }
     }
+    // What a Private Tab shows can't be captured (SPEC, "Private Tabs").
+    SecureWindow(private)
 
     Surface(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -218,7 +225,8 @@ fun BrowserWindow(
             request,
             onDownload = {
                 library.startDownload(request)
-                downloading = request.fileName
+                // A Private Tab's download isn't on the list, so there is nothing to show there.
+                if (!private) downloading = request.fileName
                 tab.dismissDownload()
             },
             onDismiss = tab::dismissDownload,
