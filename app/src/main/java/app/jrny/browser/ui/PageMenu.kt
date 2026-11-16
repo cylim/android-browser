@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -76,8 +77,9 @@ fun PageMenu(
     onSetDefaultBrowser: (() -> Unit)?,
 ) {
     var open by remember { mutableStateOf(false) }
-    // Move and Open in Profile need an address to carry and another Profile to carry it to.
-    val canUseOtherProfile = tab.url != null && profiles.all.size > 1
+    // Move and Open in Profile need an address to carry and another Profile to carry it to. A
+    // Private Tab stays private, so it offers neither.
+    val canUseOtherProfile = tab.url != null && profiles.all.size > 1 && !tabs.selected.isPrivate
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.testTag("page-menu")) {
             Icon(Icons.Filled.MoreVert, stringResource(R.string.more))
@@ -100,6 +102,7 @@ fun PageMenu(
                 Item(R.string.forward, Icons.AutoMirrored.Filled.ArrowForward, "menu-forward", enabled = tab.canGoForward, onClick = tab::goForward)
             }
             Item(R.string.new_tab, Icons.Filled.Add, "menu-new-tab", onClick = tabs.open)
+            Item(R.string.new_private_tab, Icons.Filled.Lock, "menu-new-private-tab", onClick = tabs.openPrivate)
             HorizontalDivider()
             // Only web pages can be bookmarked.
             val url = tab.url

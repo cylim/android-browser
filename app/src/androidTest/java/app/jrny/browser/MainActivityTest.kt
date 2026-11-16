@@ -9,6 +9,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.await
 import app.jrny.browser.TestPages.titled
+import app.jrny.browser.profile.ProfileId
+import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.tab.Tab
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,6 +65,28 @@ class MainActivityTest {
         await("reloaded") { !after.isLoading && after.title == "one navigate" }
         // A restored Tab has an address, so the field doesn't grab focus and open the keyboard.
         compose.onNodeWithTag("address").assertIsNotFocused()
+    }
+
+    @Test
+    fun privateTabsOutliveARebuiltWindowAndEndWhenTheWindowIsClosed() {
+        tab()
+        var profile: ProfileId? = null
+        var privateTabs: PrivateTabs? = null
+        compose.activityRule.scenario.onActivity { activity ->
+            val browser = activity.browser!!
+            profile = browser.active.value!!.profile.id
+            privateTabs = (activity.application as JrnyApplication).privateTabs
+            browser.openPrivateTab(browser.active.value!!.profile)
+        }
+        assertEquals(1, privateTabs!!.current(profile!!)!!.tabs.size)
+
+        // Android rebuilds the window: the Private Tab is still there.
+        compose.activityRule.scenario.recreate()
+        assertEquals(1, privateTabs!!.current(profile!!)!!.tabs.size)
+
+        // The person closes the window: it ends, though this process lives on.
+        compose.activityRule.scenario.moveToState(Lifecycle.State.DESTROYED)
+        assertEquals(null, privateTabs!!.current(profile!!))
     }
 
     @Test

@@ -35,6 +35,10 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - Each Profile can open **Private Tabs**. All of a Profile's Private Tabs share one temporary web data store, which is separate from the Profile's normal store.
 - Private Tabs never write to history, are never restored after the app is killed, and block screenshots and recent-apps previews (`FLAG_SECURE`).
 - Their storage is discarded once the last Private Tab of the Profile closes. Any leftover private storage is wiped at every cold start.
+  - WebView can't delete a store while the app runs. So when the last Private Tab closes, its cookies and site storage are cleared, and the next Private Tab gets a new, empty store. The old store's folder goes at the next cold start.
+- Private Tabs are kept in memory only: they survive the app's window being rebuilt, but not the app being closed or killed. Closing the app's window ends them even while Android keeps the app's process around.
+- A Private Tab is listed after the Profile's other Tabs, marked with a lock. Its page is named in the list only while a Private Tab is the one showing, which is when the window can't be captured.
+- A Private Tab can't be Moved or opened in another Profile. Its downloads are saved to the device but not put on the Profile's list of downloads.
 
 ## Incoming Links
 

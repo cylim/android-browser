@@ -2,6 +2,9 @@ package app.jrny.browser.ui
 
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -49,7 +52,7 @@ class AddressDraft {
  * passes the current [layout], so the field takes focus back after a move.
  */
 @Composable
-fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape, layout: BrowserLayout) {
+fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape, layout: BrowserLayout, private: Boolean = false) {
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -86,6 +89,12 @@ fun AddressField(tab: Tab, draft: AddressDraft, modifier: Modifier, shape: Shape
             keepSelectAll = false
         },
         placeholder = { Text(stringResource(R.string.address_hint)) },
+        // A lock marks a Private Tab's address field, in both layouts.
+        leadingIcon = if (private) {
+            { Icon(Icons.Filled.Lock, stringResource(R.string.private_tab), modifier = Modifier.testTag("private-mark")) }
+        } else {
+            null
+        },
         // In the Bottom Bar, reload sits inside the field, which leaves room for the Tab count.
         // The Sidebar has it above, with back and forward. Hidden while typing.
         trailingIcon = if (layout == BrowserLayout.BottomBar && editing == null) {

@@ -14,6 +14,8 @@ import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
+import app.jrny.browser.library.Visit
+import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import app.jrny.browser.tab.TabId
@@ -48,6 +50,7 @@ class BrowserStateTest {
     private val profiles = repositories.profiles
     private val tabs = repositories.tabs
     private val downloader = FakeDownloader()
+    private var privateTabs = PrivateTabs()
     private val scopes = mutableListOf<CoroutineScope>()
     private val browsers = mutableListOf<BrowserState>()
 
@@ -70,7 +73,7 @@ class BrowserStateTest {
     private fun newBrowser(): BrowserState {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
-        return onMain { BrowserState(context, repositories, downloader, scope) }.also { browsers += it }
+        return onMain { BrowserState(context, repositories, downloader, privateTabs, scope) }.also { browsers += it }
     }
 
     /** The Active Profile and its Tabs, once the database has given them. */
@@ -90,6 +93,21 @@ class BrowserStateTest {
     private fun load(tab: Tab, url: String, title: String) {
         onMain { tab.load(url) }
         await("$title loaded") { !tab.isLoading && tab.title == title }
+    }
+
+    /** Opens a Private Tab in the Active Profile and returns it, shown. */
+    private fun openPrivate(browser: BrowserState): Pair<TabId, Tab> {
+        val profile = active(browser).profile
+        onMain { browser.openPrivateTab(profile) }
+        await("private tab selected") { browser.active.value?.selected?.isPrivate == true }
+        val id = active(browser).selected.id
+        return id to show(browser, id)
+    }
+
+    /** Loads [url] and waits for the page's title to satisfy [title]. */
+    private fun loadUntil(tab: Tab, url: String, title: (String) -> Boolean) {
+        onMain { tab.load(url) }
+        await("loaded $url") { !tab.isLoading && tab.url == url && title(tab.title) }
     }
 
     /** Waits until [id]'s saved address and title are [url] and [title]. */
@@ -397,6 +415,184 @@ class BrowserStateTest {
         onMain { browser.delete(work) }
         await("personal active") { browser.active.value?.profile?.id == personal.id }
         assertEquals(emptyList<Download>(), runBlocking { repositories.downloads.downloads(work.id).first() })
+    }
+
+    @Test
+    fun aPrivateTabHasItsOwnCookiesWhichGoWhenTheLastOneCloses() {
+        val cookie = "jrny_private=${System.nanoTime()}"
+        TestServer(mapOf("/set" to "set-cookie:$cookie", "/echo" to "echo-cookies")).use { server ->
+            val browser = newBrowser()
+            val normal = active(browser).selected.id
+            val normalTab = show(browser, normal)
+
+            val (first, firstTab) = openPrivate(browser)
+            loadUntil(firstTab, server.url("/set")) { it == "cookie set" }
+
+            // A second Private Tab of the Profile shares the first one's store.
+            val (second, secondTab) = openPrivate(browser)
+            loadUntil(secondTab, server.url("/echo")) { it.startsWith("cookies:") }
+            assertTrue(onMain { secondTab.title }, onMain { secondTab.title }.contains(cookie))
+
+            // The Profile's own Tab doesn't see it.
+            loadUntil(normalTab, server.url("/echo")) { it.startsWith("cookies:") }
+            assertFalse(onMain { normalTab.title }, onMain { normalTab.title }.contains(cookie))
+
+            // Once the last Private Tab has closed, a new one starts with nothing.
+            onMain { browser.closeTab(first) }
+            onMain { browser.closeTab(second) }
+            await("back on the normal tab") { browser.active.value?.selected?.id == normal }
+            show(browser, normal)
+            val (_, freshTab) = openPrivate(browser)
+            loadUntil(freshTab, server.url("/echo")) { it.startsWith("cookies:") }
+            assertFalse(onMain { freshTab.title }, onMain { freshTab.title }.contains(cookie))
+        }
+    }
+
+    @Test
+    fun aPrivateTabIsListedAfterTheSavedTabsAndLeavesNoHistory() {
+        TestServer(mapOf("/secret" to "<title>Secret</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile.id
+            val normal = active(browser).selected.id
+            show(browser, normal)
+
+            val (private, tab) = openPrivate(browser)
+            loadUntil(tab, server.url("/secret")) { it == "Secret" }
+            await("kept in memory") { browser.active.value?.selected?.title == "Secret" }
+
+            val listed = active(browser).tabs
+            assertEquals(listOf(normal, private), listed.map { it.id })
+            assertEquals(listOf(false, true), listed.map { it.isPrivate })
+            assertEquals(listOf(false, true), listed.map { it.selected })
+            // Nothing of it is in the database or in the history.
+            assertEquals(listOf(normal), runBlocking { tabs.tabs(personal).first() }.map { it.id })
+            Thread.sleep(300)
+            assertEquals(emptyList<Visit>(), onMain { browser.visits.value })
+
+            // Choosing the saved Tab shows it again, and the Private Tab stays open.
+            val profile = active(browser).profile
+            onMain { browser.selectTab(profile, normal) }
+            await("normal selected") { browser.active.value?.selected?.id == normal }
+            assertEquals(2, active(browser).tabs.size)
+        }
+    }
+
+    @Test
+    fun aPrivateTabChosenRightAfterASavedTabStaysChosen() {
+        val browser = newBrowser()
+        val profile = active(browser).profile
+        val normal = active(browser).selected.id
+        show(browser, normal)
+        val (private, _) = openPrivate(browser)
+        val other = runBlocking { tabs.open(profile.id) }
+        await("other listed") { browser.active.value?.tabs?.any { it.id == other } == true }
+
+        // The saved Tab's choice is still being written when the Private Tab is chosen.
+        onMain {
+            browser.selectTab(profile, normal)
+            browser.selectTab(profile, private)
+        }
+        Thread.sleep(500)
+        assertEquals(private, active(browser).selected.id)
+
+        // A saved Tab chosen last wins as before.
+        onMain { browser.selectTab(profile, normal) }
+        await("saved tab shown") { browser.active.value?.selected?.id == normal }
+    }
+
+    @Test
+    fun anIncomingLinkNeverOpensInAPrivateTab() {
+        val browser = newBrowser()
+        show(browser, active(browser).selected.id)
+        val (private, _) = openPrivate(browser)
+
+        onMain { browser.openIncomingLink(titled("link")) }
+        await("link shown instead of the private tab") { browser.active.value?.selected?.url == titled("link") }
+        val shown = active(browser).selected
+        assertFalse(shown.isPrivate)
+        assertTrue(active(browser).tabs.any { it.id == private })
+    }
+
+    @Test
+    fun privateTabsOutliveTheActivityButNotTheProcess() {
+        val first = newBrowser()
+        show(first, active(first).selected.id)
+        val (private, tab) = openPrivate(first)
+        load(tab, titled("kept"), "kept navigate")
+        await("kept in memory") { first.active.value?.selected?.title == "kept navigate" }
+
+        // The activity is recreated: a new BrowserState, the same process.
+        onMain { first.destroy() }
+        val recreated = newBrowser()
+        await("private tab back") { recreated.active.value?.selected?.id == private }
+        val back = show(recreated, private)
+        await("reloaded") { !back.isLoading && back.title == "kept navigate" }
+
+        // Android killed the app: nothing in memory survives, and no Private Tab comes back.
+        onMain { recreated.destroy() }
+        privateTabs = PrivateTabs()
+        val restarted = newBrowser()
+        assertTrue(active(restarted).tabs.none { it.isPrivate })
+    }
+
+    @Test
+    fun closingTheAppsWindowEndsEveryPrivateTabEvenIfTheProcessLivesOn() {
+        val cookie = "jrny_closed=${System.nanoTime()}"
+        TestServer(mapOf("/set" to "set-cookie:$cookie", "/echo" to "echo-cookies")).use { server ->
+            val first = newBrowser()
+            show(first, active(first).selected.id)
+            val (_, tab) = openPrivate(first)
+            loadUntil(tab, server.url("/set")) { it == "cookie set" }
+
+            // What the activity does when it finishes: the same process and PrivateTabs go on.
+            onMain {
+                first.closeAllPrivateTabs()
+                first.destroy()
+            }
+            assertEquals(0, onMain { first.liveTabCount })
+
+            val reopened = newBrowser()
+            assertTrue(active(reopened).tabs.none { it.isPrivate })
+            show(reopened, active(reopened).selected.id)
+            // A Private Tab opened now starts with nothing of the one before.
+            val (_, fresh) = openPrivate(reopened)
+            loadUntil(fresh, server.url("/echo")) { it.startsWith("cookies:") }
+            assertFalse(onMain { fresh.title }, onMain { fresh.title }.contains(cookie))
+        }
+    }
+
+    @Test
+    fun aPrivateTabStaysPrivate() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        runBlocking { profiles.activate(personal.id) }
+        await("personal active") { browser.active.value?.profile?.id == personal.id }
+        show(browser, active(browser).selected.id)
+        val (_, tab) = openPrivate(browser)
+        load(tab, titled("private"), "private navigate")
+        await("kept in memory") { browser.active.value?.selected?.url == titled("private") }
+        val private = active(browser).selected
+
+        // It can't be moved to, or opened in, another Profile as a saved Tab.
+        onMain { browser.moveTab(private, work) }
+        onMain { browser.openInProfile(private, work) }
+        Thread.sleep(400)
+        assertEquals(personal.id, active(browser).profile.id)
+        assertTrue(runBlocking { tabs.tabs(work.id).first() }.none { it.url == titled("private") })
+
+        // Its download uses its own cookies and isn't put on the Profile's list.
+        onMain { browser.startPrivateDownload(private, DownloadRequest("https://example.com/file.zip", "", "file.zip", "application/zip", -1)) }
+        await("download started") { downloader.started.size == 1 }
+        Thread.sleep(300)
+        assertEquals(emptyList<Download>(), onMain { browser.downloads.value })
+
+        // Deleting its Profile closes it.
+        runBlocking { profiles.activate(work.id) }
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        onMain { browser.delete(personal) }
+        await("personal gone") { browser.profiles.value.none { it.id == personal.id } }
+        await("private tabs closed") { privateTabs.current(personal.id) == null }
     }
 
     @Test

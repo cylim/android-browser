@@ -9,6 +9,7 @@ import app.jrny.browser.download.Downloader
 import app.jrny.browser.download.SystemDownloader
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.tab.PrivateTabs
 import kotlinx.coroutines.runBlocking
 
 class JrnyApplication : Application() {
@@ -16,6 +17,9 @@ class JrnyApplication : Application() {
     val database: JrnyDatabase by lazy { JrnyDatabase.open(this) }
     val repositories: Repositories by lazy { Repositories(database) }
     val downloader: Downloader by lazy { SystemDownloader(this) }
+
+    /** Private Tabs live in memory for as long as the process does, across activity restarts. */
+    val privateTabs = PrivateTabs()
 
     /**
      * Before any activity, and so before any WebView loads a Profile: creates the first Profile on
@@ -27,6 +31,8 @@ class JrnyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
+        // Whatever Private Tabs left on disk goes before anything loads (SPEC, "Private Tabs").
+        WebProfile.wipePrivateStores()
         runBlocking {
             repositories.profiles.ensureFirstProfile(getString(R.string.first_profile_name))
             ProfileCleanup(repositories.profiles) { id ->
