@@ -51,6 +51,14 @@ _Avoid_: AirControl, Air Traffic Control, routing rule
 The wide-window layout: a vertical list of the Active Profile's Tabs, with the Profile switcher at its bottom.
 _Avoid_: Drawer, tab strip
 
+**Rail**:
+The collapsed Sidebar: a narrow column with back, forward, reload and the Active Profile's avatar, so the page gets almost the full width.
+_Avoid_: Mini sidebar, collapsed drawer
+
 **Bottom Bar**:
 The narrow-window layout: an address and search field along the bottom edge, with the Active Profile's avatar for switching Profiles.
 _Avoid_: Toolbar, omnibox
+
+**Tab Overview** (planned):
+The Bottom Bar's full-screen view of all the Active Profile's Tabs, opened from a button on the bar.
+_Avoid_: Tab switcher, tab grid

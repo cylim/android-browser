@@ -18,6 +18,7 @@ A throwaway app, kept on a separate branch and never merged, that answers one qu
 - Gradle/Compose project with application ID `app.jrny.browser`, minSdk 35.
 - CI builds, lints and tests every pull request.
 - One Profile and one Tab: load a page, go back and forward, reload.
+- Sidebar (≥ 840dp) and Bottom Bar (< 840dp) layouts for that Tab, switching live when the window resizes. The Sidebar can collapse to a rail.
 
 ## Milestone 2: Profiles
 
@@ -28,7 +29,7 @@ A throwaway app, kept on a separate branch and never merged, that answers one qu
 ## Milestone 3: Tabs and layouts
 
 - Several Tabs per Profile, with the 5-live-Tab limit and restore after the app is killed.
-- Sidebar (≥ 840dp) and Bottom Bar (< 840dp), switching live when the window resizes.
+- The Tab list in the Sidebar and the Tab Overview in the Bottom Bar.
 
 ## Milestone 4: Moving between Profiles and Incoming Links
 

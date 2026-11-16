@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JRNY browser</string>
+    <string name="address_hint">Search or type an address</string>
+    <string name="back">Back</string>
+    <string name="forward">Forward</string>
+    <string name="reload">Reload</string>
+    <string name="stop">Stop loading</string>
+    <string name="tabs">Tabs</string>
+    <string name="new_tab">New Tab</string>
+    <string name="hide_sidebar">Hide sidebar</string>
+    <string name="show_sidebar">Show sidebar</string>
+    <!-- The only Profile until Profiles can be created and named in Milestone 2. -->
+    <string name="first_profile_name">Profile 1</string>
+    <string name="close_popup">Close popup</string>
+    <string name="show_full_address">Show the full address</string>
+    <string name="page_crashed">This page stopped working.</string>
+    <string name="unsupported_webview">JRNY browser needs a newer Android System WebView with multi-profile support. Update Android System WebView from your app store, then reopen JRNY browser.</string>
+</resources>

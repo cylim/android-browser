@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A browser has to load the http:// pages people ask for, such as a router, a NAS or an intranet
+    site. Android blocks cleartext traffic by default, and WebView follows that policy. Typed
+    addresses still default to https:// (AddressInput), and certificates are checked as usual.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
