@@ -10,8 +10,30 @@
     <string name="new_tab">New Tab</string>
     <string name="hide_sidebar">Hide sidebar</string>
     <string name="show_sidebar">Show sidebar</string>
-    <!-- The only Profile until Profiles can be created and named in Milestone 2. -->
-    <string name="first_profile_name">Profile 1</string>
+    <!-- The Profile created on first launch. -->
+    <string name="first_profile_name">Personal</string>
+    <string name="switch_profile">Switch Profile</string>
+    <string name="active_profile">Active Profile</string>
+    <string name="new_profile">New Profile</string>
+    <string name="edit_profile">Edit Profile</string>
+    <string name="edit_profile_named">Edit %1$s</string>
+    <string name="profile_name">Name</string>
+    <string name="profile_color">Color</string>
+    <string name="profile_color_option">Color: %1$s</string>
+    <string name="profile_icon">Icon</string>
+    <string name="profile_icon_option">Icon: %1$s</string>
+    <string name="create">Create</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="delete_profile">Delete Profile</string>
+    <string name="delete_profile_title">Delete %1$s?</string>
+    <string name="delete_profile_body">Every Account signed in within %1$s will be signed out. Its Tabs close now, and its cookies and site data are erased the next time the app starts.</string>
+    <string name="last_profile_cannot_be_deleted">The last Profile can\'t be deleted.</string>
+    <plurals name="profiles_pending_removal">
+        <item quantity="one">%d deleted Profile is erased the next time the app starts.</item>
+        <item quantity="other">%d deleted Profiles are erased the next time the app starts.</item>
+    </plurals>
     <string name="close_popup">Close popup</string>
     <string name="show_full_address">Show the full address</string>
     <string name="page_crashed">This page stopped working.</string>

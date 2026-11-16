@@ -35,9 +35,13 @@ class MainActivityTest {
         assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
     }
 
+    /** The Active Profile's Tab. */
     private fun tab(): Tab {
         var tab: Tab? = null
-        compose.activityRule.scenario.onActivity { tab = it.tab }
+        compose.activityRule.scenario.onActivity { activity ->
+            val browser = activity.browser!!
+            tab = browser.tabFor(browser.activeProfile.value!!)
+        }
         return tab!!
     }
 

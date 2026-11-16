@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -25,6 +26,9 @@ android {
         }
     }
 
+    // Room writes each database version's schema here, for migrations and their tests.
+    sourceSets["androidTest"].assets.directories.add("$projectDir/schemas")
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -36,6 +40,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.webkit)
     implementation(libs.guava)
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -50,4 +56,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }

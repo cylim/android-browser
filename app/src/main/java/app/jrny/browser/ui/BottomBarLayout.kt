@@ -14,13 +14,21 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.jrny.browser.R
 import app.jrny.browser.tab.Tab
 
 /** The Bottom Bar's address field is a pill. */
@@ -39,7 +47,8 @@ private val BAR_SIDE_PADDING = 4.dp
  * bar leaves just enough room below for the gesture handle.
  */
 @Composable
-fun BottomBarLayout(tab: Tab, addressField: AddressFieldSlot) {
+fun BottomBarLayout(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSlot) {
+    var sheet by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -58,7 +67,8 @@ fun BottomBarLayout(tab: Tab, addressField: AddressFieldSlot) {
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
         )
-        Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+        // Tinted with the Active Profile's color, like the Sidebar.
+        Surface(color = profileTint(profiles.active)) {
             Column(Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
                 LoadProgress(tab)
                 Row(
@@ -72,12 +82,22 @@ fun BottomBarLayout(tab: Tab, addressField: AddressFieldSlot) {
                 ) {
                     BackButton(tab)
                     ForwardButton(tab)
-                    // Switching Profiles from here arrives in Milestone 2.
-                    ProfileAvatar()
+                    // The Profile sheet: switch, create, edit (SPEC, "Bottom Bar").
+                    ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile)) { sheet = true }
                     addressField(Modifier.weight(1f), FIELD_SHAPE)
                     ReloadOrStopButton(tab)
                 }
             }
         }
+    }
+    if (sheet) ProfileSheet(profiles, onDismiss = { sheet = false })
+}
+
+/** The Profile sheet, from the Bottom Bar's avatar: the same list as the Sidebar's menu. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileSheet(profiles: ProfilesUi, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("profile-sheet")) {
+        ProfileList(profiles, onDone = onDismiss, modifier = Modifier.padding(bottom = BAR_GAP))
     }
 }
