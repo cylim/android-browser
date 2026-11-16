@@ -3,6 +3,7 @@ package app.jrny.browser.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Dp
@@ -361,6 +363,18 @@ class PinnedUiTest {
         pin(docs).holdAndDrag(36.dp)
         assertEquals(1, reorderedTop.size)
         compose.onNodeWithTag("pinned-unpin").assertDoesNotExist()
+    }
+
+    @Test
+    fun aScreenReadersLongPressOpensTheMenuWithoutAFinger() {
+        show(TABLET_LANDSCAPE)
+        pin(mail).performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithTag("pinned-unpin").performClick()
+        assertEquals(listOf(mail), unpinned)
+
+        folder(work).performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithTag("folder-delete").performClick()
+        assertEquals(listOf(work), deletedFolders)
     }
 
     @Test
