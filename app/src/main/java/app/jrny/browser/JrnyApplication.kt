@@ -6,6 +6,8 @@ import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewFeature
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.Downloader
+import app.jrny.browser.icons.SiteIconStore
+import java.io.File
 import app.jrny.browser.download.SystemDownloader
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.WebProfile
@@ -30,6 +32,7 @@ class JrnyApplication : Application() {
             privateTabs = privateTabs,
             settings = SettingsRepository(getSharedPreferences("settings", MODE_PRIVATE)),
             searchSuggestions = HttpSearchSuggestions(),
+            siteIcons = SiteIconStore(File(filesDir, "site-icons")),
         )
     }
 

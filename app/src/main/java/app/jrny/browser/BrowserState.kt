@@ -102,6 +102,9 @@ class BrowserState(
     private val downloadRepository = repositories.downloads
     private val siteRuleRepository = repositories.siteRules
 
+    /** The icons of the sites each Profile has shown, for the Tab list. */
+    val siteIcons = services.siteIcons
+
     val profiles: StateFlow<List<Profile>> = profileRepository.profiles.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile.stateIn(scope, SharingStarted.Eagerly, null)
     val pendingDeletionCount: StateFlow<Int> = profileRepository.pendingDeletionCount.stateIn(scope, SharingStarted.Eagerly, 0)
@@ -250,6 +253,8 @@ class BrowserState(
                     }
                 }
             },
+            // Kept with the Profile the page was shown in. A Private Tab's are never kept.
+            onIcon = { url, icon -> scope.launch { siteIcons.save(saved.profileId, url, icon) } },
         )
         val saving = scope.launch {
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
@@ -314,6 +319,7 @@ class BrowserState(
                 live.entries.filter { it.value.saved.profileId == profile.id }.map { it.key }.forEach(::retire)
                 // Its Private Tabs close with it.
                 privateTabs.closeAll(profile.id)?.let(::discard)
+                siteIcons.clear(profile.id)
             }
         }
     }
@@ -577,8 +583,13 @@ class BrowserState(
         scope.launch { history.delete(visit) }
     }
 
+    /** Clears [profile]'s history, and the icons of every site it has no bookmark or open Tab of. */
     fun clearHistory(profile: Profile) {
-        scope.launch { history.clear(profile.id) }
+        scope.launch {
+            history.clear(profile.id)
+            val kept = bookmarkRepository.bookmarks(profile.id).first().map { it.url } + tabRepository.tabs(profile.id).first().mapNotNull { it.url }
+            siteIcons.keepOnly(profile.id, kept)
+        }
     }
 
     /**

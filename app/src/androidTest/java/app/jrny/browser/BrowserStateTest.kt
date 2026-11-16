@@ -69,6 +69,8 @@ class BrowserStateTest {
         asked += engine to query
         listOf("$query one", "$query two")
     }
+    private val iconFolder = java.io.File(context.cacheDir, "test-site-icons-${System.nanoTime()}")
+    private val siteIcons = app.jrny.browser.icons.SiteIconStore(iconFolder)
     private val scopes = mutableListOf<CoroutineScope>()
     private val browsers = mutableListOf<BrowserState>()
 
@@ -86,13 +88,14 @@ class BrowserStateTest {
         runBlocking { scopes.forEach { it.coroutineContext.job.cancelAndJoin() } }
         database.close()
         context.deleteSharedPreferences(settingsFile)
+        iconFolder.deleteRecursively()
     }
 
     /** A BrowserState, as the activity makes one, on the shared database. */
     private fun newBrowser(): BrowserState {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
-        val services = BrowserServices(repositories, downloader, privateTabs, settings, suggestions)
+        val services = BrowserServices(repositories, downloader, privateTabs, settings, suggestions, siteIcons)
         return onMain { BrowserState(context, services, scope) }.also { browsers += it }
     }
 
@@ -612,6 +615,39 @@ class BrowserStateTest {
             onMain { browser.deleteBookmark(bookmark) }
             await("unpinned") { browser.bookmarks.value.isEmpty() && browser.active.value?.tabs?.none { it.isPinned } == true }
             assertTrue(active(browser).tabs.any { it.id == reopened.id })
+        }
+    }
+
+    @Test
+    fun aSitesIconIsKeptForItsProfileAndGoesWithTheHistoryUnlessItIsBookmarked() {
+        // A page that names its own icon, a red square, so nothing is fetched from the network.
+        val redSquare = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII="
+        val page = "<title>Icon page</title><link rel=\"icon\" type=\"image/png\" href=\"data:image/png;base64,$redSquare\"><p>hi</p>"
+        TestServer(mapOf("/icon" to page)).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            val id = runBlocking { tabs.open(personal.id) }
+            val tab = show(browser, id)
+            load(tab, server.url("/icon"), "Icon page")
+
+            await("icon kept") { browser.siteIcons.cached(personal.id, server.url("/")) != null }
+            // Only in the Profile that showed the page.
+            assertEquals(null, runBlocking { siteIcons.load(work.id, server.url("/")) })
+            val before = onMain { browser.siteIcons.version.value }
+
+            // Clearing the history takes the icon along, unless a bookmark or an open Tab still names the site.
+            onMain { browser.clearHistory(personal) }
+            await("history cleared") { browser.siteIcons.version.value > before }
+            assertTrue(runBlocking { siteIcons.load(personal.id, server.url("/")) } != null)
+            onMain { browser.closeTab(id) }
+            await("tab closed") { browser.active.value?.tabs?.none { it.id == id } == true }
+            val again = onMain { browser.siteIcons.version.value }
+            onMain { browser.clearHistory(personal) }
+            await("history cleared again") { browser.siteIcons.version.value > again }
+            assertEquals(null, runBlocking { siteIcons.load(personal.id, server.url("/")) })
         }
     }
 
