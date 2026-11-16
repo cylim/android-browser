@@ -90,6 +90,7 @@
     <string name="rule_covers_path">Covers %1$s and everything under it.</string>
     <string name="rule_covers_star">Covers every address that fits %1$s, where * stands for anything.</string>
     <string name="rule_not_a_site">That isn\'t a site. Try something like example.com.</string>
+    <string name="rule_too_long">That is too long for a rule. A site and its path can take up to %1$d characters.</string>
     <string name="rule_replaces">Replaces your rule that opens %1$s in %2$s.</string>
     <string name="rule_open_in">Open in</string>
     <string name="rule_use_page_site">Use %1$s</string>

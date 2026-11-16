@@ -315,7 +315,7 @@ class BrowserStateTest {
 
             onMain { browser.acceptRuleOffer() }
             await("rule saved") { browser.linkOffer is LinkOffer.RuleSaved }
-            assertEquals(listOf(site to work.id), onMain { browser.siteRules.value }.map { it.pattern to it.profileId })
+            await("rule listed") { browser.siteRules.value.map { it.pattern to it.profileId } == listOf(site to work.id) }
 
             // From Personal, the next link to that site opens in Work, and moving isn't offered a rule again.
             runBlocking { profiles.activate(personal.id) }
@@ -333,6 +333,43 @@ class BrowserStateTest {
             await("rule for Personal offered") { (browser.linkOffer as? LinkOffer.Always)?.profile?.id == personal.id }
             onMain { browser.acceptRuleOffer() }
             await("rule replaced") { browser.siteRules.value.map { it.pattern to it.profileId } == listOf(site to personal.id) }
+        }
+    }
+
+    @Test
+    fun movingALinkThatANarrowRuleSentOffersToChangeThatRule() {
+        TestServer(mapOf("/work/board" to "<title>board</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            val site = SitePattern.forSiteOf(server.url("/"))!!
+            val narrow = SitePattern.parse("${site.text}/work")!!
+            onMain { browser.saveSiteRule(null, narrow, work) }
+            await("rule saved") { browser.siteRules.value.size == 1 }
+
+            onMain { browser.openIncomingLink(server.url("/work/board")) }
+            await("opened in Work") { browser.active.value?.let { it.profile.id == work.id && it.selected.url == server.url("/work/board") } == true }
+            show(browser, active(browser).selected.id)
+            val moving = active(browser).selected
+            onMain { browser.moveTab(moving, personal) }
+
+            // A rule for the whole site would lose to the narrow one. The narrow one is offered.
+            await("rule offered") { browser.linkOffer is LinkOffer.Always }
+            val offer = onMain { browser.linkOffer } as LinkOffer.Always
+            assertEquals(narrow to personal.id, offer.pattern to offer.profile.id)
+            onMain { browser.acceptRuleOffer() }
+            await("rule changed") { browser.siteRules.value.map { it.pattern to it.profileId } == listOf(narrow to personal.id) }
+
+            // The same link again, from Work: it opens in Personal now.
+            runBlocking { profiles.activate(work.id) }
+            await("work active") { browser.active.value?.profile?.id == work.id }
+            show(browser, active(browser).selected.id)
+            onMain { browser.openIncomingLink(server.url("/work/board")) }
+            await("opened in Personal") {
+                browser.active.value?.let { it.profile.id == personal.id && it.selected.url == server.url("/work/board") } == true
+            }
         }
     }
 

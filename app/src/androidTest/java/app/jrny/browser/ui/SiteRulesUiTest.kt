@@ -188,6 +188,14 @@ class SiteRulesUiTest {
         compose.onNodeWithTag("rule-site-field").performTextReplacement("www.example.org")
         explanation().assertTextEquals("Replaces your rule that opens example.org in Work.")
         compose.onNodeWithTag("save-site-rule").assertIsEnabled()
+
+        // A pasted address that is too long is refused whole. Cut short, its rule would cover
+        // more than the address names.
+        val long = "https://example.com/" + "a".repeat(190) + "/private"
+        compose.onNodeWithTag("rule-site-field").performTextReplacement(long)
+        compose.onNodeWithTag("rule-site-field").assertTextContains(long)
+        explanation().assertTextEquals("That is too long for a rule. A site and its path can take up to 200 characters.")
+        compose.onNodeWithTag("save-site-rule").assertIsNotEnabled()
     }
 
     @Test

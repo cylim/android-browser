@@ -55,10 +55,11 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
   - `example.com/work` covers that path and everything under it (`/work/today`, not `/workshop`).
   - `*` stands for any run of characters: `*.example.com` covers only the sites under `example.com`.
 - Only the site and the path count. The scheme, port, query and fragment of a link are ignored, and so is the case of the site's name. The path's case counts.
+- A link is judged by what a browser would load: `\` reads as `/`, `.` and `..` steps in the path are taken first, and a site's name in its own script matches its ASCII spelling.
 - When several rules cover a link, the one that names more of the site wins, then the one that names more of the path, then the older rule. A pattern has one rule, so it never names two Profiles.
 - Site Rules apply only to Incoming Links. Links followed inside a page, and addresses typed in the address field, stay in their Tab.
 - Site Rules belong to the app, not to one Profile. They are listed, added, changed and deleted under Settings → Site Rules, where "Check a link" says which Profile a given link would open in.
-- After an Incoming Link is Moved to another Profile, the page offers a rule for that link's site with one tap ("Always").
+- After an Incoming Link is Moved to another Profile, the page offers a rule with one tap ("Always"): for that link's site, or, when a rule sent the link elsewhere, a change of that rule.
 - Deleting a Profile deletes the rules that name it. Their links open in the Active Profile again.
 
 ## Layout

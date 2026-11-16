@@ -63,8 +63,9 @@ sealed interface LinkOffer {
     data class Opened(override val tab: TabId, val rule: SiteRule? = null) : LinkOffer
 
     /**
-     * The person just moved the link to [profile]. The window offers a Site Rule, so links to
-     * [pattern] open there from now on.
+     * The person just moved the link to [profile]. The window offers a Site Rule, so links that
+     * [pattern] covers open there from now on: the pattern of the rule that sent this link
+     * elsewhere, or without one the link's site.
      */
     data class Always(override val tab: TabId, val pattern: SitePattern, val profile: Profile) : LinkOffer
 
@@ -386,10 +387,13 @@ class BrowserState(
             retire(tab.id)
             privateTabs.select(profile.id, null)
             history.record(profile.id, url)
-            // Moving a link by hand is when a rule for its site is wanted, unless one already
-            // sends it to that Profile.
-            val pattern = SitePattern.forSiteOf(url)
-            if (wasIncomingLink && pattern != null && siteRuleRepository.ruleFor(url)?.profileId != profile.id) {
+            // Moving a link by hand is when a rule for it is wanted, unless one already sends it
+            // to that Profile. The rule that decides for this link now is the one to change:
+            // a new rule for the whole site would lose to a narrower one that names another
+            // Profile. Without a rule, the link's site gets one.
+            val deciding = siteRuleRepository.ruleFor(url)
+            val pattern = deciding?.pattern ?: SitePattern.forSiteOf(url)
+            if (wasIncomingLink && pattern != null && deciding?.profileId != profile.id) {
                 offer(LinkOffer.Always(moved, pattern, profile))
             }
         }

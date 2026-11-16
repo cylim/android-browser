@@ -66,6 +66,31 @@ class SitePatternTest {
     }
 
     @Test
+    fun `dot steps in a path are taken before it is judged`() {
+        assertLeavesOut("example.com/work", "https://example.com/work/../personal", "https://example.com/work/%2e%2e/personal", "https://example.com/work/..")
+        assertCovers(
+            "example.com/work",
+            "https://example.com/personal/../work",
+            "https://example.com/personal/%2E%2E/work/today",
+            "https://example.com/./work/",
+            "https://example.com/work/a/./b/../c",
+            "https://example.com/../../work",
+        )
+        assertEquals("example.com/b", pattern("example.com/a/../b").text)
+    }
+
+    @Test
+    fun `a pattern is measured as it is stored`() {
+        // A whole address may be long: its query and fragment are not part of the pattern.
+        assertEquals("example.com/a", pattern("https://example.com/a?" + "q".repeat(500)).text)
+        assertEquals(SitePattern.MAX_LENGTH, pattern("example.com/" + "a".repeat(SitePattern.MAX_LENGTH - 12)).text.length)
+        assertNull(SitePattern.parse("example.com/" + "a".repeat(SitePattern.MAX_LENGTH - 11)))
+        // 196 characters as typed, but longer once the name is spelled in ASCII.
+        assertNull(SitePattern.parse("münchen.de/" + "a".repeat(185)))
+        assertNull(SitePattern.parse("example.com/?" + "q".repeat(SitePattern.MAX_INPUT_LENGTH)))
+    }
+
+    @Test
     fun `only web addresses are covered`() {
         assertLeavesOut("example.com", "ftp://example.com/", "intent://example.com/#Intent;end", "example.com", "about:blank", "")
     }
@@ -126,7 +151,7 @@ class SitePatternTest {
         listOf(
             "", "   ", "*", "*.*", "/path", "https://", "ftp://example.com", "mailto:someone@example.com",
             "two words.com", "exa mple.com", "someone@example.com", "example.com:port", "example..com", ".example.com", "[::1]", "exam\"ple.com",
-            "a".repeat(SitePattern.MAX_LENGTH + 1),
+            "a".repeat(SitePattern.MAX_LENGTH + 1) + ".com",
         ).forEach { assertNull("\"$it\" should not be a pattern", SitePattern.parse(it)) }
     }
 

@@ -50,17 +50,21 @@ class SitePattern private constructor(val host: String, val path: String) {
     override fun toString(): String = text
 
     companion object {
+        /** A pattern, as it is stored, can be this long. */
         const val MAX_LENGTH = 200
+
+        /** What is typed or pasted is read up to this length: a whole address, query and all. */
+        const val MAX_INPUT_LENGTH = 2_000
 
         /**
          * Reads what a person typed or pasted as a pattern: a site (`example.com`), a site with a
          * path, or a whole address, of which the site and path are kept. A leading `www.` is
          * dropped, since the site without it covers it too. Null when there is no site in it, the
-         * address isn't a web address, or it is longer than [MAX_LENGTH].
+         * address isn't a web address, or the pattern would be longer than [MAX_LENGTH].
          */
         fun parse(input: String): SitePattern? {
             var rest = input.trim()
-            if (rest.isEmpty() || rest.length > MAX_LENGTH || rest.any { it.isWhitespace() }) return null
+            if (rest.isEmpty() || rest.length > MAX_INPUT_LENGTH || rest.any { it.isWhitespace() }) return null
             val scheme = WebAddress.schemeOf(rest)
             if (scheme != null) {
                 if (!WebAddress.isWebScheme(scheme)) return null
@@ -79,9 +83,11 @@ class SitePattern private constructor(val host: String, val path: String) {
             if (!host.all { it in 'a'..'z' || it in '0'..'9' || it == '-' || it == '.' || it == '*' }) return null
             // "*" alone, or "*.*", would send every link to one Profile.
             if (host.none { it.isLetterOrDigit() }) return null
-            val path = if ('/' in rest) "/" + rest.substringAfter('/') else ""
+            val path = if ('/' in rest) resolveDots("/" + rest.substringAfter('/')) else ""
             // "example.com/" is the whole site, as "example.com" is.
-            return SitePattern(host, collapseStars(path).takeIf { it != "/" && it != "/*" }.orEmpty())
+            val pattern = SitePattern(host, collapseStars(path).takeIf { it != "/" && it != "/*" }.orEmpty())
+            // Measured as it is stored: a name in its own script grows when spelled in ASCII.
+            return pattern.takeIf { it.text.length <= MAX_LENGTH }
         }
 
         /**
@@ -118,10 +124,35 @@ class SitePattern private constructor(val host: String, val path: String) {
         private fun asABrowserReadsIt(url: String): String =
             url.filterNot { it == '\t' || it == '\n' || it == '\r' }.replace('\\', '/')
 
-        /** The path of a web address, `/` when it has none, without query or fragment. */
+        /**
+         * The path of a web address as the page is loaded from it: `/` when it has none, without
+         * query or fragment, and with its `.` and `..` steps taken.
+         */
         private fun pathOf(url: String): String {
             val afterAuthority = url.substringAfter("://").substringBefore('?').substringBefore('#')
-            return if ('/' in afterAuthority) "/" + afterAuthority.substringAfter('/') else "/"
+            return if ('/' in afterAuthority) resolveDots("/" + afterAuthority.substringAfter('/')) else "/"
+        }
+
+        /**
+         * Takes the `.` and `..` steps of [path], also when a dot is spelled `%2e`, as a browser
+         * does before it loads the page: `/work/../home` is `/home`, and a rule for `/work`
+         * doesn't cover it.
+         */
+        private fun resolveDots(path: String): String {
+            val steps = path.removePrefix("/").split('/')
+            val kept = ArrayList<String>()
+            steps.forEachIndexed { index, step ->
+                val last = index == steps.lastIndex
+                when (step.replace("%2e", ".", ignoreCase = true)) {
+                    "." -> if (last) kept += ""
+                    ".." -> {
+                        kept.removeLastOrNull()
+                        if (last) kept += ""
+                    }
+                    else -> kept += step
+                }
+            }
+            return "/" + kept.joinToString("/")
         }
 
         /**
