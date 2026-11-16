@@ -14,7 +14,8 @@ import java.net.URLEncoder
  *   because it isn't a web address and could still hide a password.
  *
  * Only `http` and `https` addresses are ever produced. Text with another scheme, such as
- * `javascript:` or `file:`, is searched for instead of being loaded.
+ * `javascript:` or `file:`, is searched for instead of being loaded, unless it carries
+ * credentials (`ftp://user:secret@host`): then nothing happens.
  */
 object AddressInput {
 
@@ -34,6 +35,9 @@ object AddressInput {
         // Checked before anything that could search: text shaped like credentials may hold a
         // password, even with spaces in it ("user:two words@example.com").
         if (scheme == null && WebAddress.hasCredentials(text)) return credentialAddress(text)
+        // Another scheme with credentials ("ftp://user:secret@example.com") isn't loaded, and its
+        // password must not reach the search engine either: nothing happens.
+        if (scheme != null && WebAddress.hasCredentials(text.substring(scheme.length + 3))) return null
         if (scheme == null && text.none(Char::isWhitespace)) {
             webAddressWithoutScheme(text)?.let { return it }
         }

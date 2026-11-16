@@ -78,6 +78,15 @@ class AddressInputTest {
     }
 
     @Test
+    fun `other schemes with credentials load nothing and are never searched for`() {
+        assertNull(address("ftp://user:secret@example.com"))
+        assertNull(address("FTP://user:secret@example.com/file"))
+        assertNull(address("intent://user:pw@example.com#Intent;end"))
+        // Without credentials they are still searched for.
+        assertEquals(search("ftp%3A%2F%2Fexample.com"), address("ftp://example.com"))
+    }
+
+    @Test
     fun `credentials with a space before the path load nothing and are never searched for`() {
         assertNull(address("user:two words@example.com"))
         assertNull(address("user:two words@example.com/path"))
