@@ -5,6 +5,7 @@
 
     <!-- Session cookies must never leave the device (SPEC, "Data protection"). -->
     <application
+        android:name=".JrnyApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"

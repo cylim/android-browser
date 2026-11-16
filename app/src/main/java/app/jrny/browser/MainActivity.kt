@@ -17,18 +17,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.webkit.WebViewFeature
-import app.jrny.browser.profile.FirstProfile
-import app.jrny.browser.profile.WebProfile
-import app.jrny.browser.tab.Tab
+import androidx.lifecycle.lifecycleScope
+import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.ui.BrowserScreen
 import app.jrny.browser.ui.SystemBarsFollowTheme
 import app.jrny.browser.ui.theme.JrnyTheme
 
 class MainActivity : ComponentActivity() {
 
-    /** The one Tab until Milestone 3. Visible to tests, which drive and inspect it. */
+    /** The Profiles and their Tabs. Visible to tests, which drive and inspect it. */
     @VisibleForTesting
-    internal var tab: Tab? = null
+    internal var browser: BrowserState? = null
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,34 +43,37 @@ class MainActivity : ComponentActivity() {
         }
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
-        val tab = Tab(this, WebProfile.of(FirstProfile.id))
-        this.tab = tab
-        // Only the address comes back, never page content (SPEC, "Tabs").
-        savedInstanceState?.getString(KEY_ADDRESS)?.let(tab::load)
+        // Only addresses come back, never page content (SPEC, "Tabs").
+        val restored = savedInstanceState?.getBundle(KEY_ADDRESSES)?.let { bundle ->
+            bundle.keySet().associate { ProfileId(it) to bundle.getString(it).orEmpty() }
+        }.orEmpty()
+        val browser = BrowserState(this, (application as JrnyApplication).profiles, lifecycleScope, restored)
+        this.browser = browser
         setContent {
             SystemBarsFollowTheme()
-            JrnyTheme { BrowserScreen(tab) }
+            JrnyTheme { BrowserScreen(browser) }
         }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        tab?.url?.let { outState.putString(KEY_ADDRESS, it) }
+        val addresses = browser?.addresses() ?: return
+        outState.putBundle(KEY_ADDRESSES, Bundle().apply { addresses.forEach { (id, url) -> putString(id.value, url) } })
     }
 
     override fun onStop() {
         super.onStop()
-        tab?.profile?.flush()
+        browser?.flush()
     }
 
     override fun onDestroy() {
-        tab?.destroy()
-        tab = null
+        browser?.destroy()
+        browser = null
         super.onDestroy()
     }
 
     private companion object {
-        const val KEY_ADDRESS = "address"
+        const val KEY_ADDRESSES = "addresses"
     }
 }
 

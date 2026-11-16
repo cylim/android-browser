@@ -75,6 +75,7 @@ class BrowserLayoutUiTest {
     val compose = createComposeRule()
 
     private lateinit var tab: Tab
+    private val profiles = TestProfiles.ui()
     private var windowSize by mutableStateOf(TABLET_LANDSCAPE)
 
     @Before
@@ -94,7 +95,7 @@ class BrowserLayoutUiTest {
         windowSize = size
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(windowSize)) {
-                JrnyTheme { BrowserScreen(tab) }
+                JrnyTheme { BrowserWindow(tab, profiles) }
             }
         }
     }

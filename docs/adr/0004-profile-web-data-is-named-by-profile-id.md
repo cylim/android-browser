@@ -13,5 +13,5 @@ Each Profile keeps its web data in its own androidx.webkit profile, named `jrny-
 
 ## Consequences
 
-- The first Profile has the ID `1` (`FirstProfile`), and its store is `jrny-profile-1`. Milestone 2 must keep that ID when Profiles move to the database, or existing sign-ins are lost.
+- Profiles live in the Room table `profiles`, whose id is AUTOINCREMENT, so a deleted Profile's ID is never given to a new one. The first Profile, created on first launch, has the ID `1` and the store `jrny-profile-1`, as in Milestone 1, so the sign-ins made before Profiles moved to the database are kept.
 - Deleting a Profile deletes its store by this name, at the next cold start (ADR 0001).

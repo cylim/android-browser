@@ -1,5 +1,7 @@
 package app.jrny.browser.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,33 +20,45 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
-import app.jrny.browser.profile.FirstProfile
+import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
 
 // The Sidebar layout's spacing. Every gap is one of these, so the edges line up.
 
-/** Between the screen edge and the panels, and between the Sidebar and the page. */
+/** Around the Sidebar: between it and the screen's edges, and between it and the page. */
 private val GUTTER = 8.dp
 
 /** Width of the expanded Sidebar's content. */
@@ -66,51 +80,54 @@ private val ICON_SLOT_INSET = 4.dp
 /** Height of the address field and of a Tab row. */
 private val ROW_HEIGHT = 56.dp
 
-/** Corner radius shared by the page, the address field and Tab rows. */
-private val CORNER = RoundedCornerShape(12.dp)
+/** Corner radius shared by the address field, Tab rows, menus and the page's edge next to the Sidebar. */
+private val CORNER_RADIUS = 12.dp
+private val CORNER = RoundedCornerShape(CORNER_RADIUS)
+
+/** The page runs to the screen's edges; only its corners next to the Sidebar are rounded. */
+private val PAGE_SHAPE = RoundedCornerShape(topStart = CORNER_RADIUS, bottomStart = CORNER_RADIUS)
 
 /**
  * The wide-window layout: an Arc-style Sidebar with navigation, the address field, the Active
  * Profile's Tabs and the Profile switcher at the bottom, next to the page. [collapsed] shrinks
  * the Sidebar to the Rail so the page gets almost the full width.
  *
- * The layout runs edge to edge. The status bar is hidden (see [HideStatusBar]), and the gesture
- * handle draws over the page, so neither reserves a strip. Only 3-button navigation, display
- * cutouts, a status bar that stays visible under a top cutout, and the keyboard take space.
+ * The page runs to the screen's top, end and bottom edges; only the Sidebar keeps a gutter. The
+ * status bar is hidden (see [HideStatusBar]), and the gesture handle draws over the page, so
+ * neither reserves a strip. Only 3-button navigation, display cutouts, a freeform window's title
+ * bar, a status bar that stays visible under a top cutout, and the keyboard take space.
  */
 @Composable
-fun SidebarLayout(tab: Tab, addressField: AddressFieldSlot, collapsed: Boolean, onCollapsedChange: (Boolean) -> Unit) {
-    // A Surface, not just a background, so text and icons get the matching content color in dark mode.
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize()) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(GUTTER),
-            modifier = Modifier
-                .fillMaxSize()
-                // Gesture navigation has no tappable element at the bottom or sides, so this is
-                // zero there, and 3-button navigation keeps its space. The top is left out: the
-                // hidden status bar still counts as a tappable element.
-                .windowInsetsPadding(
-                    WindowInsets.tappableElement.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
-                )
-                // A freeform window's title bar, which statusBars doesn't include.
-                .windowInsetsPadding(WindowInsets.captionBar)
-                // Zero while the status bar is hidden. Under a top cutout it stays visible.
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(GUTTER)
-                .testTag("sidebar-layout"),
-        ) {
-            if (collapsed) {
-                Rail(tab, onExpand = { onCollapsedChange(false) })
-            } else {
-                Sidebar(tab, addressField, onCollapse = { onCollapsedChange(true) })
+fun SidebarLayout(
+    tab: Tab,
+    profiles: ProfilesUi,
+    addressField: AddressFieldSlot,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
+) {
+    // A Surface, not just a background, so text and icons get the matching content color in dark
+    // mode. Tinted with the Active Profile's color, so it's clear which Profile is showing.
+    Surface(color = profileTint(profiles.active), modifier = Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize().testTag("sidebar-layout")) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .windowInsetsPadding(systemSpace(WindowInsetsSides.Start))
+                    .padding(GUTTER),
+            ) {
+                if (collapsed) {
+                    Rail(tab, profiles, onExpand = { onCollapsedChange(false) })
+                } else {
+                    Sidebar(tab, profiles, addressField, onCollapse = { onCollapsedChange(true) })
+                }
             }
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .windowInsetsPadding(systemSpace(WindowInsetsSides.End))
                     .imePadding()
-                    .clip(CORNER),
+                    .clip(PAGE_SHAPE),
             ) {
                 PageView(tab, Modifier.fillMaxSize())
                 LoadProgress(tab, Modifier.align(Alignment.TopCenter))
@@ -119,8 +136,23 @@ fun SidebarLayout(tab: Tab, addressField: AddressFieldSlot, collapsed: Boolean, 
     }
 }
 
+/**
+ * The space one side of the layout leaves for the system, at the top, bottom and [side]:
+ * - 3-button navigation (gesture navigation has no tappable element at the bottom or sides, so
+ *   this is zero there). Its top is left out: the hidden status bar still counts as tappable;
+ * - a freeform window's title bar, which statusBars doesn't include;
+ * - the status bar, zero while hidden (under a top cutout it stays visible);
+ * - a display cutout.
+ */
 @Composable
-private fun Sidebar(tab: Tab, addressField: AddressFieldSlot, onCollapse: () -> Unit) {
+private fun systemSpace(side: WindowInsetsSides): WindowInsets =
+    WindowInsets.tappableElement.only(WindowInsetsSides.Bottom + side)
+        .union(WindowInsets.captionBar.only(WindowInsetsSides.Top))
+        .union(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+        .union(WindowInsets.displayCutout.only(WindowInsetsSides.Top + side))
+
+@Composable
+private fun Sidebar(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSlot, onCollapse: () -> Unit) {
     Column(
         Modifier
             .width(SIDEBAR_WIDTH)
@@ -145,23 +177,30 @@ private fun Sidebar(tab: Tab, addressField: AddressFieldSlot, onCollapse: () -> 
         // TextField puts its text 16dp inside, which is CONTENT_INSET, and is 56dp tall (ROW_HEIGHT).
         addressField(Modifier.fillMaxWidth(), CORNER)
 
-        Text(
-            stringResource(R.string.tabs),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = CONTENT_INSET, top = GUTTER * 2, bottom = GUTTER),
-        )
-        // One Tab, always the selected one, until Milestone 3 adds more.
-        SelectedTabRow(tab)
-
-        Spacer(Modifier.weight(1f))
-        ProfileSwitcher()
+        // The Tab area: swiping across it switches to the next or previous Profile (SPEC, "Sidebar").
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .swipeBetweenProfiles(profiles)
+                .testTag("sidebar-tabs"),
+        ) {
+            Text(
+                stringResource(R.string.tabs),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = CONTENT_INSET, top = GUTTER * 2, bottom = GUTTER),
+            )
+            // One Tab, always the selected one, until Milestone 3 adds more.
+            SelectedTabRow(tab)
+        }
+        ProfileSwitcher(profiles)
     }
 }
 
 /** The collapsed Sidebar: the same icon column, top line and bottom line as the expanded one. */
 @Composable
-private fun Rail(tab: Tab, onExpand: () -> Unit) {
+private fun Rail(tab: Tab, profiles: ProfilesUi, onExpand: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -175,7 +214,13 @@ private fun Rail(tab: Tab, onExpand: () -> Unit) {
         ForwardButton(tab)
         ReloadOrStopButton(tab)
         Spacer(Modifier.weight(1f))
-        ProfileAvatar()
+        Box {
+            var menu by remember { mutableStateOf(false) }
+            ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile)) { menu = true }
+            // The avatar sits ICON_SLOT_INSET in from the gutter; the menu starts at the gutter,
+            // like the expanded Sidebar's, so the avatars in it share the icon column.
+            ProfileMenu(profiles, expanded = menu, onDismiss = { menu = false }, offset = DpOffset(-ICON_SLOT_INSET, 0.dp))
+        }
     }
 }
 
@@ -211,21 +256,67 @@ private fun SelectedTabRow(tab: Tab) {
     }
 }
 
-/** The Active Profile, at the bottom of the Sidebar. Switching Profiles arrives in Milestone 2. */
+/**
+ * The Active Profile at the bottom of the Sidebar. A tap opens the Profile menu: switch, create,
+ * edit. The row's avatar sits in the icon column, and its 48dp height keeps the bottom line.
+ */
 @Composable
-private fun ProfileSwitcher() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = ICON_SLOT_INSET)
-            .testTag("profile-switcher"),
-    ) {
-        ProfileAvatar()
-        Text(
-            stringResource(FirstProfile.nameRes),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(start = ICON_SLOT_INSET),
-        )
+private fun ProfileSwitcher(profiles: ProfilesUi) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(CORNER)
+                .clickable(onClickLabel = stringResource(R.string.switch_profile), role = Role.Button) { menu = true }
+                .padding(start = ICON_SLOT_INSET, end = ICON_SLOT_INSET)
+                .testTag("profile-switcher"),
+        ) {
+            ProfileAvatar(profiles.active)
+            Text(
+                profiles.active.name,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(start = ICON_SLOT_INSET),
+            )
+            // In a 48dp slot's place, so it mirrors the collapse arrow at the top: 12dp in.
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, modifier = Modifier.padding(horizontal = 12.dp))
+        }
+        ProfileMenu(profiles, expanded = menu, onDismiss = { menu = false })
     }
 }
+
+/** The Profile list as a menu, opening from the bottom of the Sidebar or Rail. */
+@Composable
+private fun ProfileMenu(profiles: ProfilesUi, expanded: Boolean, onDismiss: () -> Unit, offset: DpOffset = DpOffset.Zero) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = CORNER, offset = offset) {
+        ProfileList(profiles, onDone = onDismiss, modifier = Modifier.width(SIDEBAR_WIDTH))
+    }
+}
+
+/** A horizontal swipe of at least [SWIPE_DISTANCE] switches to the next (left) or previous (right) Profile. */
+private fun Modifier.swipeBetweenProfiles(profiles: ProfilesUi): Modifier = pointerInput(profiles.active.id, profiles.all) {
+    var dragged = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { dragged = 0f },
+        onHorizontalDrag = { _, amount -> dragged += amount },
+        onDragEnd = {
+            val step = when {
+                dragged <= -SWIPE_DISTANCE.toPx() -> 1
+                dragged >= SWIPE_DISTANCE.toPx() -> -1
+                else -> 0
+            }
+            if (step != 0) profiles.neighbour(step)?.let(profiles.switchTo)
+        },
+    )
+}
+
+/** How far a swipe across the Tab area has to travel to switch Profiles. */
+private val SWIPE_DISTANCE = 64.dp
+
+/** The surface color, tinted 10% toward the Profile's color. */
+@Composable
+fun profileTint(profile: Profile): Color =
+    lerp(MaterialTheme.colorScheme.surfaceContainer, profile.color.color, 0.10f)
