@@ -115,6 +115,14 @@ fun SettingsPanel(
                 }
             }
 
+            Section(R.string.tab_list)
+            Toggle(
+                title = R.string.compact_tabs,
+                explanation = stringResource(R.string.compact_tabs_explanation),
+                checked = settings.compactTabs,
+                tag = "setting-compact-tabs",
+            ) { on -> ui.update { it.copy(compactTabs = on) } }
+
             if (ui.pendingDeletions > 0) {
                 Section(R.string.profiles)
                 Note(pluralStringResource(R.plurals.profiles_pending_removal, ui.pendingDeletions, ui.pendingDeletions), "settings-pending-removal")

@@ -31,6 +31,8 @@ data class Settings(
     val suggestions: Boolean = true,
     val safeBrowsing: Boolean = true,
     val theme: ThemeChoice = ThemeChoice.System,
+    /** Whether a row of the Tab list takes one line, so that more Tabs fit. */
+    val compactTabs: Boolean = false,
 )
 
 /**
@@ -50,6 +52,7 @@ class SettingsRepository(private val preferences: SharedPreferences) {
             putBoolean(SUGGESTIONS, changed.suggestions)
             putBoolean(SAFE_BROWSING, changed.safeBrowsing)
             putString(THEME, changed.theme.name)
+            putBoolean(COMPACT_TABS, changed.compactTabs)
         }
     }
 
@@ -60,6 +63,7 @@ class SettingsRepository(private val preferences: SharedPreferences) {
             suggestions = preferences.getBoolean(SUGGESTIONS, defaults.suggestions),
             safeBrowsing = preferences.getBoolean(SAFE_BROWSING, defaults.safeBrowsing),
             theme = ThemeChoice.entries.firstOrNull { it.name == preferences.getString(THEME, null) } ?: defaults.theme,
+            compactTabs = preferences.getBoolean(COMPACT_TABS, defaults.compactTabs),
         )
     }
 
@@ -68,5 +72,6 @@ class SettingsRepository(private val preferences: SharedPreferences) {
         const val SUGGESTIONS = "suggestions"
         const val SAFE_BROWSING = "safe_browsing"
         const val THEME = "theme"
+        const val COMPACT_TABS = "compact_tabs"
     }
 }

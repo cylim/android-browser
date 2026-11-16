@@ -27,16 +27,24 @@ class ProfileRepository(private val dao: ProfileDao) {
     }
 
     /** Creates a Profile and makes it the Active Profile. */
-    suspend fun create(name: String, color: ProfileColor, icon: ProfileIcon): Profile {
+    suspend fun create(
+        name: String,
+        color: ProfileColor,
+        icon: ProfileIcon,
+        emoji: String? = null,
+        tint: ProfileTint = ProfileTint.Medium,
+    ): Profile {
         val clean = requireNotNull(ProfileName.clean(name)) { "Not a Profile name" }
-        val id = dao.insertActive(ProfileEntity(name = clean, color = color.name, icon = icon.name))
-        return Profile(ProfileId(id.toString()), clean, color, icon)
+        val shown = emoji?.let(ProfileEmoji::clean)
+        val id = dao.insertActive(ProfileEntity(name = clean, color = color.name, icon = stored(icon, shown), tint = tint.name))
+        // An emoji takes the icon's place for good: only one of the two is kept.
+        return Profile(ProfileId(id.toString()), clean, color, if (shown != null) ProfileIcon.Person else icon, shown, tint)
     }
 
-    /** Renames, recolors or changes the icon of [profile]. */
+    /** Renames [profile] or changes its look. */
     suspend fun update(profile: Profile) {
         val clean = requireNotNull(ProfileName.clean(profile.name)) { "Not a Profile name" }
-        dao.update(profile.id.toLong(), clean, profile.color.name, profile.icon.name)
+        dao.update(profile.id.toLong(), clean, profile.color.name, stored(profile.icon, profile.emoji?.let(ProfileEmoji::clean)), profile.tint.name)
     }
 
     suspend fun activate(id: ProfileId) = dao.activate(id.toLong())
@@ -58,7 +66,12 @@ class ProfileRepository(private val dao: ProfileDao) {
         name = row.name,
         color = enumValueOrNull<ProfileColor>(row.color) ?: ProfileColor.Blue,
         icon = enumValueOrNull<ProfileIcon>(row.icon) ?: ProfileIcon.Person,
+        emoji = row.icon.takeIf { it.startsWith(EMOJI) }?.removePrefix(EMOJI)?.let(ProfileEmoji::clean),
+        tint = enumValueOrNull<ProfileTint>(row.tint) ?: ProfileTint.Medium,
     )
+
+    /** The icon column holds an icon's name, or an emoji behind [EMOJI]. */
+    private fun stored(icon: ProfileIcon, emoji: String?): String = if (emoji != null) EMOJI + emoji else icon.name
 
     private fun ProfileId.toLong(): Long = value.toLong()
 
@@ -68,5 +81,7 @@ class ProfileRepository(private val dao: ProfileDao) {
     companion object {
         /** The first Profile's id, kept from Milestone 1 (ADR 0004). */
         const val FIRST_ID = 1L
+
+        private const val EMOJI = "emoji:"
     }
 }

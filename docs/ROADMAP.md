@@ -48,7 +48,7 @@ Added to v1 after Milestone 5:
 
 - Site Rules: send Incoming Links for matching addresses to a specific Profile.
 - Pinned Tabs and folders in the Sidebar, shared with each Profile's bookmarks.
-- Styling: Sidebar density, a theme per Profile, and emoji for Profiles.
+- Styling: compact rows for the Tab list, a color and color strength per Profile, and emoji for Profiles.
 
 ## Milestone 6: First public release
 

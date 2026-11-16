@@ -189,7 +189,7 @@ fun PinnedRow(
                 }
                 .testTag("pinned-row-${bookmark.id}"),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = PINNED_ROW_HEIGHT)) {
+            ListRow(height = if (LocalCompactTabs.current) COMPACT_ROW_HEIGHT else PINNED_ROW_HEIGHT) {
                 SiteIcon(bookmark.url, Modifier.padding(start = LIST_TEXT_INSET + indent), dimmed = openTab == null)
                 Text(
                     label,
@@ -200,7 +200,7 @@ fun PinnedRow(
                     modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP, end = if (openTab == null) LIST_TEXT_INSET else 0.dp),
                 )
                 if (openTab != null) {
-                    IconButton(onClick = onClose, modifier = Modifier.padding(end = LIST_ICON_INSET).testTag("close-pinned")) {
+                    IconButton(onClick = onClose, modifier = Modifier.padding(end = closeButtonInset()).testTag("close-pinned")) {
                         Icon(Icons.Filled.Close, stringResource(R.string.close_tab_named, label))
                     }
                 }
@@ -251,7 +251,7 @@ fun FolderRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = PINNED_ROW_HEIGHT)
+                .heightIn(min = if (LocalCompactTabs.current) COMPACT_ROW_HEIGHT else PINNED_ROW_HEIGHT)
                 .clip(shape)
                 .combinedClickable(
                     role = Role.Button,

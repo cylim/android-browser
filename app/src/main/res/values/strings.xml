@@ -57,6 +57,14 @@
     <string name="profile_name">Name</string>
     <string name="profile_color">Color</string>
     <string name="profile_color_option">Color: %1$s</string>
+    <string name="profile_tint">Color strength</string>
+    <string name="profile_tint_soft">Soft</string>
+    <string name="profile_tint_medium">Medium</string>
+    <string name="profile_tint_strong">Strong</string>
+    <string name="profile_emoji">Emoji</string>
+    <string name="profile_emoji_option">Emoji: %1$s</string>
+    <string name="profile_own_emoji">Or type any emoji</string>
+    <string name="profile_own_emoji_not_one">That isn\'t an emoji. Pick one from your keyboard\'s emoji page.</string>
     <string name="profile_icon">Icon</string>
     <string name="profile_icon_option">Icon: %1$s</string>
     <string name="create">Create</string>
@@ -114,7 +122,10 @@
     <string name="rule_covers_path">Covers %1$s and everything under it.</string>
     <string name="rule_covers_star">Covers every address that fits %1$s, where * stands for anything.</string>
     <string name="rule_not_a_site">That isn\'t a site. Try something like example.com.</string>
-    <string name="rule_too_long">That is too long for a rule. A site and its path can take up to %1$d characters.</string>
+    <plurals name="rule_too_long">
+        <item quantity="one">That is too long for a rule. A site and its path can take up to %1$d character.</item>
+        <item quantity="other">That is too long for a rule. A site and its path can take up to %1$d characters.</item>
+    </plurals>
     <string name="rule_replaces">Replaces your rule that opens %1$s in %2$s.</string>
     <string name="rule_open_in">Open in</string>
     <string name="rule_use_page_site">Use %1$s</string>
@@ -143,6 +154,9 @@
     <string name="theme_system">Same as the device</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="tab_list">Tab list</string>
+    <string name="compact_tabs">Compact rows</string>
+    <string name="compact_tabs_explanation">Each Tab takes one line, without its site underneath, so more Tabs fit. A Profile\'s color, emoji and color strength are set where you edit the Profile.</string>
     <string name="profiles">Profiles</string>
     <string name="version">Version %1$s</string>
     <string name="search_for">Search for %1$s</string>

@@ -6,8 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,7 +53,10 @@ import androidx.compose.ui.window.DialogProperties
 import app.jrny.browser.R
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileColor
+import app.jrny.browser.profile.ProfileEmoji
 import app.jrny.browser.profile.ProfileIcon
+import app.jrny.browser.profile.ProfileLook
+import app.jrny.browser.profile.ProfileTint
 import app.jrny.browser.profile.ProfileName
 
 /** Everything the layouts need to show and change Profiles. */
@@ -146,23 +151,32 @@ fun ProfileList(profiles: ProfilesUi, onDone: () -> Unit, modifier: Modifier = M
 }
 
 /**
- * Creates a Profile ([profile] null) or changes one: name, color and icon. A Profile being
- * changed can also be deleted, unless it's the last one ([canDelete] false).
+ * Creates a Profile ([profile] null) or changes one: its name and its look. The look is the
+ * Profile's theme: its color, how strongly that colors the browser, and an icon or an emoji for
+ * its avatar. A Profile being changed can also be deleted, unless it's the last one ([canDelete]
+ * false).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileEditorDialog(
     profile: Profile?,
     canDelete: Boolean,
-    onSave: (name: String, color: ProfileColor, icon: ProfileIcon) -> Unit,
+    onSave: (name: String, look: ProfileLook) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(profile?.name.orEmpty()) }
-    var color by remember { mutableStateOf(profile?.color ?: ProfileColor.Teal) }
-    var icon by remember { mutableStateOf(profile?.icon ?: ProfileIcon.Person) }
+    var look by remember { mutableStateOf(profile?.look ?: ProfileLook()) }
+    // What is typed for an emoji of one's own. The avatar takes its first emoji.
+    var typedEmoji by remember { mutableStateOf(profile?.emoji?.takeIf { it !in ProfileEmoji.suggested }.orEmpty()) }
     var confirmDelete by remember { mutableStateOf(false) }
     val cleanName = ProfileName.clean(name)
+
+    @Composable
+    fun Heading(text: Int) = Text(
+        stringResource(text),
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -171,7 +185,7 @@ fun ProfileEditorDialog(
         // lower half of the dialog, Create and Cancel included. The choices scroll in what is left.
         properties = DialogProperties(decorFitsSystemWindows = false),
         modifier = Modifier.safeDrawingPadding().padding(vertical = 8.dp).testTag("profile-editor"),
-        icon = { ProfileBadge(color, icon, 56.dp) },
+        icon = { ProfileBadge(look.color, look.icon, 56.dp, look.emoji) },
         title = { Text(stringResource(if (profile == null) R.string.new_profile else R.string.edit_profile)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -182,36 +196,88 @@ fun ProfileEditorDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("profile-name-field"),
                 )
-                Text(
-                    stringResource(R.string.profile_color),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ProfileColor.entries.forEach { option ->
-                        Choice(
-                            selected = option == color,
-                            label = stringResource(R.string.profile_color_option, option.name),
-                            onClick = { color = option },
-                            modifier = Modifier.testTag("color-${option.name}"),
-                        ) { ProfileBadge(option, icon, 40.dp) }
+                Heading(R.string.profile_color)
+                ChoiceGrid(ProfileColor.entries) { option ->
+                    Choice(
+                        selected = option == look.color,
+                        label = stringResource(R.string.profile_color_option, option.name),
+                        onClick = { look = look.copy(color = option) },
+                        modifier = Modifier.testTag("color-${option.name}"),
+                    ) { ProfileBadge(option, look.icon, CHOICE_BADGE, look.emoji) }
+                }
+                Heading(R.string.profile_tint)
+                // How much of the color the Sidebar takes, shown as it will look.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
+                    ProfileTint.entries.forEach { option ->
+                        val label = stringResource(
+                            when (option) {
+                                ProfileTint.Soft -> R.string.profile_tint_soft
+                                ProfileTint.Medium -> R.string.profile_tint_medium
+                                ProfileTint.Strong -> R.string.profile_tint_strong
+                            },
+                        )
+                        val selected = option == look.tint
+                        Surface(
+                            color = profileTint(look.color, option),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(
+                                if (selected) 2.dp else 1.dp,
+                                if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .selectable(selected = selected, role = Role.RadioButton) { look = look.copy(tint = option) }
+                                .testTag("tint-${option.name}"),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                            }
+                        }
                     }
                 }
-                Text(
-                    stringResource(R.string.profile_icon),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ProfileIcon.entries.forEach { option ->
-                        Choice(
-                            selected = option == icon,
-                            label = stringResource(R.string.profile_icon_option, option.name),
-                            onClick = { icon = option },
-                            modifier = Modifier.testTag("icon-${option.name}"),
-                        ) { ProfileBadge(color, option, 40.dp) }
-                    }
+                Heading(R.string.profile_icon)
+                ChoiceGrid(ProfileIcon.entries) { option ->
+                    Choice(
+                        selected = look.emoji == null && option == look.icon,
+                        label = stringResource(R.string.profile_icon_option, option.name),
+                        onClick = {
+                            look = look.copy(icon = option, emoji = null)
+                            typedEmoji = ""
+                        },
+                        modifier = Modifier.testTag("icon-${option.name}"),
+                    ) { ProfileBadge(look.color, option, CHOICE_BADGE) }
                 }
+                Heading(R.string.profile_emoji)
+                ChoiceGrid(ProfileEmoji.suggested) { option ->
+                    Choice(
+                        selected = look.emoji == option,
+                        label = stringResource(R.string.profile_emoji_option, option),
+                        onClick = {
+                            look = look.copy(emoji = option)
+                            typedEmoji = ""
+                        },
+                        modifier = Modifier.testTag("emoji-$option"),
+                    ) { ProfileBadge(look.color, look.icon, CHOICE_BADGE, option) }
+                }
+                OutlinedTextField(
+                    value = typedEmoji,
+                    onValueChange = { typed ->
+                        typedEmoji = typed.take(ProfileEmoji.MAX_LENGTH)
+                        // Cleared, the avatar goes back to its icon. Plain text changes nothing.
+                        val emoji = ProfileEmoji.clean(typed)
+                        if (emoji != null || typed.isBlank()) look = look.copy(emoji = emoji)
+                    },
+                    label = { Text(stringResource(R.string.profile_own_emoji)) },
+                    supportingText = if (typedEmoji.isNotBlank() && ProfileEmoji.clean(typedEmoji) == null) {
+                        { Text(stringResource(R.string.profile_own_emoji_not_one)) }
+                    } else {
+                        null
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("profile-emoji-field"),
+                )
                 if (profile != null) {
                     Spacer(Modifier.height(16.dp))
                     TextButton(
@@ -234,7 +300,7 @@ fun ProfileEditorDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(cleanName!!, color, icon) },
+                onClick = { onSave(cleanName!!, look) },
                 enabled = cleanName != null,
                 modifier = Modifier.testTag("save-profile"),
             ) { Text(stringResource(if (profile == null) R.string.create else R.string.save)) }
@@ -257,7 +323,26 @@ fun ProfileEditorDialog(
     }
 }
 
-/** A 48dp choice with a ring when selected. */
+/**
+ * The choices in rows of [columns], each in a cell of the same width, so the colors, icons and
+ * emoji form one grid whatever the dialog's width. A last row with fewer keeps the cells' places.
+ */
+@Composable
+private fun <T> ChoiceGrid(options: List<T>, columns: Int = 6, choice: @Composable (T) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        options.chunked(columns).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { option -> Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { choice(option) } }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/** The badge inside a choice: 4dp inside the choice's ring. */
+private val CHOICE_BADGE = 36.dp
+
+/** A 44dp choice with a ring when selected. */
 @Composable
 private fun Choice(
     selected: Boolean,
@@ -269,7 +354,7 @@ private fun Choice(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(48.dp)
+            .size(44.dp)
             .clip(CircleShape)
             .then(if (selected) Modifier.border(BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface), CircleShape) else Modifier)
             .semantics {

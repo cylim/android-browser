@@ -15,13 +15,16 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -76,13 +79,16 @@ fun ProfileAvatar(
         )
         .testTag("profile-avatar")
     Box(slot, contentAlignment = Alignment.Center) {
-        ProfileBadge(profile.color, profile.icon, 32.dp)
+        ProfileBadge(profile.color, profile.icon, 32.dp, profile.emoji)
     }
 }
 
-/** A color circle with an icon on it, at [size]: avatars and the editor's preview. */
+/**
+ * A circle of the Profile's color with its icon on it, or its [emoji] in the icon's place, at
+ * [size]: avatars and the editor's preview.
+ */
 @Composable
-fun ProfileBadge(color: ProfileColor, icon: ProfileIcon, size: Dp) {
+fun ProfileBadge(color: ProfileColor, icon: ProfileIcon, size: Dp, emoji: String? = null) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
@@ -90,6 +96,12 @@ fun ProfileBadge(color: ProfileColor, icon: ProfileIcon, size: Dp) {
             .clip(CircleShape)
             .background(color.color),
     ) {
-        Icon(icon.vector, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.625f))
+        if (emoji != null) {
+            // Sized in dp, not sp: the emoji has to fit its circle at any font scale.
+            val fontSize = with(LocalDensity.current) { (size * 0.56f).toSp() }
+            Text(emoji, fontSize = fontSize, lineHeight = fontSize, maxLines = 1, modifier = Modifier.clearAndSetSemantics {})
+        } else {
+            Icon(icon.vector, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.625f))
+        }
     }
 }

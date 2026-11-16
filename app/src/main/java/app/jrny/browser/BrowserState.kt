@@ -17,8 +17,7 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.settings.Settings
 import app.jrny.browser.settings.Suggestion
-import app.jrny.browser.profile.ProfileColor
-import app.jrny.browser.profile.ProfileIcon
+import app.jrny.browser.profile.ProfileLook
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.rules.SiteRule
@@ -297,8 +296,8 @@ class BrowserState(
         scope.launch { profileRepository.activate(profile.id) }
     }
 
-    fun create(name: String, color: ProfileColor, icon: ProfileIcon) {
-        scope.launch { profileRepository.create(name, color, icon) }
+    fun create(name: String, look: ProfileLook) {
+        scope.launch { profileRepository.create(name, look.color, look.icon, look.emoji, look.tint) }
     }
 
     fun update(profile: Profile) {

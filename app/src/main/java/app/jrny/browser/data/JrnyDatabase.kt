@@ -33,6 +33,8 @@ data class ProfileEntity(
     val icon: String,
     val activation: Long = 0,
     val pendingDeletion: Boolean = false,
+    /** How strongly the Profile's color tints the browser: a `ProfileTint` name. */
+    @ColumnInfo(defaultValue = "Medium") val tint: String = "Medium",
 )
 
 @Dao
@@ -62,8 +64,8 @@ abstract class ProfileDao {
     @Insert
     protected abstract suspend fun insertRow(profile: ProfileEntity): Long
 
-    @Query("UPDATE profiles SET name = :name, color = :color, icon = :icon WHERE id = :id AND pendingDeletion = 0")
-    abstract suspend fun update(id: Long, name: String, color: String, icon: String)
+    @Query("UPDATE profiles SET name = :name, color = :color, icon = :icon, tint = :tint WHERE id = :id AND pendingDeletion = 0")
+    abstract suspend fun update(id: Long, name: String, color: String, icon: String, tint: String)
 
     @Query("UPDATE profiles SET activation = :activation WHERE id = :id AND pendingDeletion = 0")
     protected abstract suspend fun setActivation(id: Long, activation: Long)
@@ -672,7 +674,7 @@ abstract class SiteRuleDao {
         ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class,
         SiteRuleEntity::class, FolderEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -680,6 +682,7 @@ abstract class SiteRuleDao {
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7),
     ],
 )
 abstract class JrnyDatabase : RoomDatabase() {

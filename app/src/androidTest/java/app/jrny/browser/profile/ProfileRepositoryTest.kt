@@ -61,6 +61,26 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun aProfileKeepsItsEmojiAndColorStrength() = runBlocking {
+        repository.ensureFirstProfile("Personal")
+        // The first Profile, and every Profile from before, has an icon and the middle strength.
+        assertEquals(null to ProfileTint.Medium, active().emoji to active().tint)
+
+        val travel = repository.create("Travel", ProfileColor.Cyan, ProfileIcon.Star, emoji = " ✈️ and more", tint = ProfileTint.Strong)
+        assertEquals("✈️", travel.emoji)
+        assertEquals(travel, active())
+        // The emoji took the icon's place: only one of the two is kept.
+        assertEquals(ProfileLook(ProfileColor.Cyan, ProfileIcon.Person, "✈️", ProfileTint.Strong), active().look)
+
+        // Plain text is not an emoji: the icon shows. Giving the emoji up brings the icon back.
+        repository.update(active().copy(emoji = "plane", tint = ProfileTint.Soft))
+        assertEquals(ProfileLook(ProfileColor.Cyan, ProfileIcon.Person, null, ProfileTint.Soft), active().look)
+        repository.update(active().copy(icon = ProfileIcon.Home, emoji = "🏠"))
+        repository.update(active().copy(icon = ProfileIcon.Home, emoji = null))
+        assertEquals(ProfileIcon.Home to null, active().icon to active().emoji)
+    }
+
+    @Test
     fun deletingTheActiveProfileHandsOverToTheOneActiveBeforeIt() = runBlocking {
         repository.ensureFirstProfile("Personal")
         val work = repository.create("Work", ProfileColor.Teal, ProfileIcon.Build)

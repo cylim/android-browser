@@ -35,6 +35,7 @@ import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Folder
 import app.jrny.browser.library.PinnedItem
 import app.jrny.browser.profile.ProfileId
+import app.jrny.browser.settings.Settings
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
@@ -76,6 +77,7 @@ class PinnedUiTest {
     private val news = TestTabs.tab(11, "News of the day", "https://news.example.com/today", selected = true)
     private val empty = TestTabs.tab(13)
 
+    private var compact by mutableStateOf(false)
     private val selected = mutableListOf<TabId>()
     private val closed = mutableListOf<TabId>()
     private val opened = mutableListOf<Bookmark>()
@@ -133,6 +135,7 @@ class PinnedUiTest {
                         ),
                     ),
                     TestProfiles.ui(),
+                    settings = SettingsUi(Settings(compactTabs = compact)),
                 )
             }
         }
@@ -404,6 +407,36 @@ class PinnedUiTest {
         assertEquals(48f, height("pinned-row-1"), pixel)
         assertEquals(48f, height("folder-row-5"), pixel)
         assertEquals(56f, height("tab-row-11"), pixel)
+    }
+
+    @Test
+    fun withCompactRowsEveryRowTakesOneLine() {
+        compact = true
+        show(TABLET_LANDSCAPE)
+        fun height(tag: String) = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot().let { (it.bottom - it.top).value }
+        // A tablet-sized window forced onto a phone's screen has pixels wider than 1dp.
+        val pixel = 1.5f
+        assertEquals(40f, height("pinned-row-1"), pixel)
+        assertEquals(40f, height("folder-row-5"), pixel)
+        assertEquals(40f, height("tab-row-11"), pixel)
+        // A Tab says its title, and its site only with roomy rows.
+        compose.onNodeWithText("News of the day").assertExists()
+        compose.onNodeWithText("news.example.com").assertDoesNotExist()
+        // The close buttons are still there, and still in one column.
+        val closePinned = closeButtonOf(docs).getUnclippedBoundsInRoot()
+        val closeTab = compose.onNode(hasTestTag("close-tab") and hasAnyAncestor(hasTestTag("tab-row-11")), useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(closeTab.right.value, closePinned.right.value, pixel)
+        // Lower buttons, but their icons stay under the new-Tab button's: same center.
+        val newTab = compose.onNodeWithTag("new-tab").getUnclippedBoundsInRoot()
+        assertEquals((newTab.left + newTab.right).value / 2, (closeTab.left + closeTab.right).value / 2, pixel)
+        closeButtonOf(docs).performClick()
+        assertEquals(listOf(TabId(10)), closed)
+
+        // Back to roomy rows, live.
+        compact = false
+        compose.waitForIdle()
+        assertEquals(56f, height("tab-row-11"), pixel)
+        compose.onNodeWithText("news.example.com").assertExists()
     }
 
     private companion object {

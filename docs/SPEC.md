@@ -12,7 +12,7 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 
 ## Profiles
 
-- A **Profile** has a name, a color and an icon. It owns its own web data (cookies, site storage, cache, site permissions, service workers), **Tabs**, history, bookmarks and downloads.
+- A **Profile** has a name and a look: a color, how strongly that color shows, and an icon or an emoji for its avatar. It owns its own web data (cookies, site storage, cache, site permissions, service workers), **Tabs**, history, bookmarks and downloads.
 - App settings (search engine, suggestions, Safe Browsing, theme) are shared by all Profiles.
 - On first launch the app creates one Profile, which becomes the **Active Profile**.
 - There is always exactly one **Active Profile**. Switching Profiles changes it.
@@ -40,6 +40,14 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - Pinned Tabs can be grouped in **Folders**, one level deep. A Folder can be collapsed, renamed and deleted; deleting it keeps its bookmarks, at the top level.
 - New bookmarks and Folders go to the end. A bookmark moved into or out of a Folder goes to that list's end.
 - The Bookmarks panel lists the same bookmarks, each Folder under its name. Choosing one there opens its Pinned Tab.
+
+### Styling
+
+- While a Profile is active, the browser wears its color: the Sidebar, the Bottom Bar and the Tab Overview are tinted with it, and the browser's accents (the chosen option, switches, buttons, links in dialogs) take it. Switching Profiles glides from one color to the other.
+- Each Profile sets its own color (one of 12) and its color strength: soft, medium or strong. Strength changes the tint of the surfaces, never the text on them.
+- A Profile's avatar shows one of 8 icons or any one emoji. Choosing an emoji replaces the icon, and choosing an icon gives the emoji up.
+- "Compact rows" (Settings, for all Profiles) makes every row of the Tab list one line and 40dp tall: a Tab shows its title without its site.
+- The app's own theme stays one setting for all Profiles: the device's, light or dark.
 
 ### Private Tabs
 
