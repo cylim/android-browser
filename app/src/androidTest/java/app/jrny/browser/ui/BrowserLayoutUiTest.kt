@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Typography
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -427,6 +430,28 @@ class BrowserLayoutUiTest {
             tab.popup == null
         }
         assertTrue(tab.webView.isAttachedToWindow)
+    }
+
+    @Test
+    fun theSidebarsListEndsAboveTheKeyboardAndTheAddressFieldKeepsItsPlace() {
+        // Only where a tablet-sized window is the real size, and so is the keyboard's place in it.
+        assumeTrue(fitsTheScreen(TABLET_LANDSCAPE))
+        loadAndWait(titled("one"), "one navigate")
+        show(TABLET_LANDSCAPE)
+        compose.onNodeWithTag("address").performClick()
+        compose.waitForIdle()
+        val window = (compose.onNodeWithTag("sidebar").fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        fun keyboard() = ViewCompat.getRootWindowInsets(window)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+        // Not every test device shows a keyboard. Where one shows, give it time to come up.
+        runCatching { compose.waitUntil(3_000) { keyboard() > 0 } }
+        assumeTrue("no on-screen keyboard on this device", keyboard() > 0)
+
+        val fieldTop = compose.onNodeWithTag("address").fetchSemanticsNode().boundsInWindow.top
+        fun listEndsAt() = compose.onNodeWithTag("tab-list").fetchSemanticsNode().boundsInWindow.bottom
+        runCatching { compose.waitUntil(5_000) { listEndsAt() <= window.height - keyboard() } }
+        assertTrue("the list ends at ${listEndsAt()}, the keyboard starts at ${window.height - keyboard()}", listEndsAt() <= window.height - keyboard())
+        // Only the list gave way. The field is where it was.
+        assertEquals(fieldTop, compose.onNodeWithTag("address").fetchSemanticsNode().boundsInWindow.top)
     }
 
     @Test

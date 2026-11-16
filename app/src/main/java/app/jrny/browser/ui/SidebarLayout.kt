@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.captionBar
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -190,17 +191,24 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowS
         slots.addressField(Modifier.fillMaxWidth(), CORNER)
 
         // The Tab area: swiping across it switches to the next or previous Profile (SPEC, "Sidebar").
+        //
+        // Its lists end above the keyboard (imePadding below), so every row can be scrolled into
+        // view while typing. Only the lists give way: the Sidebar itself keeps its place, so the
+        // address field stays visible however little room the keyboard leaves. The keyboard's
+        // height counts from the screen's edge, and the Profile switcher and the gutter already
+        // sit between that edge and this area, so that much of it is taken off first.
         Column(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .consumeWindowInsets(PaddingValues(bottom = AVATAR_SLOT + GUTTER))
                 .horizontalSwipe(profiles.active.id, profiles.all) { step -> profiles.neighbour(step)?.let(profiles.switchTo) }
                 .testTag("sidebar-tabs"),
         ) {
             val suggestions = slots.suggestions
             // While the person types, what the address field offers takes the Tab list's place.
             if (suggestions != null) {
-                suggestions(Modifier.weight(1f).padding(top = GUTTER))
+                suggestions(Modifier.weight(1f).padding(top = GUTTER).imePadding())
             } else {
             // The label's text starts on the content line; the new-Tab button sits in the icon
             // column at the end, under the collapse arrow.
@@ -218,7 +226,7 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowS
                     Icon(Icons.Filled.Add, stringResource(R.string.open_new_tab))
                 }
             }
-            TabList(tabs, shape = CORNER, selectedColor = MaterialTheme.colorScheme.surface, modifier = Modifier.weight(1f))
+            TabList(tabs, shape = CORNER, selectedColor = MaterialTheme.colorScheme.surface, modifier = Modifier.weight(1f).imePadding())
             }
         }
         ProfileSwitcher(profiles)
