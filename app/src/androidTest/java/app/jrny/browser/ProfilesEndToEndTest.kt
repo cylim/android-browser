@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -88,7 +89,7 @@ class ProfilesEndToEndTest {
             openProfileList()
             compose.onNodeWithTag("new-profile").performClick()
             compose.onNodeWithTag("profile-name-field").performTextReplacement(name)
-            compose.onNodeWithTag("color-Purple").performClick()
+            compose.onNodeWithTag("color-Purple").performScrollTo().performClick()
             compose.onNodeWithTag("save-profile").performClick()
             compose.waitUntil(10_000) { active().name == name }
             val created = active()
@@ -113,7 +114,7 @@ class ProfilesEndToEndTest {
             // Delete the new Profile: it disappears, and its data is erased at the next cold start.
             openProfileList()
             compose.onNodeWithContentDescription("Edit $name").performClick()
-            compose.onNodeWithTag("delete-profile").performClick()
+            compose.onNodeWithTag("delete-profile").performScrollTo().performClick()
             compose.onNodeWithTag("confirm-delete").performClick()
             compose.waitUntil(10_000) { browser().profiles.value.none { it.id == created.id } }
             assertEquals(first.id, active().id)

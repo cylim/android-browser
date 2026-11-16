@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -57,7 +58,7 @@ import app.jrny.browser.tab.Tab
 
 // The Sidebar layout's spacing. Every gap is one of these, so the edges line up.
 
-/** Between the screen edge and the panels, and between the Sidebar and the page. */
+/** Around the Sidebar: between it and the screen's edges, and between it and the page. */
 private val GUTTER = 8.dp
 
 /** Width of the expanded Sidebar's content. */
@@ -79,17 +80,22 @@ private val ICON_SLOT_INSET = 4.dp
 /** Height of the address field and of a Tab row. */
 private val ROW_HEIGHT = 56.dp
 
-/** Corner radius shared by the page, the address field and Tab rows. */
-private val CORNER = RoundedCornerShape(12.dp)
+/** Corner radius shared by the address field, Tab rows, menus and the page's edge next to the Sidebar. */
+private val CORNER_RADIUS = 12.dp
+private val CORNER = RoundedCornerShape(CORNER_RADIUS)
+
+/** The page runs to the screen's edges; only its corners next to the Sidebar are rounded. */
+private val PAGE_SHAPE = RoundedCornerShape(topStart = CORNER_RADIUS, bottomStart = CORNER_RADIUS)
 
 /**
  * The wide-window layout: an Arc-style Sidebar with navigation, the address field, the Active
  * Profile's Tabs and the Profile switcher at the bottom, next to the page. [collapsed] shrinks
  * the Sidebar to the Rail so the page gets almost the full width.
  *
- * The layout runs edge to edge. The status bar is hidden (see [HideStatusBar]), and the gesture
- * handle draws over the page, so neither reserves a strip. Only 3-button navigation, display
- * cutouts, a status bar that stays visible under a top cutout, and the keyboard take space.
+ * The page runs to the screen's top, end and bottom edges; only the Sidebar keeps a gutter. The
+ * status bar is hidden (see [HideStatusBar]), and the gesture handle draws over the page, so
+ * neither reserves a strip. Only 3-button navigation, display cutouts, a freeform window's title
+ * bar, a status bar that stays visible under a top cutout, and the keyboard take space.
  */
 @Composable
 fun SidebarLayout(
@@ -102,35 +108,26 @@ fun SidebarLayout(
     // A Surface, not just a background, so text and icons get the matching content color in dark
     // mode. Tinted with the Active Profile's color, so it's clear which Profile is showing.
     Surface(color = profileTint(profiles.active), modifier = Modifier.fillMaxSize()) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(GUTTER),
-            modifier = Modifier
-                .fillMaxSize()
-                // Gesture navigation has no tappable element at the bottom or sides, so this is
-                // zero there, and 3-button navigation keeps its space. The top is left out: the
-                // hidden status bar still counts as a tappable element.
-                .windowInsetsPadding(
-                    WindowInsets.tappableElement.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
-                )
-                // A freeform window's title bar, which statusBars doesn't include.
-                .windowInsetsPadding(WindowInsets.captionBar)
-                // Zero while the status bar is hidden. Under a top cutout it stays visible.
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(GUTTER)
-                .testTag("sidebar-layout"),
-        ) {
-            if (collapsed) {
-                Rail(tab, profiles, onExpand = { onCollapsedChange(false) })
-            } else {
-                Sidebar(tab, profiles, addressField, onCollapse = { onCollapsedChange(true) })
+        Row(Modifier.fillMaxSize().testTag("sidebar-layout")) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .windowInsetsPadding(systemSpace(WindowInsetsSides.Start))
+                    .padding(GUTTER),
+            ) {
+                if (collapsed) {
+                    Rail(tab, profiles, onExpand = { onCollapsedChange(false) })
+                } else {
+                    Sidebar(tab, profiles, addressField, onCollapse = { onCollapsedChange(true) })
+                }
             }
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .windowInsetsPadding(systemSpace(WindowInsetsSides.End))
                     .imePadding()
-                    .clip(CORNER),
+                    .clip(PAGE_SHAPE),
             ) {
                 PageView(tab, Modifier.fillMaxSize())
                 LoadProgress(tab, Modifier.align(Alignment.TopCenter))
@@ -138,6 +135,21 @@ fun SidebarLayout(
         }
     }
 }
+
+/**
+ * The space one side of the layout leaves for the system, at the top, bottom and [side]:
+ * - 3-button navigation (gesture navigation has no tappable element at the bottom or sides, so
+ *   this is zero there). Its top is left out: the hidden status bar still counts as tappable;
+ * - a freeform window's title bar, which statusBars doesn't include;
+ * - the status bar, zero while hidden (under a top cutout it stays visible);
+ * - a display cutout.
+ */
+@Composable
+private fun systemSpace(side: WindowInsetsSides): WindowInsets =
+    WindowInsets.tappableElement.only(WindowInsetsSides.Bottom + side)
+        .union(WindowInsets.captionBar.only(WindowInsetsSides.Top))
+        .union(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+        .union(WindowInsets.displayCutout.only(WindowInsetsSides.Top + side))
 
 @Composable
 private fun Sidebar(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSlot, onCollapse: () -> Unit) {

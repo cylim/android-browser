@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -137,8 +138,8 @@ class ProfilesUiTest {
         }
         compose.onNodeWithTag("save-profile").assertIsNotEnabled()
         compose.onNodeWithTag("profile-name-field").performTextReplacement("  School ")
-        compose.onNodeWithTag("color-Amber").performClick()
-        compose.onNodeWithTag("icon-Star").performClick()
+        compose.onNodeWithTag("color-Amber").performScrollTo().performClick()
+        compose.onNodeWithTag("icon-Star").performScrollTo().performClick()
         compose.onNodeWithTag("save-profile").assertIsEnabled().performClick()
         assertEquals(Triple("School", ProfileColor.Amber, ProfileIcon.Star), saved)
     }
@@ -152,11 +153,11 @@ class ProfilesUiTest {
                 ProfileEditorDialog(TestProfiles.work, canDelete = canDelete, onSave = { _, _, _ -> }, onDelete = { deleted++ }, onDismiss = {})
             }
         }
-        compose.onNodeWithTag("delete-profile").assertIsNotEnabled()
+        compose.onNodeWithTag("delete-profile").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("The last Profile can't be deleted.").assertExists()
 
         canDelete = true
-        compose.onNodeWithTag("delete-profile").assertIsEnabled().performClick()
+        compose.onNodeWithTag("delete-profile").performScrollTo().assertIsEnabled().performClick()
         compose.onNodeWithText("Delete Work?").assertExists()
         assertEquals(0, deleted)
         compose.onNodeWithTag("confirm-delete").performClick()
