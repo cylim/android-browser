@@ -79,6 +79,9 @@ abstract class ProfileDao {
     @Query("DELETE FROM bookmarks WHERE profileId = :id")
     protected abstract suspend fun deleteBookmarks(id: Long)
 
+    @Query("DELETE FROM downloads WHERE profileId = :id")
+    protected abstract suspend fun deleteDownloads(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -91,8 +94,9 @@ abstract class ProfileDao {
     open suspend fun activate(id: Long) = setActivation(id, maxActivation() + 1)
 
     /**
-     * Marks [id] for deletion unless it's the last live Profile, and removes its Tabs, history and
-     * bookmarks at once, so no address from it outlives it on disk. Returns whether it did.
+     * Marks [id] for deletion unless it's the last live Profile, and removes its Tabs, history,
+     * bookmarks and list of downloads at once, so no address from it outlives it on disk. The
+     * downloaded files are the person's own and stay. Returns whether it did.
      */
     @Transaction
     open suspend fun markPendingUnlessLast(id: Long): Boolean {
@@ -101,6 +105,7 @@ abstract class ProfileDao {
         deleteTabs(id)
         deleteHistory(id)
         deleteBookmarks(id)
+        deleteDownloads(id)
         return true
     }
 }
@@ -367,17 +372,63 @@ abstract class BookmarkDao {
     protected abstract suspend fun profileIsLive(profileId: Long): Boolean
 }
 
+/**
+ * One row per download a Profile started. The file itself is with Android's download service,
+ * which [downloadId] names; this row is the Profile's own list of what it downloaded.
+ */
+@Entity(
+    tableName = "downloads",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId", "startedAt")],
+)
+data class DownloadEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val downloadId: Long,
+    val url: String,
+    val fileName: String,
+    val mimeType: String,
+    val startedAt: Long,
+)
+
+@Dao
+abstract class DownloadDao {
+    /** A Profile's downloads, newest first. */
+    @Query("SELECT * FROM downloads WHERE profileId = :profileId ORDER BY startedAt DESC, id DESC")
+    abstract fun observe(profileId: Long): Flow<List<DownloadEntity>>
+
+    @Insert
+    protected abstract suspend fun insertRow(download: DownloadEntity): Long
+
+    @Query("DELETE FROM downloads WHERE id = :id")
+    abstract suspend fun delete(id: Long)
+
+    /** Lists the download in its Profile. Returns false, and lists nothing, when the Profile is gone. */
+    @Transaction
+    open suspend fun add(download: DownloadEntity): Boolean {
+        if (!profileIsLive(download.profileId)) return false
+        insertRow(download)
+        return true
+    }
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+}
+
 @Database(
-    entities = [ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class],
-    version = 3,
+    entities = [ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class],
+    version = 4,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 abstract class JrnyDatabase : RoomDatabase() {
     abstract fun profiles(): ProfileDao
     abstract fun tabs(): TabDao
     abstract fun history(): HistoryDao
     abstract fun bookmarks(): BookmarkDao
+    abstract fun downloads(): DownloadDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

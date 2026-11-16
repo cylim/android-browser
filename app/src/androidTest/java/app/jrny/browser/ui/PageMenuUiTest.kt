@@ -236,7 +236,7 @@ class PageMenuUiTest {
         compose.onNodeWithTag("incoming-link-prompt").assertExists()
         compose.onNodeWithText("Opened in Personal").assertExists()
 
-        compose.onNodeWithTag("incoming-link-move").performClick()
+        compose.onNodeWithTag("incoming-link-action").performClick()
         compose.onNodeWithTag("pick-profile-${TestProfiles.work.id.value}").performClick()
         assertEquals(listOf(TestProfiles.work), moved)
 

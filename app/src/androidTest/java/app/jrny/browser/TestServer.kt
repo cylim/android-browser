@@ -15,9 +15,13 @@ import kotlin.concurrent.thread
  * Special pages:
  * - `redirect:/other` answers with a 302 redirect to `/other`;
  * - `set-cookie:name=value` sets that cookie, and its title is "cookie set";
- * - `echo-cookies` has the Cookie header it received as its title, "cookies: …".
+ * - `echo-cookies` has the Cookie header it received as its title, "cookies: …";
+ * - `download:name:content` answers with `content` as a file to save under `name`.
  */
 class TestServer(private val pages: Map<String, String>) : AutoCloseable {
+
+    /** Every request so far: its path and the `Cookie` header it carried (empty when none). */
+    val requests: MutableList<Pair<String, String>> = java.util.concurrent.CopyOnWriteArrayList()
 
     /**
      * The device's own network address, not 127.0.0.1: Android lets cleartext to localhost
@@ -64,12 +68,15 @@ class TestServer(private val pages: Map<String, String>) : AutoCloseable {
                 if (header.isNullOrEmpty()) break
                 if (header.startsWith("Cookie:", ignoreCase = true)) cookies = header.substringAfter(':').trim()
             }
+            requests += path to cookies
             val page = pages[path]
             val redirect = page?.removePrefix("redirect:")?.takeIf { page.startsWith("redirect:") }
             val setCookie = page?.removePrefix("set-cookie:")?.takeIf { page.startsWith("set-cookie:") }
+            val download = page?.removePrefix("download:")?.takeIf { page.startsWith("download:") }
             val status = when {
                 redirect != null -> "302 Found\r\nLocation: $redirect"
                 setCookie != null -> "200 OK\r\nSet-Cookie: $setCookie; Path=/; Max-Age=600"
+                download != null -> "200 OK\r\nContent-Disposition: attachment; filename=\"${download.substringBefore(':')}\""
                 page != null -> "200 OK"
                 else -> "404 Not Found"
             }
@@ -77,11 +84,12 @@ class TestServer(private val pages: Map<String, String>) : AutoCloseable {
                 redirect != null -> ""
                 setCookie != null -> "<title>cookie set</title>"
                 page == "echo-cookies" -> "<title>cookies: $cookies</title>"
+                download != null -> download.substringAfter(':')
                 else -> page.orEmpty()
             }
             val bytes = body.toByteArray()
             client.getOutputStream().write(
-                ("HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\n" +
+                ("HTTP/1.1 $status\r\nContent-Type: ${if (download != null) "application/octet-stream" else "text/html; charset=utf-8"}\r\n" +
                     "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n").toByteArray() + bytes,
             )
         }

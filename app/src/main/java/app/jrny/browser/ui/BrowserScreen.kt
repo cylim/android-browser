@@ -66,6 +66,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
 
     val visits by browser.visits.collectAsState()
     val bookmarks by browser.bookmarks.collectAsState()
+    val downloads by browser.downloads.collectAsState()
     val library = LibraryUi(
         visits = visits,
         bookmarks = bookmarks,
@@ -73,6 +74,11 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         deleteBookmark = browser::deleteBookmark,
         deleteVisit = browser::deleteVisit,
         clearHistory = { browser.clearHistory(profile) },
+        downloads = downloads,
+        startDownload = { browser.startDownload(profile, it) },
+        downloadStatuses = browser::downloadStatuses,
+        openDownload = browser::openDownload,
+        removeDownload = browser::removeDownload,
     )
 
     val selected = current.selected.id
@@ -124,6 +130,8 @@ fun BrowserWindow(
     var pick by remember(tabs.selected.id) { mutableStateOf<ProfilePick?>(null) }
     // The history or bookmarks, shown in the page's place. Back closes it before anything else.
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
+    // The file whose download just started, named over the page with a way to the Downloads list.
+    var downloading by remember(tab) { mutableStateOf<String?>(null) }
     BackHandler(enabled = panel != null) { panel = null }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
     LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
@@ -164,8 +172,18 @@ fun BrowserWindow(
                     )
                 },
                 pagePrompt = {
-                    // With one Profile there's nowhere to move the page to, so nothing to offer.
-                    if (tabs.incomingLink && profiles.all.size > 1) {
+                    val started = downloading
+                    if (started != null) {
+                        DownloadStartedPrompt(
+                            started,
+                            onShow = {
+                                panel = Panel.Downloads
+                                downloading = null
+                            },
+                            onDismiss = { downloading = null },
+                        )
+                    } else if (tabs.incomingLink && profiles.all.size > 1) {
+                        // With one Profile there's nowhere to move the page to, so nothing to offer.
                         IncomingLinkPrompt(profiles.active.name, onMove = { pick = ProfilePick.Move }, onDismiss = tabs.dismissIncomingLink)
                     }
                 },
@@ -192,6 +210,19 @@ fun BrowserWindow(
                     BottomBarLayout(tab, tabs, profiles, slots, showForward = forwardInBar, editingAddress = draft.value != null)
             }
         }
+    }
+
+    // A page can only offer a file. It downloads once the person agrees.
+    tab.download?.let { request ->
+        DownloadDialog(
+            request,
+            onDownload = {
+                library.startDownload(request)
+                downloading = request.fileName
+                tab.dismissDownload()
+            },
+            onDismiss = tab::dismissDownload,
+        )
     }
 
     pick?.let { action ->

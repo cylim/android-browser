@@ -220,6 +220,74 @@ class TabTest {
         assertEquals(listOf(two), visits.toList())
     }
 
+    @Test
+    fun aFileIsOfferedAndThePageBeforeItStays() {
+        val pages = mapOf("/page" to "<title>page</title><a id=f href=/file>file</a>", "/file" to "download:../notes 2026.txt:hello")
+        TestServer(pages).use { server ->
+            val tab = newTab("test-download")
+            onMain { tab.load(server.url("/page")) }
+            awaitPage(tab, server.url("/page"), "page")
+
+            onMain { tab.webView.evaluateJavascript("document.getElementById('f').click()", null) }
+            await("file offered") { tab.download != null }
+            val offered = onMain { tab.download!! }
+            assertEquals(server.url("/file"), offered.url)
+            // The site's name for the file, without the folders it tried to add.
+            assertEquals("notes 2026.txt", offered.fileName)
+            assertEquals(5L, offered.size)
+            assertEquals(server.url("/page"), offered.referrer)
+            assertTrue(offered.supported)
+
+            // The Tab still shows the page, not a load that never ends.
+            await("page stays") { !tab.isLoading && tab.url == server.url("/page") && tab.title == "page" }
+            onMain { tab.dismissDownload() }
+            assertEquals(null, onMain { tab.download })
+
+            // Typing the file's address offers it too. The Tab goes back to the page it shows, and
+            // no page is named as the one that linked the file.
+            onMain { tab.load(server.url("/file")) }
+            await("file offered again") { tab.download != null }
+            assertEquals(null, onMain { tab.download!!.referrer })
+            await("page still stays") { !tab.isLoading && tab.url == server.url("/page") && tab.title == "page" }
+        }
+    }
+
+    @Test
+    fun aFileInANewTabLeavesTheTabEmpty() {
+        TestServer(mapOf("/file" to "download:notes.txt:hello")).use { server ->
+            val tab = newTab("test-download-new-tab")
+            onMain { tab.load(server.url("/file")) }
+            await("file offered") { tab.download != null }
+            await("no page") { !tab.isLoading && tab.url == null }
+        }
+    }
+
+    @Test
+    fun aNewAddressWithinTheSamePageIsAVisitWithThatPagesTitle() {
+        // As a site does when it swaps in its preferred address, or an app page moves on.
+        val pages = mapOf("/app" to "<title>App</title><button id=go onclick=\"history.pushState({}, '', '/app/next')\">go</button>")
+        TestServer(pages).use { server ->
+            val visits = java.util.Collections.synchronizedList(mutableListOf<String>())
+            val seen = java.util.Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+            val tab = onMain {
+                Tab(
+                    InstrumentationRegistry.getInstrumentation().targetContext,
+                    WebProfile.of(ProfileId("test-same-page")),
+                    onVisited = { visits += it },
+                    onPageSeen = { url, title -> seen += url to title },
+                ).also { tabs += it }
+            }
+            onMain { tab.load(server.url("/app")) }
+            awaitPage(tab, server.url("/app"), "App")
+
+            onMain { tab.webView.evaluateJavascript("document.getElementById('go').click()", null) }
+            await("moved on") { tab.url == server.url("/app/next") }
+            assertEquals("App", onMain { tab.title })
+            assertEquals(listOf(server.url("/app"), server.url("/app/next")), visits.toList())
+            assertTrue(seen.toList().toString(), seen.contains(server.url("/app/next") to "App"))
+        }
+    }
+
     private fun newTab(profileId: String): Tab = onMain {
         Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId(profileId)))
             .also { tabs += it }

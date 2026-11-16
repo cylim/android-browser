@@ -1,6 +1,7 @@
 package app.jrny.browser
 
 import app.jrny.browser.data.JrnyDatabase
+import app.jrny.browser.download.DownloadRepository
 import app.jrny.browser.library.BookmarkRepository
 import app.jrny.browser.library.HistoryRepository
 import app.jrny.browser.profile.ProfileRepository
@@ -12,4 +13,5 @@ class Repositories(database: JrnyDatabase) {
     val tabs = TabRepository(database.tabs())
     val history = HistoryRepository(database.history())
     val bookmarks = BookmarkRepository(database.bookmarks())
+    val downloads = DownloadRepository(database.downloads())
 }
