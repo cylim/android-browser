@@ -23,7 +23,7 @@ class SitePattern private constructor(val host: String, val path: String) {
     /** True when the pattern covers the web address [url]. Never true for anything but `http` and `https`. */
     fun matches(url: String): Boolean {
         val address = asABrowserReadsIt(url)
-        val linkHost = WebAddress.hostOf(address).lowercase().trimEnd('.')
+        val linkHost = asciiHost(WebAddress.hostOf(address).lowercase().trimEnd('.')) ?: return false
         if (linkHost.isEmpty()) return false
         val hostMatches = if ('*' in host) glob(host, linkHost) else linkHost == host || linkHost.endsWith(".$host")
         if (!hostMatches) return false
@@ -74,8 +74,7 @@ class SitePattern private constructor(val host: String, val path: String) {
             // A port doesn't count. Bracketed (IPv6) hosts aren't supported.
             if (!authority.substringAfter(':', "").all(Char::isDigit)) return null
             val typed = authority.substringBefore(':').lowercase().trimEnd('.').removePrefix("www.")
-            // Links name a site in ASCII ("xn--…"), so a name typed in its own script is stored that way.
-            val host = runCatching { IDN.toASCII(typed, IDN.ALLOW_UNASSIGNED) }.getOrNull() ?: return null
+            val host = asciiHost(typed) ?: return null
             if (host.isEmpty() || host.startsWith(".") || ".." in host) return null
             if (!host.all { it in 'a'..'z' || it in '0'..'9' || it == '-' || it == '.' || it == '*' }) return null
             // "*" alone, or "*.*", would send every link to one Profile.
@@ -101,6 +100,13 @@ class SitePattern private constructor(val host: String, val path: String) {
 
         /** The pattern for the site of the web address [url], or null if it has none. */
         fun forSiteOf(url: String?): SitePattern? = WebAddress.hostOf(url).takeIf { it.isNotEmpty() }?.let(::parse)
+
+        /**
+         * A site's name the way it is compared: in ASCII, where a name in its own script
+         * (`münchen.de`) is spelled `xn--mnchen-3ya.de`. A link can come either way, and so can
+         * what a person types. Null when it can't be a site's name.
+         */
+        private fun asciiHost(host: String): String? = runCatching { IDN.toASCII(host, IDN.ALLOW_UNASSIGNED) }.getOrNull()
 
         private fun collapseStars(text: String): String = text.replace(Regex("\\*+"), "*")
 

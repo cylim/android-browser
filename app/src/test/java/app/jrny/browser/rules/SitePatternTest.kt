@@ -115,6 +115,10 @@ class SitePatternTest {
         // A name in its own script is kept the way links spell it.
         assertEquals("xn--mnchen-3ya.de", pattern("münchen.de").text)
         assertTrue(pattern("münchen.de").matches("https://xn--mnchen-3ya.de/"))
+        // A link can spell the name either way, and so can the pattern.
+        assertCovers("münchen.de", "https://münchen.de/", "https://www.MÜNCHEN.de/rathaus")
+        assertCovers("xn--mnchen-3ya.de", "https://münchen.de/")
+        assertLeavesOut("münchen.de", "https://munchen.de/")
     }
 
     @Test
