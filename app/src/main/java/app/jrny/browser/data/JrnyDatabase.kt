@@ -279,29 +279,35 @@ abstract class HistoryDao {
     protected abstract suspend fun latest(profileId: Long): HistoryEntity?
 
     @Query("UPDATE history SET visitedAt = :visitedAt WHERE id = :id")
-    protected abstract suspend fun setVisitedAt(id: Long, visitedAt: Long)
+    abstract suspend fun setVisitedAt(id: Long, visitedAt: Long)
 
     /**
      * Records a visit and drops the Profile's oldest visits beyond [keep]. Visiting the address
-     * of the Profile's latest visit again only moves that visit's time. Returns the id of the new
-     * row, or null when there is none: a repeat, or a Profile that is gone.
+     * of the Profile's latest visit again only moves that visit's time. Returns what was written,
+     * so it can be taken back, or null for a Profile that is gone.
      */
     @Transaction
-    open suspend fun record(visit: HistoryEntity, keep: Int): Long? {
+    open suspend fun record(visit: HistoryEntity, keep: Int): RecordedVisit? {
         if (!profileIsLive(visit.profileId)) return null
         val latest = latest(visit.profileId)
         if (latest != null && latest.url == visit.url) {
             setVisitedAt(latest.id, visit.visitedAt)
-            return null
+            return RecordedVisit(latest.id, previousVisitedAt = latest.visitedAt)
         }
         val id = insertRow(visit)
         trim(visit.profileId, keep)
-        return id
+        return RecordedVisit(id, previousVisitedAt = null)
     }
 
     @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
     protected abstract suspend fun profileIsLive(profileId: Long): Boolean
 }
+
+/**
+ * What [HistoryDao.record] wrote: a new row, or, with [previousVisitedAt], only a new time on the
+ * row the Profile's latest visit already had.
+ */
+data class RecordedVisit(val id: Long, val previousVisitedAt: Long?)
 
 /** One row per bookmarked address, kept per Profile. An address is bookmarked at most once in a Profile. */
 @Entity(

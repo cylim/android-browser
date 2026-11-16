@@ -58,12 +58,12 @@ class LibraryRepositoryTest {
 
     @Test
     fun visitingTheLatestAddressAgainKeepsOneVisitWithTheNewTime() = runBlocking {
-        val first = history.record(personal, "https://example.com/")
+        val first = history.record(personal, "https://example.com/")!!
         history.setTitle(personal, "https://example.com/", "Example")
-        val again = history.record(personal, "https://example.com/")
+        val again = history.record(personal, "https://example.com/")!!
         val only = visited().single()
-        assertEquals(first, only.id)
-        assertEquals(null, again)
+        assertEquals(first.id, only.id)
+        assertEquals(first.id, again.id)
         assertEquals("Example", only.title)
         assertEquals(1_001L, only.visitedAt)
 
@@ -71,6 +71,22 @@ class LibraryRepositoryTest {
         history.record(personal, "https://example.org/")
         history.record(personal, "https://example.com/")
         assertEquals(3, visited().size)
+    }
+
+    @Test
+    fun aVisitThatWasOnlyARedirectsStopIsTakenBack() = runBlocking {
+        // A new row goes.
+        history.record(personal, "https://example.com/")
+        val hop = history.record(personal, "https://example.com/hop")!!
+        history.takeBack(hop)
+        assertEquals(listOf("https://example.com/"), visited().map { it.url })
+
+        // A repeat of the latest visit keeps its row and gets its earlier time back.
+        val earlier = visited().single().visitedAt
+        val repeat = history.record(personal, "https://example.com/")!!
+        assertEquals(earlier, repeat.previousVisitedAt)
+        history.takeBack(repeat)
+        assertEquals(earlier, visited().single().visitedAt)
     }
 
     @Test

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.jrny.browser.data.RecordedVisit
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Visit
 import app.jrny.browser.profile.Profile
@@ -123,14 +124,14 @@ class BrowserState(
         val page = MutableStateFlow(saved.url to saved.title)
         // The Tab's newest visit while it has no title yet. If the next visit arrives first, it
         // was only a redirect's stop on the way, and leaves the history again.
-        var untitled: Pair<Long, String>? = null
+        var untitled: Pair<RecordedVisit, String>? = null
         val tab = Tab(
             context,
             WebProfile.of(saved.profileId),
             onPageChanged = { page.value = it.url to it.title },
             onVisited = { url ->
                 scope.launch {
-                    untitled?.let { (id, _) -> history.delete(id) }
+                    untitled?.let { (recorded, _) -> history.takeBack(recorded) }
                     untitled = history.record(saved.profileId, url)?.let { it to url }
                 }
             },

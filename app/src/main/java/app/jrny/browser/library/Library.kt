@@ -5,6 +5,7 @@ import app.jrny.browser.data.BookmarkDao
 import app.jrny.browser.data.BookmarkEntity
 import app.jrny.browser.data.HistoryDao
 import app.jrny.browser.data.HistoryEntity
+import app.jrny.browser.data.RecordedVisit
 import app.jrny.browser.profile.ProfileId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -27,16 +28,22 @@ class HistoryRepository(private val dao: HistoryDao, private val now: () -> Long
 
     /**
      * Records that [profile] visited [url]. Addresses that aren't web pages are left out, and a
-     * repeat of the Profile's latest visit only moves its time. Returns the new visit's id, or
-     * null when no visit was added.
+     * repeat of the Profile's latest visit only moves its time. Returns what was written, for
+     * [takeBack], or null when nothing was.
      */
-    suspend fun record(profile: ProfileId, url: String): Long? {
+    suspend fun record(profile: ProfileId, url: String): RecordedVisit? {
         if (!WebAddress.isWebAddress(url)) return null
         return dao.record(HistoryEntity(profileId = profile.toLong(), url = url, visitedAt = now()), MAX_VISITS)
     }
 
-    /** Removes the visit with [id], for example a redirect's stop on the way to the real page. */
-    suspend fun delete(id: Long) = dao.delete(id)
+    /**
+     * Undoes [recorded], for a visit that turned out to be only a redirect's stop on the way to
+     * the real page: a new row goes, and a repeat gets its earlier time back.
+     */
+    suspend fun takeBack(recorded: RecordedVisit) {
+        val earlier = recorded.previousVisitedAt
+        if (earlier == null) dao.delete(recorded.id) else dao.setVisitedAt(recorded.id, earlier)
+    }
 
     /** Sets the title of [profile]'s latest visit of [url], once the page has one. */
     suspend fun setTitle(profile: ProfileId, url: String, title: String) {
