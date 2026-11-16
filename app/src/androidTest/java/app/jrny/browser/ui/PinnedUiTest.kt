@@ -3,10 +3,13 @@ package app.jrny.browser.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -22,8 +25,10 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
@@ -333,6 +338,77 @@ class PinnedUiTest {
         compose.onNodeWithTag("pinned-up").performClick()
         assertEquals(listOf(listOf(notes, board)), reorderedInFolder)
         assertEquals(2, reorderedTop.size)
+    }
+
+    /** Holds the row until it lifts, drags it [by] down (or up, when negative) in small steps, and lets go. */
+    private fun SemanticsNodeInteraction.holdAndDrag(by: Dp) = performTouchInput {
+        down(center)
+        advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+        repeat(10) { moveBy(Offset(0f, by.toPx() / 10)) }
+        up()
+    }
+
+    @Test
+    fun aHeldPinnedTabIsDraggedToAnotherPlace() {
+        show(TABLET_LANDSCAPE)
+        // Once its middle is past the middle of the row below, the two change places.
+        pin(docs).holdAndDrag(60.dp)
+        assertEquals(listOf(listOf(items[1], items[0], items[2], items[3])), reorderedTop)
+        // No menu: the hold was a drag.
+        compose.onNodeWithTag("pinned-unpin").assertDoesNotExist()
+        // The list shows the new order at once, before the saved one arrives.
+        assertTrue(top("pinned-row-2") < top("pinned-row-1"))
+
+        // Dragged, but not past its neighbor: nothing changes, and there is still no menu.
+        pin(docs).holdAndDrag(36.dp)
+        assertEquals(1, reorderedTop.size)
+        compose.onNodeWithTag("pinned-unpin").assertDoesNotExist()
+    }
+
+    @Test
+    fun aScreenReadersLongPressOpensTheMenuWithoutAFinger() {
+        show(TABLET_LANDSCAPE)
+        pin(mail).performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithTag("pinned-unpin").performClick()
+        assertEquals(listOf(mail), unpinned)
+
+        folder(work).performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithTag("folder-delete").performClick()
+        assertEquals(listOf(work), deletedFolders)
+    }
+
+    @Test
+    fun aPinnedTabDroppedOnAFolderGoesIntoIt() {
+        show(TABLET_LANDSCAPE)
+        // Mail sits right above the Work Folder: one row down puts it on the Folder's row.
+        pin(mail).holdAndDrag(48.dp)
+        assertEquals(listOf<Pair<Bookmark, Folder?>>(mail to work), moved)
+        assertEquals(emptyList<List<PinnedItem>>(), reorderedTop)
+    }
+
+    @Test
+    fun aPinnedTabDraggedOutOfItsFolderLeavesIt() {
+        show(TABLET_LANDSCAPE)
+        pin(board).holdAndDrag(70.dp)
+        assertEquals(listOf<Pair<Bookmark, Folder?>>(board to null), moved)
+        assertEquals(emptyList<List<Bookmark>>(), reorderedInFolder)
+    }
+
+    @Test
+    fun rowsOfAFolderAreDraggedWithinItAndAFolderAmongTheTopLevel() {
+        val notes = Bookmark(9, "https://notes.example.com/", "Notes", folderId = 5)
+        val both = work.copy(bookmarks = listOf(board, notes))
+        items = listOf(PinnedItem.Page(docs), PinnedItem.Page(mail), PinnedItem.Group(both), PinnedItem.Group(reading))
+        show(TABLET_LANDSCAPE)
+
+        pin(board).holdAndDrag(60.dp)
+        assertEquals("moved instead: $moved", listOf(listOf(notes, board)), reorderedInFolder)
+        assertEquals(emptyList<Pair<Bookmark, Folder?>>(), moved)
+
+        // The closed Folder at the end goes up past the open one: past that Folder's own row,
+        // which is above its two Pinned Tabs.
+        folder(reading).holdAndDrag((-180).dp)
+        assertEquals(listOf(PinnedItem.Page(docs), PinnedItem.Page(mail), PinnedItem.Group(reading)), reorderedTop.single().take(3))
     }
 
     @Test
