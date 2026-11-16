@@ -171,6 +171,18 @@ abstract class TabDao {
         if (count(profileId) == 0) open(profileId, null)
     }
 
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+
+    /**
+     * Opens [url] as a new Tab in [profileId], unless that Profile has been deleted: a deleted
+     * Profile's Tabs are gone, and a late one would keep its address on disk. Returns the Tab's
+     * id, or null when the Profile is gone.
+     */
+    @Transaction
+    open suspend fun openInLive(profileId: Long, url: String): Long? =
+        if (profileIsLive(profileId)) open(profileId, url) else null
+
     /**
      * Opens [url] as a new Tab in [profileId] and makes that Profile the Active Profile, in one
      * step, so the window never shows one without the other. Returns the Tab's id, or null when

@@ -153,6 +153,17 @@ class TabRepositoryTest {
     }
 
     @Test
+    fun aLinkIsNotOpenedInADeletedProfile() = runBlocking {
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        val opened = tabs.openUrl(work, "https://example.com/")!!
+        assertEquals(opened, selected(work))
+
+        profiles.delete(work)
+        assertNull(tabs.openUrl(work, "https://example.com/late"))
+        assertEquals(emptyList<SavedTab>(), tabsOf(work))
+    }
+
+    @Test
     fun deletingAProfileClosesItsTabs() = runBlocking {
         val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
         tabs.open(work, "https://example.org/secret")

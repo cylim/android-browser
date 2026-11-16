@@ -131,6 +131,28 @@ class PageMenuUiTest {
     }
 
     @Test
+    fun thePickerClosesWhenAnotherTabIsShown() {
+        loadPage()
+        var selected by mutableStateOf(TestTabs.one)
+        val other = TestTabs.tab(2, "other", "http://example.com/other", selected = true)
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(PHONE_PORTRAIT)) {
+                JrnyTheme {
+                    BrowserWindow(tab, TestTabs.ui(all = listOf(selected), moved = moved), TestProfiles.ui())
+                }
+            }
+        }
+        openMenu()
+        compose.onNodeWithTag("menu-move").performClick()
+        compose.onNodeWithTag("profile-picker").assertExists()
+
+        // An Incoming Link, say, selects another Tab while the picker is open.
+        selected = other
+        compose.onNodeWithTag("profile-picker").assertDoesNotExist()
+        assertEquals(emptyList<Profile>(), moved)
+    }
+
+    @Test
     fun aTabWithoutAnAddressOrWithoutAnotherProfileCantBeMoved() {
         // No page loaded: there's no address to carry.
         show(TABLET_LANDSCAPE)

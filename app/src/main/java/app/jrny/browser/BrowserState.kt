@@ -185,8 +185,16 @@ class BrowserState(
      */
     fun openIncomingLink(url: String) {
         scope.launch {
-            val profile = profileRepository.activeProfile.filterNotNull().first()
-            incomingLinkTab = tabRepository.open(profile.id, url)
+            // The Active Profile can be deleted between reading it and opening the Tab. Then
+            // nothing is opened there, and the Profile that is active now takes the link.
+            repeat(INCOMING_LINK_ATTEMPTS) {
+                val profile = profileRepository.activeProfile.filterNotNull().first()
+                val opened = tabRepository.openUrl(profile.id, url)
+                if (opened != null) {
+                    incomingLinkTab = opened
+                    return@launch
+                }
+            }
         }
     }
 
@@ -231,6 +239,8 @@ class BrowserState(
     }
 
     companion object {
+        private const val INCOMING_LINK_ATTEMPTS = 3
+
         /** At most this many Tabs are live at once, across all Profiles (SPEC, "Tabs"). */
         const val MAX_LIVE_TABS = 5
     }

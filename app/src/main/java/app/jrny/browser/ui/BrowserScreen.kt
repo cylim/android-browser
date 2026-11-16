@@ -95,8 +95,10 @@ fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, onSetDefaultBrow
         if (tab.popup != null) tab.closePopup() else tab.goBack()
     }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
-    // The Profile picker for Move or Open in Profile, opened from the page menu or the Incoming Link prompt.
-    var pick by remember { mutableStateOf<ProfilePick?>(null) }
+    // The Profile picker for Move or Open in Profile, opened from the page menu or the Incoming
+    // Link prompt. It belongs to the Tab it was opened for: if another Tab is shown meanwhile
+    // (an Incoming Link, say), it closes, so a choice never moves a Tab the person didn't mean.
+    var pick by remember(tabs.selected.id) { mutableStateOf<ProfilePick?>(null) }
     HideStatusBar()
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.
