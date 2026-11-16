@@ -79,10 +79,17 @@ class BrowserState(
 
     /**
      * The Tab an Incoming Link just opened, which offers "Move to Profile…" (SPEC, "Incoming
-     * Links"), until it's dismissed, moved, or another Tab is shown.
+     * Links"), until it's dismissed, moved, or the person goes on to another Tab.
      */
     var incomingLinkTab: TabId? by mutableStateOf(null)
         private set
+
+    /**
+     * True once [incomingLinkTab] has been on screen. Only then does showing another Tab end the
+     * offer: the Tab shown before the link can still report itself shown a moment after the link
+     * arrived, most of all when the link is what started the app.
+     */
+    private var incomingLinkSeen = false
 
     /** How many Tabs have a WebView now. */
     val liveTabCount: Int get() = live.size
@@ -111,7 +118,11 @@ class BrowserState(
     fun shown(id: TabId) {
         live[id] ?: return
         shownId = id
-        if (id != incomingLinkTab) incomingLinkTab = null
+        if (id == incomingLinkTab) {
+            incomingLinkSeen = true
+        } else if (incomingLinkSeen) {
+            dismissIncomingLink()
+        }
         retired.filter { it != id }.forEach { destroy(it); retired.remove(it) }
         while (live.size > MAX_LIVE_TABS) {
             val (oldest, _) = live.entries.first()
@@ -167,7 +178,7 @@ class BrowserState(
         val url = currentUrl(tab) ?: return
         scope.launch {
             if (tabRepository.move(tab.id, profile.id, url) != null) {
-                if (incomingLinkTab == tab.id) incomingLinkTab = null
+                if (incomingLinkTab == tab.id) dismissIncomingLink()
                 retire(tab.id)
             }
         }
@@ -191,6 +202,7 @@ class BrowserState(
                 val profile = profileRepository.activeProfile.filterNotNull().first()
                 val opened = tabRepository.openUrl(profile.id, url)
                 if (opened != null) {
+                    incomingLinkSeen = false
                     incomingLinkTab = opened
                     return@launch
                 }
@@ -200,6 +212,7 @@ class BrowserState(
 
     fun dismissIncomingLink() {
         incomingLinkTab = null
+        incomingLinkSeen = false
     }
 
     /** The address [tab] shows now: the live page's, which can be newer than the saved one. */

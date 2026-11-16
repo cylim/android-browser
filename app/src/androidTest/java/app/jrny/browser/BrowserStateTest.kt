@@ -196,10 +196,15 @@ class BrowserStateTest {
         await("link selected") { browser.active.value?.selected?.id == link }
         assertEquals(personal, active(browser).profile.id)
         assertEquals(titled("link"), active(browser).selected.url)
+
+        // The Tab shown before can still report itself shown after the link arrived, as it does
+        // when the link starts the app. That must not end the offer.
+        onMain { browser.shown(before) }
+        assertEquals(link, onMain { browser.incomingLinkTab })
         show(browser, link)
         assertEquals(link, onMain { browser.incomingLinkTab })
 
-        // Showing another Tab ends the offer.
+        // Going on to another Tab does.
         runBlocking { tabs.select(before) }
         show(browser, before)
         assertEquals(null, onMain { browser.incomingLinkTab })
