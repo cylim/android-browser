@@ -52,8 +52,11 @@ class TabsEndToEndTest {
 
     /** The selected Tab, live. */
     private fun shownTab(): Tab {
+        // Waited for here, not on the UI thread: there the wait would block the very thread that
+        // has to deliver the Tabs.
+        val saved = selected()
         var tab: Tab? = null
-        compose.runOnUiThread { tab = browser().tabFor(selected()) }
+        compose.runOnUiThread { tab = browser().tabFor(saved) }
         return tab!!
     }
 
