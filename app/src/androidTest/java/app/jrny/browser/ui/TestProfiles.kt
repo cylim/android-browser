@@ -33,5 +33,19 @@ object TestTabs {
         selectedIds: MutableList<TabId> = mutableListOf(),
         closed: MutableList<TabId> = mutableListOf(),
         opened: MutableList<Unit> = mutableListOf(),
-    ) = TabsUi(all, selected, select = { selectedIds += it }, close = { closed += it }, open = { opened += Unit })
+        moved: MutableList<Profile> = mutableListOf(),
+        openedIn: MutableList<Profile> = mutableListOf(),
+        incomingLink: Boolean = false,
+        dismissIncomingLink: () -> Unit = {},
+    ) = TabsUi(
+        all,
+        selected,
+        select = { selectedIds += it },
+        close = { closed += it },
+        open = { opened += Unit },
+        move = { moved += it },
+        openIn = { openedIn += it },
+        incomingLink = incomingLink,
+        dismissIncomingLink = dismissIncomingLink,
+    )
 }

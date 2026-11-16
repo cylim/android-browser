@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
@@ -22,12 +23,21 @@ import app.jrny.browser.tab.Tab
 /** The address field, placed by a layout with its own modifier and shape. */
 typealias AddressFieldSlot = @Composable (Modifier, Shape) -> Unit
 
+/** What [BrowserWindow] builds once and each layout places where it belongs. */
+class WindowSlots(
+    val addressField: AddressFieldSlot,
+    /** The "More" button with the page menu. */
+    val pageMenu: @Composable () -> Unit,
+    /** The Incoming Link prompt, floating at the bottom of the page. Empty when there's nothing to offer. */
+    val pagePrompt: @Composable () -> Unit,
+)
+
 /**
  * The browser: the Active Profile's selected Tab in [BrowserWindow], and the Profile editor when
  * it's open. Switching Profiles or Tabs shows the other Tab, which keeps its page while it's live.
  */
 @Composable
-fun BrowserScreen(browser: BrowserState) {
+fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = null) {
     val all by browser.profiles.collectAsState()
     val active by browser.active.collectAsState()
     val pending by browser.pendingDeletionCount.collectAsState()
@@ -36,12 +46,22 @@ fun BrowserScreen(browser: BrowserState) {
     // Some(null) creates a Profile, Some(profile) changes one.
     var editing by remember { mutableStateOf<EditorTarget?>(null) }
     val profiles = ProfilesUi(all, profile, pending, browser::switchTo, edit = { editing = EditorTarget(it) })
-    val tabs = TabsUi(current.tabs, current.selected, browser::selectTab, browser::closeTab, open = { browser.openTab(profile) })
+    val tabs = TabsUi(
+        all = current.tabs,
+        selected = current.selected,
+        select = browser::selectTab,
+        close = browser::closeTab,
+        open = { browser.openTab(profile) },
+        move = { browser.moveTab(current.selected, it) },
+        openIn = { browser.openInProfile(current.selected, it) },
+        incomingLink = browser.incomingLinkTab == current.selected.id,
+        dismissIncomingLink = browser::dismissIncomingLink,
+    )
 
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
-    BrowserWindow(tab, tabs, profiles)
+    BrowserWindow(tab, tabs, profiles, onSetDefaultBrowser)
 
     editing?.let { target ->
         val existing = target.profile
@@ -69,12 +89,14 @@ private class EditorTarget(val profile: Profile?)
  * folding). The Tab and its page survive the switch.
  */
 @Composable
-fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi) {
+fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, onSetDefaultBrowser: (() -> Unit)? = null) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
         if (tab.popup != null) tab.closePopup() else tab.goBack()
     }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
+    // The Profile picker for Move or Open in Profile, opened from the page menu or the Incoming Link prompt.
+    var pick by remember { mutableStateOf<ProfilePick?>(null) }
     HideStatusBar()
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.
@@ -94,11 +116,49 @@ fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi) {
             LaunchedEffect(layout) {
                 if (layout == BrowserLayout.Sidebar && draft.value != null) sidebarCollapsed = false
             }
+            // A Bottom Bar at least this wide (a tablet in portrait) has room for the Forward
+            // button. A narrower one keeps Forward in the page menu.
+            val forwardInBar = maxWidth >= BOTTOM_BAR_FORWARD_MIN_WIDTH
+            val slots = WindowSlots(
+                addressField = addressField,
+                pageMenu = {
+                    PageMenu(
+                        tab,
+                        tabs,
+                        profiles,
+                        showForward = layout == BrowserLayout.BottomBar && !forwardInBar,
+                        onPick = { pick = it },
+                        onSetDefaultBrowser = onSetDefaultBrowser,
+                    )
+                },
+                pagePrompt = {
+                    // With one Profile there's nowhere to move the page to, so nothing to offer.
+                    if (tabs.incomingLink && profiles.all.size > 1) {
+                        IncomingLinkPrompt(profiles.active.name, onMove = { pick = ProfilePick.Move }, onDismiss = tabs.dismissIncomingLink)
+                    }
+                },
+            )
             when (layout) {
                 BrowserLayout.Sidebar ->
-                    SidebarLayout(tab, tabs, profiles, addressField, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
-                BrowserLayout.BottomBar -> BottomBarLayout(tab, tabs, profiles, addressField, editingAddress = draft.value != null)
+                    SidebarLayout(tab, tabs, profiles, slots, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
+                BrowserLayout.BottomBar ->
+                    BottomBarLayout(tab, tabs, profiles, slots, showForward = forwardInBar, editingAddress = draft.value != null)
             }
         }
     }
+
+    pick?.let { action ->
+        ProfilePickerDialog(
+            pick = action,
+            others = profiles.all.filter { it.id != profiles.active.id },
+            onChoose = { target ->
+                if (action == ProfilePick.Move) tabs.move(target) else tabs.openIn(target)
+                pick = null
+            },
+            onDismiss = { pick = null },
+        )
+    }
 }
+
+/** From this window width up, the Bottom Bar shows the Forward button itself. */
+private val BOTTOM_BAR_FORWARD_MIN_WIDTH = 600.dp

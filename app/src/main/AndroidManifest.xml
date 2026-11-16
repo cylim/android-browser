@@ -15,15 +15,31 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Jrny">
 
-        <!-- configChanges: rotation, resizing and dark mode must not recreate the Tab's WebView. -->
+        <!--
+            configChanges: rotation, resizing and dark mode must not recreate the Tab's WebView.
+            singleTask: one browser window, so a link from another app opens a Tab in it
+            (onNewIntent) instead of starting a second copy of the activity.
+        -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!--
+                Incoming Links (SPEC). Exactly this filter, web links with no host, is what makes
+                Android list the app as a browser and offer it as the default one.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
             </intent-filter>
         </activity>
     </application>

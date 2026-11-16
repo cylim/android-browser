@@ -74,6 +74,9 @@ private val CONTENT_INSET = 16.dp
  */
 private val ICON_SLOT_INSET = 4.dp
 
+/** Between the Incoming Link prompt and the page's edges. */
+private val PROMPT_GAP = 16.dp
+
 /** Corner radius shared by the address field, Tab rows, menus and the page's edge next to the Sidebar. */
 private val CORNER_RADIUS = 12.dp
 private val CORNER = RoundedCornerShape(CORNER_RADIUS)
@@ -96,7 +99,7 @@ fun SidebarLayout(
     tab: Tab,
     tabs: TabsUi,
     profiles: ProfilesUi,
-    addressField: AddressFieldSlot,
+    slots: WindowSlots,
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
 ) {
@@ -111,9 +114,9 @@ fun SidebarLayout(
                     .padding(GUTTER),
             ) {
                 if (collapsed) {
-                    Rail(tab, profiles, onExpand = { onCollapsedChange(false) })
+                    Rail(tab, profiles, slots, onExpand = { onCollapsedChange(false) })
                 } else {
-                    Sidebar(tab, tabs, profiles, addressField, onCollapse = { onCollapsedChange(true) })
+                    Sidebar(tab, tabs, profiles, slots, onCollapse = { onCollapsedChange(true) })
                 }
             }
             Box(
@@ -124,7 +127,13 @@ fun SidebarLayout(
                     .imePadding()
                     .clip(PAGE_SHAPE),
             ) {
-                PageView(tab, Modifier.fillMaxSize())
+                PageView(tab, Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(start = PROMPT_GAP, end = PROMPT_GAP, bottom = floatingBottomSpace(PROMPT_GAP)),
+                    ) { slots.pagePrompt() }
+                }
                 LoadProgress(tab, Modifier.align(Alignment.TopCenter))
             }
         }
@@ -147,7 +156,7 @@ private fun systemSpace(side: WindowInsetsSides): WindowInsets =
         .union(WindowInsets.displayCutout.only(WindowInsetsSides.Top + side))
 
 @Composable
-private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: AddressFieldSlot, onCollapse: () -> Unit) {
+private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowSlots, onCollapse: () -> Unit) {
     Column(
         Modifier
             .width(SIDEBAR_WIDTH)
@@ -163,6 +172,7 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: 
             BackButton(tab)
             ForwardButton(tab)
             ReloadOrStopButton(tab)
+            slots.pageMenu()
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onCollapse) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.hide_sidebar))
@@ -170,7 +180,7 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: 
         }
         Spacer(Modifier.height(GUTTER))
         // TextField puts its text 16dp inside, which is CONTENT_INSET, and is 56dp tall, like a Tab row.
-        addressField(Modifier.fillMaxWidth(), CORNER)
+        slots.addressField(Modifier.fillMaxWidth(), CORNER)
 
         // The Tab area: swiping across it switches to the next or previous Profile (SPEC, "Sidebar").
         Column(
@@ -204,7 +214,7 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: 
 
 /** The collapsed Sidebar: the same icon column, top line and bottom line as the expanded one. */
 @Composable
-private fun Rail(tab: Tab, profiles: ProfilesUi, onExpand: () -> Unit) {
+private fun Rail(tab: Tab, profiles: ProfilesUi, slots: WindowSlots, onExpand: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -217,6 +227,7 @@ private fun Rail(tab: Tab, profiles: ProfilesUi, onExpand: () -> Unit) {
         BackButton(tab)
         ForwardButton(tab)
         ReloadOrStopButton(tab)
+        slots.pageMenu()
         Spacer(Modifier.weight(1f))
         Box {
             var menu by remember { mutableStateOf(false) }

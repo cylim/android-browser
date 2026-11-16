@@ -82,3 +82,16 @@ fun bottomEdgeSpace(gap: Dp): Dp {
         }
     }
 }
+
+/**
+ * How far something floating over an edge-to-edge page stays from the bottom edge: [gap], or
+ * enough to sit [gap] / 2 above the gesture handle. 3-button navigation and the keyboard already
+ * push the page up, so they add nothing here.
+ */
+@Composable
+fun floatingBottomSpace(gap: Dp): Dp {
+    val density = LocalDensity.current
+    if (WindowInsets.tappableElement.getBottom(density) > 0 || WindowInsets.ime.getBottom(density) > 0) return gap
+    val handle = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }.coerceAtMost(GESTURE_HANDLE_SPACE)
+    return maxOf(gap, handle + gap / 2)
+}

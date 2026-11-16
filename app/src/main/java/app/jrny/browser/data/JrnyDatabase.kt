@@ -151,6 +151,12 @@ abstract class TabDao {
     @Query("DELETE FROM tabs WHERE id = :id")
     protected abstract suspend fun deleteRow(id: Long)
 
+    @Query(
+        "UPDATE profiles SET activation = (SELECT COALESCE(MAX(activation), 0) + 1 FROM profiles) " +
+            "WHERE id = :profileId AND pendingDeletion = 0",
+    )
+    protected abstract suspend fun activateProfile(profileId: Long): Int
+
     /** Opens a Tab at the end of [profileId]'s list, selects it, and returns its id. */
     @Transaction
     open suspend fun open(profileId: Long, url: String?): Long =
@@ -163,6 +169,32 @@ abstract class TabDao {
     @Transaction
     open suspend fun ensureOne(profileId: Long) {
         if (count(profileId) == 0) open(profileId, null)
+    }
+
+    /**
+     * Opens [url] as a new Tab in [profileId] and makes that Profile the Active Profile, in one
+     * step, so the window never shows one without the other. Returns the Tab's id, or null when
+     * the Profile is gone.
+     */
+    @Transaction
+    open suspend fun openAndActivate(profileId: Long, url: String): Long? {
+        if (activateProfile(profileId) == 0) return null
+        return open(profileId, url)
+    }
+
+    /**
+     * Moves [id] to [profileId], carrying only [url]: the original Tab closes, and a new Tab in
+     * the target Profile, which becomes the Active Profile, loads the address afresh (ADR 0003).
+     * Title, scroll position and history stay behind. Returns the new Tab's id, or null, and
+     * nothing changes, when the Tab or the Profile is gone or the Tab is already there.
+     */
+    @Transaction
+    open suspend fun move(id: Long, profileId: Long, url: String): Long? {
+        val row = get(id) ?: return null
+        if (row.profileId == profileId) return null
+        val moved = openAndActivate(profileId, url) ?: return null
+        close(id)
+        return moved
     }
 
     /**

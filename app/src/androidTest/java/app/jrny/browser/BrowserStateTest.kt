@@ -184,6 +184,54 @@ class BrowserStateTest {
     }
 
     @Test
+    fun anIncomingLinkOpensInTheActiveProfileAndOffersAMoveUntilAnotherTabShows() {
+        val browser = newBrowser()
+        val personal = active(browser).profile.id
+        val before = runBlocking { tabs.open(personal) }
+        show(browser, before)
+
+        onMain { browser.openIncomingLink(titled("link")) }
+        await("link opened") { browser.incomingLinkTab != null }
+        val link = onMain { browser.incomingLinkTab!! }
+        await("link selected") { browser.active.value?.selected?.id == link }
+        assertEquals(personal, active(browser).profile.id)
+        assertEquals(titled("link"), active(browser).selected.url)
+        show(browser, link)
+        assertEquals(link, onMain { browser.incomingLinkTab })
+
+        // Showing another Tab ends the offer.
+        runBlocking { tabs.select(before) }
+        show(browser, before)
+        assertEquals(null, onMain { browser.incomingLinkTab })
+    }
+
+    @Test
+    fun aMoveTakesTheLivePagesAddressToTheOtherProfile() {
+        val browser = newBrowser()
+        val personal = active(browser).profile.id
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        runBlocking { profiles.activate(personal) }
+        await("personal active") { browser.active.value?.profile?.id == personal }
+        val id = runBlocking { tabs.open(personal) }
+        val tab = show(browser, id)
+        load(tab, titled("moved"), "moved navigate")
+        awaitSaved(browser, id, titled("moved"), "moved navigate")
+        val saved = active(browser).selected
+
+        onMain { browser.moveTab(saved, work) }
+
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        val arrived = active(browser).selected
+        assertEquals(titled("moved"), arrived.url)
+        assertEquals("", arrived.title)
+        val shown = show(browser, arrived.id)
+        await("reloaded there") { !shown.isLoading && shown.title == "moved navigate" }
+        assertNotSame(tab, shown)
+        assertFalse(onMain { browser.isLive(id) })
+        assertTrue(runBlocking { tabs.tabs(personal).first() }.none { it.id == id })
+    }
+
+    @Test
     fun closingTheShownTabShowsAnotherAndFreesItsWebView() {
         val browser = newBrowser()
         val personal = active(browser).profile.id

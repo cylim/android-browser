@@ -5,6 +5,7 @@ import android.webkit.WebView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,10 +51,12 @@ import app.jrny.browser.tab.Tab
  * screen after the renderer died.
  */
 @Composable
-fun PageView(tab: Tab, modifier: Modifier = Modifier) {
+fun PageView(tab: Tab, modifier: Modifier = Modifier, overlay: @Composable BoxScope.() -> Unit = {}) {
     Box(modifier.testTag("page")) {
         // A new WebView replaces a dead one (Tab.replaceDeadWebView), so key the view on it.
         key(tab.webView) { WebViewHost(tab.webView) }
+        // Floats over the page, and under a popup.
+        overlay()
         tab.popup?.let { popup ->
             key(popup) {
                 Column(Modifier.fillMaxSize().testTag("popup")) {

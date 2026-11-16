@@ -45,6 +45,16 @@
         <item quantity="one">%d deleted Profile is erased the next time the app starts.</item>
         <item quantity="other">%d deleted Profiles are erased the next time the app starts.</item>
     </plurals>
+    <string name="more">More</string>
+    <string name="move_to_profile">Move to Profile…</string>
+    <string name="open_in_profile">Open in Profile…</string>
+    <string name="move_to_profile_title">Move to Profile</string>
+    <string name="move_to_profile_body">This Tab closes here, and the page loads again in the Profile you choose. Unsaved form input will be lost.</string>
+    <string name="open_in_profile_title">Open in Profile</string>
+    <string name="open_in_profile_body">The page opens as a new Tab in the Profile you choose. This Tab stays open.</string>
+    <string name="incoming_link_opened_in">Opened in %1$s</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="set_default_browser">Set as default browser</string>
     <string name="close_popup">Close popup</string>
     <string name="show_full_address">Show the full address</string>
     <string name="page_crashed">This page stopped working.</string>

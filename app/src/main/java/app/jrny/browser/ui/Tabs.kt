@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
+import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.TabId
 
@@ -54,6 +55,13 @@ class TabsUi(
     val close: (TabId) -> Unit,
     /** Opens an empty Tab and shows it. */
     val open: () -> Unit,
+    /** Move: the selected Tab goes to that Profile, carrying only its address. */
+    val move: (Profile) -> Unit = {},
+    /** Open in Profile: the selected Tab's address opens there as a new Tab. */
+    val openIn: (Profile) -> Unit = {},
+    /** True while the selected Tab is one an Incoming Link just opened. */
+    val incomingLink: Boolean = false,
+    val dismissIncomingLink: () -> Unit = {},
 ) {
     /** The Tab after the selected one, or before it with [step] -1, for swiping. Null at either end. */
     fun neighbour(step: Int): SavedTab? {

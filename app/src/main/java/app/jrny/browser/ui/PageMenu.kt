@@ -1,0 +1,192 @@
+package app.jrny.browser.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import app.jrny.browser.R
+import app.jrny.browser.profile.Profile
+import app.jrny.browser.tab.Tab
+
+/** Which action the Profile picker is choosing a Profile for (SPEC, "Tabs"). */
+enum class ProfilePick { Move, OpenIn }
+
+/**
+ * The page menu behind the "More" button, for the shown Tab: a new Tab, Move, Open in Profile,
+ * and making JRNY browser the default browser while it isn't. [showForward] adds Forward, for the
+ * narrow Bottom Bar, which has no room for its button.
+ */
+@Composable
+fun PageMenu(
+    tab: Tab,
+    tabs: TabsUi,
+    profiles: ProfilesUi,
+    showForward: Boolean,
+    onPick: (ProfilePick) -> Unit,
+    onSetDefaultBrowser: (() -> Unit)?,
+) {
+    var open by remember { mutableStateOf(false) }
+    // Move and Open in Profile need an address to carry and another Profile to carry it to.
+    val canUseOtherProfile = tab.url != null && profiles.all.size > 1
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.testTag("page-menu")) {
+            Icon(Icons.Filled.MoreVert, stringResource(R.string.more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(12.dp)) {
+            @Composable
+            fun Item(label: Int, icon: ImageVector, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(label)) },
+                    leadingIcon = { Icon(icon, contentDescription = null) },
+                    enabled = enabled,
+                    onClick = {
+                        open = false
+                        onClick()
+                    },
+                    modifier = Modifier.testTag(tag),
+                )
+            }
+            if (showForward) {
+                Item(R.string.forward, Icons.AutoMirrored.Filled.ArrowForward, "menu-forward", enabled = tab.canGoForward, onClick = tab::goForward)
+            }
+            Item(R.string.new_tab, Icons.Filled.Add, "menu-new-tab", onClick = tabs.open)
+            Item(R.string.move_to_profile, Icons.AutoMirrored.Filled.ExitToApp, "menu-move", enabled = canUseOtherProfile) {
+                onPick(ProfilePick.Move)
+            }
+            Item(R.string.open_in_profile, Icons.Filled.AccountCircle, "menu-open-in", enabled = canUseOtherProfile) {
+                onPick(ProfilePick.OpenIn)
+            }
+            if (onSetDefaultBrowser != null) {
+                Item(R.string.set_default_browser, Icons.Filled.Star, "menu-default-browser", onClick = onSetDefaultBrowser)
+            }
+        }
+    }
+}
+
+/**
+ * Chooses the Profile to Move the Tab to, or to open its page in. For a Move it says first what
+ * is lost (ADR 0003), so choosing a Profile is the confirmation. Rows are 56dp with the avatar in
+ * a 48dp slot, like the Profile list's.
+ */
+@Composable
+fun ProfilePickerDialog(pick: ProfilePick, others: List<Profile>, onChoose: (Profile) -> Unit, onDismiss: () -> Unit) {
+    val move = pick == ProfilePick.Move
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("profile-picker"),
+        title = { Text(stringResource(if (move) R.string.move_to_profile_title else R.string.open_in_profile_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(stringResource(if (move) R.string.move_to_profile_body else R.string.open_in_profile_body))
+                // Rows reach 8dp past the text on both sides, so each avatar's 32dp circle, centered
+                // in its 48dp slot, starts on the same line as the title and the text above.
+                Column(Modifier.padding(top = 16.dp).bleed(AVATAR_INSET)) {
+                    others.forEach { profile ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(role = Role.Button) { onChoose(profile) }
+                                .testTag("pick-profile-${profile.id.value}"),
+                        ) {
+                            ProfileAvatar(profile)
+                            Text(
+                                profile.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(start = 4.dp, end = 16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** How far an avatar's 32dp circle sits inside its 48dp slot. */
+private val AVATAR_INSET = 8.dp
+
+/** Lets the content be [by] wider than its place on each side. */
+private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx()
+    val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = constraints.maxWidth + 2 * extra))
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
+}
+
+/**
+ * Shown over a page an Incoming Link just opened: which Profile it opened in, and a one-tap
+ * "Move to Profile…" (SPEC, "Incoming Links"). Text starts 16dp in; the close icon ends 16dp in.
+ */
+@Composable
+fun IncomingLinkPrompt(profileName: String, onMove: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.inverseSurface,
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = 6.dp,
+        modifier = modifier.widthIn(max = 480.dp).testTag("incoming-link-prompt"),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp)) {
+            Text(
+                stringResource(R.string.incoming_link_opened_in, profileName),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            TextButton(onClick = onMove, modifier = Modifier.padding(start = 8.dp).testTag("incoming-link-move")) {
+                Text(stringResource(R.string.move_to_profile), color = MaterialTheme.colorScheme.inversePrimary, maxLines = 1)
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+            }
+        }
+    }
+}
