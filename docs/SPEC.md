@@ -72,8 +72,12 @@ The layout depends on window width, not device type. It switches live when the w
   - History and bookmarks open in the page's place: beside the Sidebar, or full screen above the Bottom Bar layout.
   - Deleting a Profile removes its history, its bookmarks and its list of downloads at once. Downloaded files stay on the device.
   - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. Files a page makes itself (`blob:` and `data:` addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.
-- Search: Google by default, and the engine can be changed in settings. Address-bar suggestions are on by default and can be turned off.
-- Safe Browsing: on by default and can be turned off.
+- Search: Google by default, and the engine can be changed in settings (Google, Bing, DuckDuckGo, Brave Search). Address-bar suggestions are on by default and can be turned off.
+  - While the person types, the address field offers matching pages from the Active Profile's bookmarks and history, then searches the search engine suggests.
+  - Typed text goes to the search engine only when it would be searched for anyway. An address, or text shaped like credentials, is never sent. The request carries no cookies. A Private Tab offers no suggestions at all.
+- Safe Browsing: on by default and can be turned off. The change also reaches pages that are already open.
+- Theme: the device's, light or dark. It sets the browser's own bars and lists; pages keep following the device's setting.
+- Settings open in the page's place, like history and bookmarks.
 - Password managers work through the Android Autofill framework. JRNY browser does not store passwords itself.
 - Passkeys are not supported until the app is approved as a privileged browser ([ADR 0001](adr/0001-system-webview-as-engine.md)).
 

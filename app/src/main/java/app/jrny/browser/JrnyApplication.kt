@@ -9,6 +9,8 @@ import app.jrny.browser.download.Downloader
 import app.jrny.browser.download.SystemDownloader
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.settings.HttpSearchSuggestions
+import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.tab.PrivateTabs
 import kotlinx.coroutines.runBlocking
 
@@ -20,6 +22,16 @@ class JrnyApplication : Application() {
 
     /** Private Tabs live in memory for as long as the process does, across activity restarts. */
     val privateTabs = PrivateTabs()
+
+    val services: BrowserServices by lazy {
+        BrowserServices(
+            repositories = repositories,
+            downloader = downloader,
+            privateTabs = privateTabs,
+            settings = SettingsRepository(getSharedPreferences("settings", MODE_PRIVATE)),
+            searchSuggestions = HttpSearchSuggestions(),
+        )
+    }
 
     /**
      * Before any activity, and so before any WebView loads a Profile: creates the first Profile on

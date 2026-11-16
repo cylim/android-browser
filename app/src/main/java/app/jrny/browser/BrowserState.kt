@@ -8,16 +8,18 @@ import app.jrny.browser.data.RecordedVisit
 import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadStatus
-import app.jrny.browser.download.Downloader
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Visit
+import app.jrny.browser.address.AddressInput
+import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.Profile
+import app.jrny.browser.settings.Settings
+import app.jrny.browser.settings.Suggestion
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.PrivateSession
-import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.tab.Tab
 import app.jrny.browser.tab.TabId
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
@@ -59,11 +62,14 @@ data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
 @OptIn(ExperimentalCoroutinesApi::class)
 class BrowserState(
     private val context: Context,
-    repositories: Repositories,
-    private val downloader: Downloader,
-    private val privateTabs: PrivateTabs,
+    services: BrowserServices,
     private val scope: CoroutineScope,
 ) {
+    private val repositories = services.repositories
+    private val downloader = services.downloader
+    private val privateTabs = services.privateTabs
+    private val settingsRepository = services.settings
+    private val searchSuggestions = services.searchSuggestions
     private val profileRepository = repositories.profiles
     private val tabRepository = repositories.tabs
     private val history = repositories.history
@@ -111,10 +117,24 @@ class BrowserState(
         .flatMapLatest { downloadRepository.downloads(it.id) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    /** The app's settings, shared by all Profiles. */
+    val settings: StateFlow<Settings> = settingsRepository.settings
+
+    fun updateSettings(change: (Settings) -> Settings) = settingsRepository.update(change)
+
     /** Live Tabs, least recently shown first. */
     private val live = LinkedHashMap<TabId, LiveTab>(MAX_LIVE_TABS + 1, 0.75f, true)
 
     private class LiveTab(val tab: Tab, val saving: Job?, val saved: SavedTab)
+
+    init {
+        // Turning Safe Browsing on or off reaches the pages that are already open.
+        scope.launch {
+            settings.map { it.safeBrowsing }.distinctUntilChanged().drop(1).collect { on ->
+                live.values.forEach { it.tab.safeBrowsing = on }
+            }
+        }
+    }
 
     /** Private stores whose session has ended, emptied once their last WebView is gone. */
     private val endedStores = mutableSetOf<String>()
@@ -165,6 +185,7 @@ class BrowserState(
         val tab = Tab(
             context,
             WebProfile.of(saved.profileId),
+            safeBrowsing = settings.value.safeBrowsing,
             onPageChanged = { page.value = it.url to it.title },
             onVisited = { url ->
                 scope.launch {
@@ -200,6 +221,7 @@ class BrowserState(
         val tab = Tab(
             context,
             WebProfile.privateOf(saved.profileId, session.session),
+            safeBrowsing = settings.value.safeBrowsing,
             onPageChanged = { privateTabs.savePage(saved.profileId, saved.id, it.url, it.title) },
         )
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
@@ -367,6 +389,34 @@ class BrowserState(
         }
     }
 
+    /**
+     * What to offer while [text] is typed in [tab]'s address field: pages from the Active
+     * Profile's bookmarks and history that match, then searches the search engine suggests.
+     *
+     * The text goes to the search engine only if the setting is on and it would be searched for
+     * anyway: an address, or text shaped like credentials, is never sent. A Private Tab offers
+     * nothing: what is typed there stays there, and it has no history to draw on.
+     */
+    suspend fun suggest(tab: SavedTab, text: String): List<Suggestion> {
+        val query = text.trim()
+        if (query.isEmpty() || tab.isPrivate) return emptyList()
+        fun matches(title: String, url: String) = title.contains(query, ignoreCase = true) || url.contains(query, ignoreCase = true)
+        val pages = (
+            bookmarks.value.filter { matches(it.title, it.url) }.map { Suggestion(it.title.ifBlank { it.url }, it.url, Suggestion.Kind.Bookmark) } +
+                visits.value.filter { matches(it.title, it.url) }.map { Suggestion(it.title.ifBlank { it.url }, it.url, Suggestion.Kind.History) }
+            )
+            // One page can be on record under more than one address. It is offered once.
+            .distinctBy { it.text to WebAddress.hostOf(it.url) }
+            .take(MAX_PAGE_SUGGESTIONS)
+        val current = settings.value
+        val searches = if (current.suggestions && AddressInput.isSearch(query)) {
+            searchSuggestions.fetch(current.searchEngine, query).take(MAX_SEARCH_SUGGESTIONS).map { Suggestion(it, null, Suggestion.Kind.Search) }
+        } else {
+            emptyList()
+        }
+        return pages + searches
+    }
+
     /** Bookmarks [url] in [profile], or removes the bookmark if that Profile has one. */
     fun toggleBookmark(profile: Profile, url: String, title: String) {
         scope.launch { bookmarkRepository.toggle(profile.id, url, title) }
@@ -507,6 +557,8 @@ class BrowserState(
 
     companion object {
         private const val INCOMING_LINK_ATTEMPTS = 3
+        private const val MAX_PAGE_SUGGESTIONS = 3
+        private const val MAX_SEARCH_SUGGESTIONS = 5
 
         /** At most this many Tabs are live at once, across all Profiles (SPEC, "Tabs"). */
         const val MAX_LIVE_TABS = 5

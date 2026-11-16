@@ -197,6 +197,11 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowS
                 .horizontalSwipe(profiles.active.id, profiles.all) { step -> profiles.neighbour(step)?.let(profiles.switchTo) }
                 .testTag("sidebar-tabs"),
         ) {
+            val suggestions = slots.suggestions
+            // While the person types, what the address field offers takes the Tab list's place.
+            if (suggestions != null) {
+                suggestions(Modifier.weight(1f).padding(top = GUTTER))
+            } else {
             // The label's text starts on the content line; the new-Tab button sits in the icon
             // column at the end, under the collapse arrow.
             Row(
@@ -214,6 +219,7 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowS
                 }
             }
             TabList(tabs, shape = CORNER, selectedColor = MaterialTheme.colorScheme.surface, modifier = Modifier.weight(1f))
+            }
         }
         ProfileSwitcher(profiles)
     }

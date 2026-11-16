@@ -1,6 +1,8 @@
 package app.jrny.browser
 
 import android.annotation.SuppressLint
+import android.content.Context
+import androidx.webkit.WebSettingsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewFeature
@@ -15,6 +17,10 @@ import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
 import app.jrny.browser.library.Visit
+import app.jrny.browser.settings.SearchEngine
+import app.jrny.browser.settings.SearchSuggestions
+import app.jrny.browser.settings.SettingsRepository
+import app.jrny.browser.settings.Suggestion
 import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
@@ -51,6 +57,15 @@ class BrowserStateTest {
     private val tabs = repositories.tabs
     private val downloader = FakeDownloader()
     private var privateTabs = PrivateTabs()
+    private val settingsFile = "test-settings-${System.nanoTime()}"
+    private val settings = SettingsRepository(context.getSharedPreferences(settingsFile, Context.MODE_PRIVATE))
+
+    /** Suggests "<query> one" and "<query> two", and records what it was asked. */
+    private val asked = java.util.Collections.synchronizedList(mutableListOf<Pair<SearchEngine, String>>())
+    private val suggestions = SearchSuggestions { engine, query ->
+        asked += engine to query
+        listOf("$query one", "$query two")
+    }
     private val scopes = mutableListOf<CoroutineScope>()
     private val browsers = mutableListOf<BrowserState>()
 
@@ -67,13 +82,15 @@ class BrowserStateTest {
         // crashes the test process.
         runBlocking { scopes.forEach { it.coroutineContext.job.cancelAndJoin() } }
         database.close()
+        context.deleteSharedPreferences(settingsFile)
     }
 
     /** A BrowserState, as the activity makes one, on the shared database. */
     private fun newBrowser(): BrowserState {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
-        return onMain { BrowserState(context, repositories, downloader, privateTabs, scope) }.also { browsers += it }
+        val services = BrowserServices(repositories, downloader, privateTabs, settings, suggestions)
+        return onMain { BrowserState(context, services, scope) }.also { browsers += it }
     }
 
     /** The Active Profile and its Tabs, once the database has given them. */
@@ -593,6 +610,76 @@ class BrowserStateTest {
         onMain { browser.delete(personal) }
         await("personal gone") { browser.profiles.value.none { it.id == personal.id } }
         await("private tabs closed") { privateTabs.current(personal.id) == null }
+    }
+
+    @Test
+    fun suggestionsArePagesOfTheProfileThenSearchesFromTheChosenEngine() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        runBlocking {
+            repositories.bookmarks.add(personal.id, "https://kotlinlang.org/", "Kotlin")
+            repositories.history.record(personal.id, "https://example.com/kotlin-news")
+            repositories.history.record(personal.id, "https://example.com/other")
+        }
+        await("loaded") { browser.bookmarks.value.size == 1 && browser.visits.value.size == 2 }
+        onMain { browser.updateSettings { it.copy(searchEngine = SearchEngine.DuckDuckGo) } }
+        val tab = active(browser).selected
+
+        val offered = runBlocking { browser.suggest(tab, " kotlin ") }
+        assertEquals(
+            listOf(
+                Suggestion("Kotlin", "https://kotlinlang.org/", Suggestion.Kind.Bookmark),
+                Suggestion("https://example.com/kotlin-news", "https://example.com/kotlin-news", Suggestion.Kind.History),
+                Suggestion("kotlin one", null, Suggestion.Kind.Search),
+                Suggestion("kotlin two", null, Suggestion.Kind.Search),
+            ),
+            offered,
+        )
+        assertEquals(listOf(SearchEngine.DuckDuckGo to "kotlin"), asked.toList())
+    }
+
+    @Test
+    fun whatIsTypedGoesToTheSearchEngineOnlyWhenItMay() {
+        val browser = newBrowser()
+        show(browser, active(browser).selected.id)
+        val tab = active(browser).selected
+
+        // An address, or text shaped like credentials, is never sent.
+        assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "https://bank.example/account?token=abc") })
+        assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "user:secret@example.com") })
+        assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "   ") })
+
+        // Nothing is sent from a Private Tab.
+        openPrivate(browser)
+        val private = active(browser).selected
+        assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(private, "private search") })
+
+        // Nothing is sent with the setting off.
+        onMain { browser.updateSettings { it.copy(suggestions = false) } }
+        assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "weather") })
+        assertEquals(emptyList<Pair<SearchEngine, String>>(), asked.toList())
+
+        onMain { browser.updateSettings { it.copy(suggestions = true) } }
+        assertEquals(2, runBlocking { browser.suggest(tab, "weather") }.size)
+        assertEquals(listOf(SearchEngine.Google to "weather"), asked.toList())
+    }
+
+    @Test
+    fun safeBrowsingFollowsTheSettingAlsoForPagesAlreadyOpen() {
+        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE))
+        val browser = newBrowser()
+        val tab = show(browser, active(browser).selected.id)
+        fun enabled(of: Tab) = onMain { WebSettingsCompat.getSafeBrowsingEnabled(of.webView.settings) }
+        assertTrue(enabled(tab))
+
+        onMain { browser.updateSettings { it.copy(safeBrowsing = false) } }
+        await("off for the open page") { !WebSettingsCompat.getSafeBrowsingEnabled(tab.webView.settings) }
+
+        // A Tab opened now starts with it off, and turning it on reaches both.
+        val (_, private) = openPrivate(browser)
+        assertFalse(enabled(private))
+        onMain { browser.updateSettings { it.copy(safeBrowsing = true) } }
+        await("on again") { WebSettingsCompat.getSafeBrowsingEnabled(tab.webView.settings) && WebSettingsCompat.getSafeBrowsingEnabled(private.webView.settings) }
     }
 
     @Test

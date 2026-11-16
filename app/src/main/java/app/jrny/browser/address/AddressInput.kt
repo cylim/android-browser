@@ -22,6 +22,15 @@ object AddressInput {
     /** The default search engine (SPEC, "Browsing features"). `%s` is the encoded query. */
     const val GOOGLE_SEARCH = "https://www.google.com/search?q=%s"
 
+    /**
+     * True when [input] would be searched for, not loaded as an address. Only such text may be
+     * sent to the search engine for suggestions: an address, or anything shaped like credentials,
+     * stays on the device while it is typed, as it does when it is submitted.
+     */
+    fun isSearch(input: String): Boolean = toAddress(input, SEARCH_MARKER)?.startsWith(SEARCH_MARKER) == true
+
+    private const val SEARCH_MARKER = "search:"
+
     /** Returns the address to load, or null when there is nothing to load. */
     fun toAddress(input: String, searchTemplate: String = GOOGLE_SEARCH): String? {
         val text = input.trim()

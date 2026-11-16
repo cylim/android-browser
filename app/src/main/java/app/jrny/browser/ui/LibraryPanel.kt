@@ -54,8 +54,8 @@ import app.jrny.browser.library.Visit
 import app.jrny.browser.tab.displayHost
 import kotlinx.coroutines.delay
 
-/** A list that takes the page's place: the Active Profile's history, bookmarks or downloads. */
-enum class Panel { History, Bookmarks, Downloads }
+/** What takes the page's place: the Active Profile's history, bookmarks or downloads, or the app's settings. */
+enum class Panel { History, Bookmarks, Downloads, Settings }
 
 /** The Active Profile's history, bookmarks and downloads, and what can be done with them. */
 class LibraryUi(
@@ -99,36 +99,26 @@ fun LibraryPanel(
     contentPadding: PaddingValues = PaddingValues(),
 ) {
     var confirmClear by remember { mutableStateOf(false) }
-    Surface(modifier.fillMaxSize().testTag("panel-${panel.name}")) {
-        Box(contentAlignment = Alignment.TopCenter) {
-            Column(Modifier.widthIn(max = PANEL_MAX_WIDTH).padding(horizontal = PANEL_GUTTER)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = PANEL_TEXT_INSET, end = PANEL_ICON_INSET),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            stringResource(
-                                when (panel) {
-                                    Panel.History -> R.string.history
-                                    Panel.Bookmarks -> R.string.bookmarks
-                                    Panel.Downloads -> R.string.downloads
-                                },
-                            ),
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.semantics { heading() },
-                        )
-                        Text(profileName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (panel == Panel.History && library.visits.isNotEmpty()) {
-                        TextButton(onClick = { confirmClear = true }, modifier = Modifier.testTag("clear-history")) {
-                            Text(stringResource(R.string.clear_history))
-                        }
-                    }
-                    IconButton(onClick = onClose, modifier = Modifier.testTag("close-panel")) {
-                        Icon(Icons.Filled.Close, stringResource(R.string.close))
-                    }
+    val title = when (panel) {
+        Panel.History -> R.string.history
+        Panel.Bookmarks -> R.string.bookmarks
+        Panel.Downloads -> R.string.downloads
+        Panel.Settings -> R.string.settings
+    }
+    PanelFrame(
+        tag = "panel-${panel.name}",
+        title = stringResource(title),
+        subtitle = profileName,
+        onClose = onClose,
+        modifier = modifier,
+        action = {
+            if (panel == Panel.History && library.visits.isNotEmpty()) {
+                TextButton(onClick = { confirmClear = true }, modifier = Modifier.testTag("clear-history")) {
+                    Text(stringResource(R.string.clear_history))
                 }
+            }
+        },
+    ) {
                 when (panel) {
                     Panel.History -> PanelList(
                         items = library.visits,
@@ -161,9 +151,9 @@ fun LibraryPanel(
                         )
                     }
                     Panel.Downloads -> DownloadList(library, contentPadding)
+                    // The settings have their own panel (SettingsPanel).
+                    Panel.Settings -> Unit
                 }
-            }
-        }
     }
 
     if (confirmClear) {
@@ -182,6 +172,44 @@ fun LibraryPanel(
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.cancel)) } },
         )
+    }
+}
+
+/**
+ * The frame every panel shares: one column, at most [PANEL_MAX_WIDTH] wide and centered, with a
+ * header (title, what it belongs to, an optional action, close) above the [content].
+ */
+@Composable
+fun PanelFrame(
+    tag: String,
+    title: String,
+    subtitle: String?,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    action: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    Surface(modifier.fillMaxSize().testTag(tag)) {
+        Box(contentAlignment = Alignment.TopCenter) {
+            Column(Modifier.widthIn(max = PANEL_MAX_WIDTH).padding(horizontal = PANEL_GUTTER)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = PANEL_TEXT_INSET, end = PANEL_ICON_INSET),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                        if (subtitle != null) {
+                            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    action()
+                    IconButton(onClick = onClose, modifier = Modifier.testTag("close-panel")) {
+                        Icon(Icons.Filled.Close, stringResource(R.string.close))
+                    }
+                }
+                content()
+            }
+        }
     }
 }
 
@@ -319,7 +347,7 @@ private val PANEL_MAX_WIDTH = 720.dp
 private val PANEL_GUTTER = 8.dp
 
 /** Where text starts inside the column. */
-private val PANEL_TEXT_INSET = 16.dp
+val PANEL_TEXT_INSET = 16.dp
 
 /** Where a 48dp icon-button slot ends inside the column, so its icon ends 16dp in. */
 private val PANEL_ICON_INSET = 4.dp

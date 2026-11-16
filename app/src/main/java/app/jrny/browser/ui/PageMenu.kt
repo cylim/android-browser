@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -123,8 +124,9 @@ fun PageMenu(
             Item(R.string.open_in_profile, Icons.Filled.AccountCircle, "menu-open-in", enabled = canUseOtherProfile) {
                 onPick(ProfilePick.OpenIn)
             }
+            HorizontalDivider()
+            Item(R.string.settings, Icons.Filled.Settings, "menu-settings") { onPanel(Panel.Settings) }
             if (onSetDefaultBrowser != null) {
-                HorizontalDivider()
                 Item(R.string.set_default_browser, Icons.Filled.CheckCircle, "menu-default-browser", onClick = onSetDefaultBrowser)
             }
         }
