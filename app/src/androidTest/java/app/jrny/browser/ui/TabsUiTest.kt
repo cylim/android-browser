@@ -115,6 +115,10 @@ class TabsUiTest {
         compose.onNodeWithTag("tab-overview").assertExists()
         compose.onNodeWithText("3 Tabs").assertExists()
         row(mail).assertIsSelected()
+        // Nothing of the page or the bar is left underneath to focus or to read out.
+        compose.onNodeWithTag("address").assertDoesNotExist()
+        compose.onNodeWithTag("page").assertDoesNotExist()
+        compose.onNodeWithTag("tab-count").assertDoesNotExist()
 
         // Choosing a Tab selects it and goes back to the page.
         row(news).performClick()

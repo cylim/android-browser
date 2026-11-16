@@ -1,7 +1,6 @@
 package app.jrny.browser.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.asPaddingValues
@@ -75,9 +74,12 @@ private val OVERVIEW_ROW_SHAPE = RoundedCornerShape(12.dp)
 fun BottomBarLayout(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: AddressFieldSlot, editingAddress: Boolean = false) {
     var sheet by remember { mutableStateOf(false) }
     var overview by rememberSaveable { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
+    // The Tab Overview replaces the page and the bar. Left underneath, they would still take
+    // keyboard focus and be read by a screen reader.
+    if (overview) {
+        TabOverview(tabs, profileTint(profiles.active), onClose = { overview = false })
+    } else {
         BarAndPage(tab, tabs, profiles, addressField, editingAddress, onProfiles = { sheet = true }, onTabs = { overview = true })
-        if (overview) TabOverview(tabs, profileTint(profiles.active), onClose = { overview = false })
     }
     if (sheet) ProfileSheet(profiles, onDismiss = { sheet = false })
 }

@@ -83,14 +83,21 @@ class Tab(
     /** The site's host for display, without a leading `www.`, or empty for a non-web page. */
     val displayHost: String get() = displayHost(url)
 
-    /** The page's vertical scroll position, in pixels, to save with the Tab. */
+    /**
+     * The page's vertical scroll position, in pixels, to save with the Tab. While a restored page
+     * is still loading, or waits for a reload after a crash, it's the position the page goes back
+     * to, so saving the Tab in that moment doesn't lose it.
+     */
     val scrollY: Int
-        get() = webView.scrollY
+        get() = if (restoreScrollY > 0) restoreScrollY else webView.scrollY
 
     /** Where to scroll once the page being restored has loaded, or 0. */
     private var restoreScrollY = 0
 
-    /** The saved title of the page being restored, which stays if that page fails to load. */
+    /**
+     * The saved title of the page being restored. It stays until the page reports its own title,
+     * and comes back if the page fails to load, in whichever order WebView reports that.
+     */
     private var restoringTitle: String? = null
 
     /** True once the page's own load failed. WebView then shows its error page, whose title isn't the page's. */
@@ -129,7 +136,14 @@ class Tab(
 
     fun reload() {
         val address = url
-        if (crashed && address != null) load(address) else webView.reload()
+        if (crashed && address != null) {
+            // The new WebView loads the page afresh, then scrolls back to where the old one was.
+            val scrollY = restoreScrollY
+            load(address)
+            restoreScrollY = scrollY
+        } else {
+            webView.reload()
+        }
     }
 
     fun stop() = webView.stopLoading()
@@ -193,6 +207,7 @@ class Tab(
      */
     private fun replaceDeadWebView(dead: WebView) {
         if (dead != webView) return
+        restoreScrollY = scrollY
         closePopup()
         (dead.parent as? ViewGroup)?.removeView(dead)
         dead.destroy()
@@ -229,7 +244,6 @@ class Tab(
                 view.scrollTo(0, restoreScrollY)
                 restoreScrollY = 0
             }
-            restoringTitle = null
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -273,6 +287,9 @@ class Tab(
 
         override fun onReceivedTitle(view: WebView, title: String?) {
             if (view != webView || loadFailed) return
+            // A restored page keeps its saved title until it has one of its own.
+            if (restoringTitle != null && title.isNullOrBlank()) return
+            restoringTitle = null
             this@Tab.title = title.orEmpty()
             onPageChanged(this@Tab)
         }
