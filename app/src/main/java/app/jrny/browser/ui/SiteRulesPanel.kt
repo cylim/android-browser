@@ -272,8 +272,9 @@ fun SiteRuleEditorDialog(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = text,
-                    // Kept whole: cut short, a pasted address would make a rule for more than it names.
-                    onValueChange = { text = it.take(SitePattern.MAX_INPUT_LENGTH) },
+                    // Kept whole, however long: cut short, a pasted address would make a rule for
+                    // more than it names. What is too long is refused below.
+                    onValueChange = { text = it },
                     label = { Text(stringResource(R.string.rule_site)) },
                     placeholder = { Text(stringResource(R.string.rule_site_placeholder)) },
                     isError = text.isNotBlank() && pattern == null,

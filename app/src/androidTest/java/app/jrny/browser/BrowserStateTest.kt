@@ -374,6 +374,47 @@ class BrowserStateTest {
     }
 
     @Test
+    fun takingTheOfferChangesTheDecidingRuleAndKeepsItTheOlderOfTwoEquallyNarrowOnes() {
+        TestServer(mapOf("/a" to "<title>a</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(work.id) }
+            await("work active") { browser.active.value?.profile?.id == work.id }
+            // Two rules that cover the link and name as much of it: the older decides.
+            val host = SitePattern.forSiteOf(server.url("/"))!!.text
+            val older = SitePattern.parse(host.dropLast(1) + "*")!!
+            val younger = SitePattern.parse("*" + host.drop(1))!!
+            assertEquals(older.weight, younger.weight)
+            onMain { browser.saveSiteRule(null, older, personal) }
+            await("first rule saved") { browser.siteRules.value.size == 1 }
+            onMain { browser.saveSiteRule(null, younger, personal) }
+            await("second rule saved") { browser.siteRules.value.size == 2 }
+            val deciding = onMain { browser.siteRules.value.first() }
+
+            onMain { browser.openIncomingLink(server.url("/a")) }
+            await("opened in Personal") { browser.active.value?.let { it.profile.id == personal.id && it.selected.url == server.url("/a") } == true }
+            show(browser, active(browser).selected.id)
+            val moving = active(browser).selected
+            onMain { browser.moveTab(moving, work) }
+            await("rule offered") { browser.linkOffer is LinkOffer.Always }
+            assertEquals(deciding, (onMain { browser.linkOffer } as LinkOffer.Always).rule)
+            onMain { browser.acceptRuleOffer() }
+
+            // The same rule, with its place among the rules, now names Work.
+            await("rule changed") {
+                browser.siteRules.value.map { Triple(it.id, it.pattern, it.profileId) } ==
+                    listOf(Triple(deciding.id, older, work.id), Triple(deciding.id + 1, younger, personal.id))
+            }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            show(browser, active(browser).selected.id)
+            onMain { browser.openIncomingLink(server.url("/a")) }
+            await("opened in Work") { browser.active.value?.let { it.profile.id == work.id && it.selected.url == server.url("/a") } == true }
+        }
+    }
+
+    @Test
     fun aMoveFromTheMenuOrToTheRulesOwnProfileOffersNoRule() {
         TestServer(mapOf("/a" to "<title>a</title>")).use { server ->
             val browser = newBrowser()

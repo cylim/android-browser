@@ -196,6 +196,13 @@ class SiteRulesUiTest {
         compose.onNodeWithTag("rule-site-field").assertTextContains(long)
         explanation().assertTextEquals("That is too long for a rule. A site and its path can take up to 200 characters.")
         compose.onNodeWithTag("save-site-rule").assertIsNotEnabled()
+
+        // The same at any length: dot steps that would shrink to nothing if the end were cut off.
+        val longer = "https://example.com/" + "./".repeat(1_200) + "private"
+        compose.onNodeWithTag("rule-site-field").performTextReplacement(longer)
+        compose.onNodeWithTag("rule-site-field").assertTextContains(longer)
+        explanation().assertTextEquals("That is too long for a rule. A site and its path can take up to 200 characters.")
+        compose.onNodeWithTag("save-site-rule").assertIsNotEnabled()
     }
 
     @Test

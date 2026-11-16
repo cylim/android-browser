@@ -64,10 +64,11 @@ sealed interface LinkOffer {
 
     /**
      * The person just moved the link to [profile]. The window offers a Site Rule, so links that
-     * [pattern] covers open there from now on: the pattern of the rule that sent this link
-     * elsewhere, or without one the link's site.
+     * [pattern] covers open there from now on. When a rule sent this link elsewhere, that is
+     * [rule], and the offer is to change it: [pattern] is its own. Without one, [pattern] is the
+     * link's site, for a new rule.
      */
-    data class Always(override val tab: TabId, val pattern: SitePattern, val profile: Profile) : LinkOffer
+    data class Always(override val tab: TabId, val pattern: SitePattern, val profile: Profile, val rule: SiteRule? = null) : LinkOffer
 
     /** That rule was just made. The window says so, with a way to the Site Rules. */
     data class RuleSaved(override val tab: TabId, val pattern: SitePattern, val profile: Profile) : LinkOffer
@@ -394,7 +395,7 @@ class BrowserState(
             val deciding = siteRuleRepository.ruleFor(url)
             val pattern = deciding?.pattern ?: SitePattern.forSiteOf(url)
             if (wasIncomingLink && pattern != null && deciding?.profileId != profile.id) {
-                offer(LinkOffer.Always(moved, pattern, profile))
+                offer(LinkOffer.Always(moved, pattern, profile, deciding))
             }
         }
     }
@@ -403,7 +404,9 @@ class BrowserState(
     fun acceptRuleOffer() {
         val offered = linkOffer as? LinkOffer.Always ?: return
         scope.launch {
-            val saved = siteRuleRepository.save(existing = null, offered.pattern, offered.profile.id)
+            // The deciding rule is changed in place. Made anew it would be the youngest, and an
+            // equally narrow rule that also covers the link would decide instead.
+            val saved = siteRuleRepository.save(existing = offered.rule, offered.pattern, offered.profile.id)
             // Still the same offer: the person may have gone on meanwhile.
             if (linkOffer == offered) linkOffer = if (saved) LinkOffer.RuleSaved(offered.tab, offered.pattern, offered.profile) else null
         }
