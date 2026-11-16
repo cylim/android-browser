@@ -95,7 +95,7 @@ class BrowserLayoutUiTest {
         windowSize = size
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(windowSize)) {
-                JrnyTheme { BrowserWindow(tab, profiles) }
+                JrnyTheme { BrowserWindow(tab, TestTabs.ui(), profiles) }
             }
         }
     }
@@ -423,6 +423,16 @@ class BrowserLayoutUiTest {
         compose.runOnUiThread { tab.popup!!.evaluateJavascript("window.close()", null) }
         compose.waitUntil(5_000) { tab.popup == null }
         assertTrue(tab.webView.isAttachedToWindow)
+    }
+
+    @Test
+    fun aRestoredTabScrollsBackToWhereItWas() {
+        show(PHONE_PORTRAIT)
+        val tall = page("<title>tall</title><div style='height:20000px'>top</div>")
+        compose.runOnUiThread { tab.restore(tall, 1500) }
+        compose.waitUntil(15_000) { !tab.isLoading && tab.title == "tall" }
+        compose.waitUntil(5_000) { tab.scrollY == 1500 }
+        assertEquals(1500, tab.scrollY)
     }
 
     private companion object {

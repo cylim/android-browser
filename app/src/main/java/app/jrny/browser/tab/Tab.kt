@@ -27,10 +27,15 @@ import app.jrny.browser.profile.WebProfile
  * Moving a page to another Profile creates a new Tab (ADR 0003).
  *
  * Create, use and destroy a Tab on the main thread, and only when `WebViewFeature.MULTI_PROFILE`
- * is supported (MainActivity checks).
+ * is supported (MainActivity checks). [onPageChanged] runs whenever [url] or [title] changes, even
+ * while nothing is drawn, so the Tab can be saved.
  */
 @SuppressLint("RequiresFeature")
-class Tab(private val context: Context, val profile: WebProfile) {
+class Tab(
+    private val context: Context,
+    val profile: WebProfile,
+    private val onPageChanged: (Tab) -> Unit = {},
+) {
 
     /**
      * The WebView showing this Tab. It is replaced with a new one if the renderer dies, so
@@ -72,19 +77,35 @@ class Tab(private val context: Context, val profile: WebProfile) {
         private set
 
     /** The page's own title, or null when it has none (or only repeats the address). */
-    val pageTitle: String?
-        get() = title.takeIf { it.isNotBlank() && it != url }
+    val pageTitle: String? get() = pageTitle(title, url)
 
     /** The site's host for display, without a leading `www.`, or empty for a non-web page. */
-    val displayHost: String
-        get() = WebAddress.hostOf(url).removePrefix("www.")
+    val displayHost: String get() = displayHost(url)
+
+    /** The page's vertical scroll position, in pixels, to save with the Tab. */
+    val scrollY: Int
+        get() = webView.scrollY
+
+    /** Where to scroll once the page being restored has loaded, or 0. */
+    private var restoreScrollY = 0
 
     /** Loads [address] in the Tab. A popup over the page closes, so the new page is what shows. */
     fun load(address: String) {
         closePopup()
         crashed = false
+        restoreScrollY = 0
         url = address
+        onPageChanged(this)
         webView.loadUrl(address)
+    }
+
+    /**
+     * Brings back a saved Tab: loads [address] and, once it has loaded, scrolls to [scrollY].
+     * The page itself is never saved, so it loads afresh (SPEC, "Tabs").
+     */
+    fun restore(address: String, scrollY: Int) {
+        load(address)
+        restoreScrollY = scrollY
     }
 
     fun goBack() {
@@ -183,6 +204,7 @@ class Tab(private val context: Context, val profile: WebProfile) {
             isLoading = true
             this@Tab.url = url
             updateHistory()
+            onPageChanged(this@Tab)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -190,6 +212,11 @@ class Tab(private val context: Context, val profile: WebProfile) {
             isLoading = false
             this@Tab.url = view.url ?: url
             updateHistory()
+            onPageChanged(this@Tab)
+            if (restoreScrollY > 0) {
+                view.scrollTo(0, restoreScrollY)
+                restoreScrollY = 0
+            }
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -197,6 +224,7 @@ class Tab(private val context: Context, val profile: WebProfile) {
             // Also fires for same-document navigations (history.pushState), which don't start a page load.
             this@Tab.url = url
             updateHistory()
+            onPageChanged(this@Tab)
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -222,7 +250,9 @@ class Tab(private val context: Context, val profile: WebProfile) {
         }
 
         override fun onReceivedTitle(view: WebView, title: String?) {
-            if (view == webView) this@Tab.title = title.orEmpty()
+            if (view != webView) return
+            this@Tab.title = title.orEmpty()
+            onPageChanged(this@Tab)
         }
 
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {

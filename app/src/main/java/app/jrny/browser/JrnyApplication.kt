@@ -8,12 +8,14 @@ import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.ProfileRepository
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.tab.TabRepository
 import kotlinx.coroutines.runBlocking
 
 class JrnyApplication : Application() {
 
     val database: JrnyDatabase by lazy { JrnyDatabase.open(this) }
     val profiles: ProfileRepository by lazy { ProfileRepository(database.profiles()) }
+    val tabs: TabRepository by lazy { TabRepository(database.tabs()) }
 
     /**
      * Before any activity, and so before any WebView loads a Profile: creates the first Profile on

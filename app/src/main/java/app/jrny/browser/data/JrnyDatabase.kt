@@ -1,9 +1,12 @@
 package app.jrny.browser.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
@@ -66,6 +69,9 @@ abstract class ProfileDao {
     @Query("UPDATE profiles SET pendingDeletion = 1 WHERE id = :id")
     protected abstract suspend fun markPending(id: Long)
 
+    @Query("DELETE FROM tabs WHERE profileId = :id")
+    protected abstract suspend fun deleteTabs(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -77,18 +83,109 @@ abstract class ProfileDao {
     @Transaction
     open suspend fun activate(id: Long) = setActivation(id, maxActivation() + 1)
 
-    /** Marks [id] for deletion unless it's the last live Profile. Returns whether it did. */
+    /**
+     * Marks [id] for deletion unless it's the last live Profile, and closes its Tabs, so their
+     * addresses don't outlive it on disk. Returns whether it did.
+     */
     @Transaction
     open suspend fun markPendingUnlessLast(id: Long): Boolean {
         if (countLive() <= 1) return false
         markPending(id)
+        deleteTabs(id)
         return true
     }
 }
 
-@Database(entities = [ProfileEntity::class], version = 1, exportSchema = true)
+/**
+ * One row per open Tab, so Tabs come back after Android kills the app (SPEC, "Tabs"). Only what's
+ * needed to reload the page is kept: its address, title and scroll position, never its content.
+ *
+ * A Profile's selected Tab is its Tab with the highest [lastUsed], a counter shared by all Tabs
+ * that grows each time a Tab is selected, so each Profile has one and nothing else to keep in sync.
+ */
+@Entity(
+    tableName = "tabs",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId")],
+)
+data class TabEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    /** Null for a new Tab that hasn't loaded anything. */
+    val url: String? = null,
+    val title: String = "",
+    /** The page's vertical scroll position, in pixels. */
+    val scrollY: Int = 0,
+    val lastUsed: Long = 0,
+)
+
+@Dao
+abstract class TabDao {
+    /** A Profile's Tabs, oldest first: the order the Tab list shows them in. */
+    @Query("SELECT * FROM tabs WHERE profileId = :profileId ORDER BY id")
+    abstract fun observe(profileId: Long): Flow<List<TabEntity>>
+
+    @Query("SELECT * FROM tabs WHERE id = :id")
+    abstract suspend fun get(id: Long): TabEntity?
+
+    @Query("UPDATE tabs SET url = :url, title = :title WHERE id = :id")
+    abstract suspend fun savePage(id: Long, url: String?, title: String)
+
+    @Query("UPDATE tabs SET scrollY = :scrollY WHERE id = :id")
+    abstract suspend fun saveScroll(id: Long, scrollY: Int)
+
+    @Query("SELECT COALESCE(MAX(lastUsed), 0) FROM tabs")
+    protected abstract suspend fun maxLastUsed(): Long
+
+    @Query("SELECT COUNT(*) FROM tabs WHERE profileId = :profileId")
+    protected abstract suspend fun count(profileId: Long): Int
+
+    @Insert
+    protected abstract suspend fun insertRow(tab: TabEntity): Long
+
+    @Query("UPDATE tabs SET lastUsed = :lastUsed WHERE id = :id")
+    protected abstract suspend fun setLastUsed(id: Long, lastUsed: Long)
+
+    @Query("DELETE FROM tabs WHERE id = :id")
+    protected abstract suspend fun deleteRow(id: Long)
+
+    /** Opens a Tab at the end of [profileId]'s list, selects it, and returns its id. */
+    @Transaction
+    open suspend fun open(profileId: Long, url: String?): Long =
+        insertRow(TabEntity(profileId = profileId, url = url, lastUsed = maxLastUsed() + 1))
+
+    @Transaction
+    open suspend fun select(id: Long) = setLastUsed(id, maxLastUsed() + 1)
+
+    /** Opens an empty Tab in [profileId] if it has none, so every Profile always has one. */
+    @Transaction
+    open suspend fun ensureOne(profileId: Long) {
+        if (count(profileId) == 0) open(profileId, null)
+    }
+
+    /**
+     * Closes [id]. The Profile's most recently used remaining Tab becomes its selected Tab, and
+     * closing its last Tab leaves an empty one.
+     */
+    @Transaction
+    open suspend fun close(id: Long) {
+        val row = get(id) ?: return
+        deleteRow(id)
+        ensureOne(row.profileId)
+    }
+}
+
+@Database(
+    entities = [ProfileEntity::class, TabEntity::class],
+    version = 2,
+    exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
+)
 abstract class JrnyDatabase : RoomDatabase() {
     abstract fun profiles(): ProfileDao
+    abstract fun tabs(): TabDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

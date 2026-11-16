@@ -23,20 +23,25 @@ import app.jrny.browser.tab.Tab
 typealias AddressFieldSlot = @Composable (Modifier, Shape) -> Unit
 
 /**
- * The browser: the Active Profile's Tab in [BrowserWindow], and the Profile editor when it's open.
- * Switching Profiles shows the other Profile's Tab, which keeps its page.
+ * The browser: the Active Profile's selected Tab in [BrowserWindow], and the Profile editor when
+ * it's open. Switching Profiles or Tabs shows the other Tab, which keeps its page while it's live.
  */
 @Composable
 fun BrowserScreen(browser: BrowserState) {
     val all by browser.profiles.collectAsState()
-    val active by browser.activeProfile.collectAsState()
+    val active by browser.active.collectAsState()
     val pending by browser.pendingDeletionCount.collectAsState()
-    val profile = active ?: return
+    val current = active ?: return
+    val profile = current.profile
     // Some(null) creates a Profile, Some(profile) changes one.
     var editing by remember { mutableStateOf<EditorTarget?>(null) }
     val profiles = ProfilesUi(all, profile, pending, browser::switchTo, edit = { editing = EditorTarget(it) })
+    val tabs = TabsUi(current.tabs, current.selected, browser::selectTab, browser::closeTab, open = { browser.openTab(profile) })
 
-    BrowserWindow(browser.tabFor(profile), profiles)
+    val selected = current.selected.id
+    val tab = browser.tabFor(current.selected)
+    LaunchedEffect(selected) { browser.shown(selected) }
+    BrowserWindow(tab, tabs, profiles)
 
     editing?.let { target ->
         val existing = target.profile
@@ -64,7 +69,7 @@ private class EditorTarget(val profile: Profile?)
  * folding). The Tab and its page survive the switch.
  */
 @Composable
-fun BrowserWindow(tab: Tab, profiles: ProfilesUi) {
+fun BrowserWindow(tab: Tab, tabs: TabsUi, profiles: ProfilesUi) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
         if (tab.popup != null) tab.closePopup() else tab.goBack()
@@ -91,8 +96,8 @@ fun BrowserWindow(tab: Tab, profiles: ProfilesUi) {
             }
             when (layout) {
                 BrowserLayout.Sidebar ->
-                    SidebarLayout(tab, profiles, addressField, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
-                BrowserLayout.BottomBar -> BottomBarLayout(tab, profiles, addressField)
+                    SidebarLayout(tab, tabs, profiles, addressField, sidebarCollapsed, onCollapsedChange = { sidebarCollapsed = it })
+                BrowserLayout.BottomBar -> BottomBarLayout(tab, tabs, profiles, addressField, editingAddress = draft.value != null)
             }
         }
     }

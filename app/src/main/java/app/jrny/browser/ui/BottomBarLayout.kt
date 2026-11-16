@@ -1,6 +1,24 @@
 package app.jrny.browser.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.union
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
@@ -42,15 +60,38 @@ private val BAR_GAP = 8.dp
 /** Icon buttons are 48dp with a 24dp icon, so 4dp puts the outer icons 16dp from the screen edges. */
 private val BAR_SIDE_PADDING = 4.dp
 
+/** Between the Tab Overview's cards and the screen's sides. */
+private val OVERVIEW_GUTTER = 8.dp
+private val OVERVIEW_ROW_SHAPE = RoundedCornerShape(12.dp)
+
 /**
  * The narrow-window layout: the page, with back, forward, the Active Profile's avatar, the
- * address field and reload along the bottom (SPEC, "Bottom Bar"). It runs edge to edge: the page
- * starts at the top edge (only a status bar kept under a camera cutout pushes it down), and the
- * bar leaves just enough room below for the gesture handle.
+ * address field (reload sits inside it) and the Tab count along the bottom (SPEC, "Bottom Bar").
+ * Swiping along the bar switches Tabs, and the Tab count opens the Tab Overview. It runs edge to
+ * edge: the page starts at the top edge (only a status bar kept under a camera cutout pushes it
+ * down), and the bar leaves just enough room below for the gesture handle.
  */
 @Composable
-fun BottomBarLayout(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSlot) {
+fun BottomBarLayout(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: AddressFieldSlot, editingAddress: Boolean = false) {
     var sheet by remember { mutableStateOf(false) }
+    var overview by rememberSaveable { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        BarAndPage(tab, tabs, profiles, addressField, editingAddress, onProfiles = { sheet = true }, onTabs = { overview = true })
+        if (overview) TabOverview(tabs, profileTint(profiles.active), onClose = { overview = false })
+    }
+    if (sheet) ProfileSheet(profiles, onDismiss = { sheet = false })
+}
+
+@Composable
+private fun BarAndPage(
+    tab: Tab,
+    tabs: TabsUi,
+    profiles: ProfilesUi,
+    addressField: AddressFieldSlot,
+    editingAddress: Boolean,
+    onProfiles: () -> Unit,
+    onTabs: () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -75,24 +116,103 @@ fun BottomBarLayout(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSl
                 LoadProgress(tab)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(
-                        start = BAR_SIDE_PADDING,
-                        end = BAR_SIDE_PADDING,
-                        top = BAR_GAP,
-                        bottom = bottomEdgeSpace(BAR_GAP),
-                    ),
+                    modifier = Modifier
+                        // Swiping along the bar switches to the next or previous Tab (SPEC, "Bottom Bar"),
+                        // also across the address field, except while typing, when a drag moves the cursor.
+                        .horizontalSwipe(tabs.selected.id, tabs.all, beforeChildren = !editingAddress) { step ->
+                            tabs.neighbour(step)?.let { tabs.select(it.id) }
+                        }
+                        .padding(
+                            start = BAR_SIDE_PADDING,
+                            end = BAR_SIDE_PADDING,
+                            top = BAR_GAP,
+                            bottom = bottomEdgeSpace(BAR_GAP),
+                        )
+                        .testTag("bottom-bar"),
                 ) {
                     BackButton(tab)
                     ForwardButton(tab)
                     // The Profile sheet: switch, create, edit (SPEC, "Bottom Bar").
-                    ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile)) { sheet = true }
+                    ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile), onClick = onProfiles)
                     addressField(Modifier.weight(1f), FIELD_SHAPE)
-                    ReloadOrStopButton(tab)
+                    TabCountButton(tabs.all.size, onClick = onTabs)
                 }
             }
         }
     }
-    if (sheet) ProfileSheet(profiles, onDismiss = { sheet = false })
+}
+
+/**
+ * The Tab Overview: all the Active Profile's Tabs, full screen over the page. Choosing a Tab shows
+ * it; the bar at the bottom opens a new Tab or goes back to the page, as Back does. The list's
+ * text and close buttons line up with the bar's icons, [OVERVIEW_GUTTER] plus a row's own inset
+ * from the screen's edges.
+ */
+@Composable
+private fun TabOverview(tabs: TabsUi, tint: Color, onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
+    Surface(color = tint, modifier = Modifier.fillMaxSize().testTag("tab-overview")) {
+        Column(
+            Modifier
+                .windowInsetsPadding(WindowInsets.tappableElement.only(WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
+        ) {
+            TabList(
+                tabs,
+                shape = OVERVIEW_ROW_SHAPE,
+                selectedColor = MaterialTheme.colorScheme.surface,
+                contentPadding = PaddingValues(top = OVERVIEW_GUTTER) + overviewTopSpace(),
+                onChosen = onClose,
+                modifier = Modifier.weight(1f).padding(horizontal = OVERVIEW_GUTTER),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(
+                    start = OVERVIEW_GUTTER + BAR_SIDE_PADDING,
+                    end = OVERVIEW_GUTTER + BAR_SIDE_PADDING,
+                    top = BAR_GAP,
+                    bottom = bottomEdgeSpace(BAR_GAP),
+                ),
+            ) {
+                IconButton(
+                    onClick = {
+                        tabs.open()
+                        onClose()
+                    },
+                    modifier = Modifier.testTag("new-tab"),
+                ) {
+                    Icon(Icons.Filled.Add, stringResource(R.string.open_new_tab))
+                }
+                Text(
+                    pluralStringResource(R.plurals.tab_count, tabs.all.size, tabs.all.size),
+                    style = MaterialTheme.typography.titleSmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onClose, modifier = Modifier.testTag("close-overview")) {
+                    Text(stringResource(R.string.done))
+                }
+            }
+        }
+    }
+}
+
+/** Above the Tab Overview's list: a freeform window's title bar, a status bar kept under a top cutout, and the cutout. */
+@Composable
+private fun overviewTopSpace(): PaddingValues =
+    WindowInsets.captionBar.union(WindowInsets.statusBars).union(WindowInsets.displayCutout)
+        .only(WindowInsetsSides.Top)
+        .asPaddingValues()
+
+@Composable
+private operator fun PaddingValues.plus(other: PaddingValues): PaddingValues {
+    val direction = LocalLayoutDirection.current
+    return PaddingValues(
+        start = calculateStartPadding(direction) + other.calculateStartPadding(direction),
+        top = calculateTopPadding() + other.calculateTopPadding(),
+        end = calculateEndPadding(direction) + other.calculateEndPadding(direction),
+        bottom = calculateBottomPadding() + other.calculateBottomPadding(),
+    )
 }
 
 /** The Profile sheet, from the Bottom Bar's avatar: the same list as the Sidebar's menu. */

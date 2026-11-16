@@ -69,7 +69,7 @@ class ProfilesUiTest {
 
     private fun show(size: DpSize, active: Profile = TestProfiles.personal) = compose.setContent {
         DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size)) {
-            JrnyTheme { BrowserWindow(tab, TestProfiles.ui(active = active, switched = switched, edited = edited)) }
+            JrnyTheme { BrowserWindow(tab, TestTabs.ui(), TestProfiles.ui(active = active, switched = switched, edited = edited)) }
         }
     }
 

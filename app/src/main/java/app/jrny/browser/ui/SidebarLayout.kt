@@ -1,8 +1,6 @@
 package app.jrny.browser.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -27,6 +24,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.DropdownMenu
@@ -45,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -77,9 +74,6 @@ private val CONTENT_INSET = 16.dp
  */
 private val ICON_SLOT_INSET = 4.dp
 
-/** Height of the address field and of a Tab row. */
-private val ROW_HEIGHT = 56.dp
-
 /** Corner radius shared by the address field, Tab rows, menus and the page's edge next to the Sidebar. */
 private val CORNER_RADIUS = 12.dp
 private val CORNER = RoundedCornerShape(CORNER_RADIUS)
@@ -100,6 +94,7 @@ private val PAGE_SHAPE = RoundedCornerShape(topStart = CORNER_RADIUS, bottomStar
 @Composable
 fun SidebarLayout(
     tab: Tab,
+    tabs: TabsUi,
     profiles: ProfilesUi,
     addressField: AddressFieldSlot,
     collapsed: Boolean,
@@ -118,7 +113,7 @@ fun SidebarLayout(
                 if (collapsed) {
                     Rail(tab, profiles, onExpand = { onCollapsedChange(false) })
                 } else {
-                    Sidebar(tab, profiles, addressField, onCollapse = { onCollapsedChange(true) })
+                    Sidebar(tab, tabs, profiles, addressField, onCollapse = { onCollapsedChange(true) })
                 }
             }
             Box(
@@ -152,7 +147,7 @@ private fun systemSpace(side: WindowInsetsSides): WindowInsets =
         .union(WindowInsets.displayCutout.only(WindowInsetsSides.Top + side))
 
 @Composable
-private fun Sidebar(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSlot, onCollapse: () -> Unit) {
+private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, addressField: AddressFieldSlot, onCollapse: () -> Unit) {
     Column(
         Modifier
             .width(SIDEBAR_WIDTH)
@@ -174,7 +169,7 @@ private fun Sidebar(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSl
             }
         }
         Spacer(Modifier.height(GUTTER))
-        // TextField puts its text 16dp inside, which is CONTENT_INSET, and is 56dp tall (ROW_HEIGHT).
+        // TextField puts its text 16dp inside, which is CONTENT_INSET, and is 56dp tall, like a Tab row.
         addressField(Modifier.fillMaxWidth(), CORNER)
 
         // The Tab area: swiping across it switches to the next or previous Profile (SPEC, "Sidebar").
@@ -182,17 +177,26 @@ private fun Sidebar(tab: Tab, profiles: ProfilesUi, addressField: AddressFieldSl
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .swipeBetweenProfiles(profiles)
+                .horizontalSwipe(profiles.active.id, profiles.all) { step -> profiles.neighbour(step)?.let(profiles.switchTo) }
                 .testTag("sidebar-tabs"),
         ) {
-            Text(
-                stringResource(R.string.tabs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = CONTENT_INSET, top = GUTTER * 2, bottom = GUTTER),
-            )
-            // One Tab, always the selected one, until Milestone 3 adds more.
-            SelectedTabRow(tab)
+            // The label's text starts on the content line; the new-Tab button sits in the icon
+            // column at the end, under the collapse arrow.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = GUTTER, end = ICON_SLOT_INSET),
+            ) {
+                Text(
+                    stringResource(R.string.tabs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f).padding(start = CONTENT_INSET),
+                )
+                IconButton(onClick = tabs.open, modifier = Modifier.testTag("new-tab")) {
+                    Icon(Icons.Filled.Add, stringResource(R.string.open_new_tab))
+                }
+            }
+            TabList(tabs, shape = CORNER, selectedColor = MaterialTheme.colorScheme.surface, modifier = Modifier.weight(1f))
         }
         ProfileSwitcher(profiles)
     }
@@ -220,38 +224,6 @@ private fun Rail(tab: Tab, profiles: ProfilesUi, onExpand: () -> Unit) {
             // The avatar sits ICON_SLOT_INSET in from the gutter; the menu starts at the gutter,
             // like the expanded Sidebar's, so the avatars in it share the icon column.
             ProfileMenu(profiles, expanded = menu, onDismiss = { menu = false }, offset = DpOffset(-ICON_SLOT_INSET, 0.dp))
-        }
-    }
-}
-
-@Composable
-private fun SelectedTabRow(tab: Tab) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = CORNER,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .heightIn(min = ROW_HEIGHT)
-                .padding(horizontal = CONTENT_INSET, vertical = GUTTER),
-        ) {
-            Text(
-                tab.pageTitle ?: tab.displayHost.ifEmpty { stringResource(R.string.new_tab) },
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
-                Text(
-                    tab.displayHost,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }
@@ -295,26 +267,6 @@ private fun ProfileMenu(profiles: ProfilesUi, expanded: Boolean, onDismiss: () -
         ProfileList(profiles, onDone = onDismiss, modifier = Modifier.width(SIDEBAR_WIDTH))
     }
 }
-
-/** A horizontal swipe of at least [SWIPE_DISTANCE] switches to the next (left) or previous (right) Profile. */
-private fun Modifier.swipeBetweenProfiles(profiles: ProfilesUi): Modifier = pointerInput(profiles.active.id, profiles.all) {
-    var dragged = 0f
-    detectHorizontalDragGestures(
-        onDragStart = { dragged = 0f },
-        onHorizontalDrag = { _, amount -> dragged += amount },
-        onDragEnd = {
-            val step = when {
-                dragged <= -SWIPE_DISTANCE.toPx() -> 1
-                dragged >= SWIPE_DISTANCE.toPx() -> -1
-                else -> 0
-            }
-            if (step != 0) profiles.neighbour(step)?.let(profiles.switchTo)
-        },
-    )
-}
-
-/** How far a swipe across the Tab area has to travel to switch Profiles. */
-private val SWIPE_DISTANCE = 64.dp
 
 /** The surface color, tinted 10% toward the Profile's color. */
 @Composable
