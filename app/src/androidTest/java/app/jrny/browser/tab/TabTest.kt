@@ -163,6 +163,27 @@ class TabTest {
         assertFalse(onMain { tab.crashed })
     }
 
+    @Test
+    fun aPageThatFailsToLoadKeepsItsAddressAndTakesNoTitleFromTheErrorPage() {
+        val tab = newTab("test-load-failure")
+        val one = titled("one")
+        onMain { tab.load(one) }
+        awaitPage(tab, one, "one navigate")
+
+        // Nothing listens on this port. WebView shows its own error page, titled "Webpage not available".
+        val unreachable = "http://127.0.0.1:9/"
+        onMain { tab.load(unreachable) }
+        await("load failed") { !tab.isLoading && tab.url == unreachable }
+        Thread.sleep(300)
+        assertEquals("", onMain { tab.title })
+        assertEquals(unreachable, onMain { tab.url })
+
+        // The next page that loads has its title again.
+        val two = titled("two")
+        onMain { tab.load(two) }
+        awaitPage(tab, two, "two navigate")
+    }
+
     private fun newTab(profileId: String): Tab = onMain {
         Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId(profileId)))
             .also { tabs += it }

@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -89,11 +90,18 @@ class Tab(
     /** Where to scroll once the page being restored has loaded, or 0. */
     private var restoreScrollY = 0
 
+    /** The saved title of the page being restored, which stays if that page fails to load. */
+    private var restoringTitle: String? = null
+
+    /** True once the page's own load failed. WebView then shows its error page, whose title isn't the page's. */
+    private var loadFailed = false
+
     /** Loads [address] in the Tab. A popup over the page closes, so the new page is what shows. */
     fun load(address: String) {
         closePopup()
         crashed = false
         restoreScrollY = 0
+        restoringTitle = null
         url = address
         onPageChanged(this)
         webView.loadUrl(address)
@@ -101,10 +109,13 @@ class Tab(
 
     /**
      * Brings back a saved Tab: loads [address] and, once it has loaded, scrolls to [scrollY].
-     * The page itself is never saved, so it loads afresh (SPEC, "Tabs").
+     * The page itself is never saved, so it loads afresh (SPEC, "Tabs"). The Tab keeps its saved
+     * [title] until the page reports its own, so a page that fails to load doesn't lose its name.
      */
-    fun restore(address: String, scrollY: Int) {
+    fun restore(address: String, title: String, scrollY: Int) {
+        this.title = title
         load(address)
+        restoringTitle = title
         restoreScrollY = scrollY
     }
 
@@ -202,6 +213,7 @@ class Tab(
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             if (view != webView) return
             isLoading = true
+            loadFailed = false
             this@Tab.url = url
             updateHistory()
             onPageChanged(this@Tab)
@@ -217,6 +229,16 @@ class Tab(
                 view.scrollTo(0, restoreScrollY)
                 restoreScrollY = 0
             }
+            restoringTitle = null
+        }
+
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (view != webView || !request.isForMainFrame) return
+            // The page didn't load. Keep the title it was saved with, or none, so the Tab shows
+            // its site, instead of the error page's "Webpage not available".
+            loadFailed = true
+            title = restoringTitle.orEmpty()
+            onPageChanged(this@Tab)
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -250,7 +272,7 @@ class Tab(
         }
 
         override fun onReceivedTitle(view: WebView, title: String?) {
-            if (view != webView) return
+            if (view != webView || loadFailed) return
             this@Tab.title = title.orEmpty()
             onPageChanged(this@Tab)
         }

@@ -91,7 +91,7 @@ class BrowserState(
         val saving = scope.launch {
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
         }
-        saved.url?.let { tab.restore(it, saved.scrollY) }
+        saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
         live[saved.id] = LiveTab(tab, saving)
         return tab
     }

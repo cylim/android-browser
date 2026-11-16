@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -159,6 +160,23 @@ class BrowserStateTest {
         val firstSelected = active(first).selected
         assertNotSame(onMain { first.tabFor(firstSelected) }, restored)
         await("a reloaded") { !restored.isLoading && restored.url == titled("a") && restored.title == "a navigate" }
+    }
+
+    @Test
+    fun aRestoredTabKeepsItsSavedTitleWhenThePageDoesNotLoad() {
+        val browser = newBrowser()
+        val personal = active(browser).profile.id
+        // Nothing listens on this port, so the page fails to load and reports no title.
+        val unreachable = "http://127.0.0.1:9/"
+        val id = runBlocking { tabs.open(personal, unreachable) }
+        runBlocking { tabs.savePage(id, unreachable, "Saved title") }
+
+        val tab = show(browser, id)
+        assertEquals("Saved title", onMain { tab.title })
+        await("load failed") { !tab.isLoading }
+        // The saved row is written after each change. It must still carry the title.
+        Thread.sleep(500)
+        assertEquals("Saved title", runBlocking { tabs.tabs(personal).first() }.single { it.id == id }.title)
     }
 
     @Test

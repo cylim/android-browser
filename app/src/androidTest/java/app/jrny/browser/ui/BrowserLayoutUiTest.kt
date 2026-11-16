@@ -429,7 +429,7 @@ class BrowserLayoutUiTest {
     fun aRestoredTabScrollsBackToWhereItWas() {
         show(PHONE_PORTRAIT)
         val tall = page("<title>tall</title><div style='height:20000px'>top</div>")
-        compose.runOnUiThread { tab.restore(tall, 1500) }
+        compose.runOnUiThread { tab.restore(tall, "", 1500) }
         compose.waitUntil(15_000) { !tab.isLoading && tab.title == "tall" }
         compose.waitUntil(5_000) { tab.scrollY == 1500 }
         assertEquals(1500, tab.scrollY)
