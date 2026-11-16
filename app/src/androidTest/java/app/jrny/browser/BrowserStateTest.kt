@@ -585,7 +585,7 @@ class BrowserStateTest {
             await("pinned") { browser.bookmarks.value.map { it.url to it.title } == listOf(server.url("/pin") to "Pinned page") }
             val bookmark = onMain { browser.bookmarks.value.single() }
             await("the Tab is its Pinned Tab") { browser.active.value?.tabs?.single { it.id == id }?.bookmarkId == bookmark.id }
-            assertEquals(listOf(PinnedItem.Page(bookmark)), onMain { browser.pinned.value })
+            await("listed under Pinned") { browser.pinned.value == listOf(PinnedItem.Page(bookmark)) }
 
             // Closing the Pinned Tab closes its Tab. The bookmark stays, closed.
             onMain { browser.closeTab(id) }

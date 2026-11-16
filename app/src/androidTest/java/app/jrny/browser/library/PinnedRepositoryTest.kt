@@ -183,6 +183,24 @@ class PinnedRepositoryTest {
     }
 
     @Test
+    fun aToggleBookmarksAndPinsInOneStepAndTheNextToggleUndoesBoth() = runBlocking {
+        val tab = tabs.open(personal, "https://a.example/")
+        assertTrue(bookmarks.toggle(personal, "https://a.example/", "A", pinTab = tab))
+        assertEquals(bookmark("https://a.example/").id, open().single().bookmarkId)
+
+        // The second toggle removes the bookmark and leaves nothing pinned.
+        assertFalse(bookmarks.toggle(personal, "https://a.example/", "A", pinTab = tab))
+        assertEquals(emptyList<Bookmark>(), marked())
+        assertEquals(listOf<Long?>(null), open().map { it.bookmarkId })
+
+        // A Tab of another Profile is never taken.
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        assertTrue(bookmarks.toggle(work, "https://w.example/", "W", pinTab = tab))
+        assertEquals(listOf<Long?>(null), open().map { it.bookmarkId })
+        assertEquals(1, marked(work).size)
+    }
+
+    @Test
     fun foldersAndPinsBelongToTheirProfileAndGoWithIt() = runBlocking {
         val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
         val reading = bookmarks.addFolder(personal, "Reading")!!

@@ -130,9 +130,12 @@ fun TabList(
     val openTabs = tabs.all.filter { it.bookmarkId in listed }.associateBy { it.bookmarkId }
     val others = tabs.all.filter { it.bookmarkId !in listed }
 
-    /** [list] with the entry at [index] moved [by] places, or null when that leaves the list. */
-    fun <T> moved(list: List<T>, index: Int, by: Int): List<T>? =
-        if (index + by !in list.indices) null else list.toMutableList().apply { add(index + by, removeAt(index)) }
+    /**
+     * What moves the entry at [index] of [list] [by] places and hands the new order to [reorder],
+     * or null when that would leave the list. The new order is made only when it is asked for.
+     */
+    fun <T> mover(list: List<T>, index: Int, by: Int, reorder: (List<T>) -> Unit): (() -> Unit)? =
+        if (index + by !in list.indices) null else ({ reorder(list.toMutableList().apply { add(index + by, removeAt(index)) }) })
 
     @Composable
     fun Pinned(bookmark: Bookmark, indent: Dp = 0.dp, onMoveUp: (() -> Unit)?, onMoveDown: (() -> Unit)?) {
@@ -167,8 +170,8 @@ fun TabList(
             }
             pins.items.forEachIndexed { index, entry ->
                 // The top level in its new order, when this entry can go that way.
-                val up = moved(pins.items, index, -1)?.let { { pins.reorder(it) } }
-                val down = moved(pins.items, index, 1)?.let { { pins.reorder(it) } }
+                val up = mover(pins.items, index, -1, pins.reorder)
+                val down = mover(pins.items, index, 1, pins.reorder)
                 when (entry) {
                     is PinnedItem.Page -> item(key = "pin-${entry.bookmark.id}") { Pinned(entry.bookmark, onMoveUp = up, onMoveDown = down) }
                     is PinnedItem.Group -> {
@@ -188,8 +191,8 @@ fun TabList(
                                 Pinned(
                                     bookmark,
                                     indent = FOLDER_INDENT,
-                                    onMoveUp = moved(folder.bookmarks, place, -1)?.let { { pins.reorderIn(it) } },
-                                    onMoveDown = moved(folder.bookmarks, place, 1)?.let { { pins.reorderIn(it) } },
+                                    onMoveUp = mover(folder.bookmarks, place, -1, pins.reorderIn),
+                                    onMoveDown = mover(folder.bookmarks, place, 1, pins.reorderIn),
                                 )
                             }
                             if (folder.bookmarks.isEmpty()) item(key = "folder-empty-${folder.id}") { EmptyFolderHint() }

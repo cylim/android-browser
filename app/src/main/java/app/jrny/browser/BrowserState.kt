@@ -503,10 +503,7 @@ class BrowserState(
      * what it is: its page is only bookmarked.
      */
     fun toggleBookmark(tab: SavedTab, url: String, title: String) {
-        scope.launch {
-            val bookmarked = bookmarkRepository.toggle(tab.profileId, url, title)
-            if (bookmarked && !tab.isPrivate) bookmarkRepository.pin(tab.id, url, title)
-        }
+        scope.launch { bookmarkRepository.toggle(tab.profileId, url, title, pinTab = tab.id.takeUnless { tab.isPrivate }) }
     }
 
     /**

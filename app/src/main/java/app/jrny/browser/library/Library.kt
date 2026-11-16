@@ -117,12 +117,13 @@ class BookmarkRepository(private val dao: BookmarkDao, private val now: () -> Lo
     suspend fun remove(profile: ProfileId, url: String) = dao.remove(profile.toLong(), url)
 
     /**
-     * Bookmarks [url] in [profile], or removes the bookmark if that Profile has one. Returns
-     * whether it is bookmarked afterwards. An address that isn't a web page never is.
+     * Bookmarks [url] in [profile], or removes the bookmark if that Profile has one. A newly
+     * added bookmark takes [pinTab], a Tab of that Profile, as its Pinned Tab. Returns whether
+     * the address is bookmarked afterwards. An address that isn't a web page never is.
      */
-    suspend fun toggle(profile: ProfileId, url: String, title: String): Boolean {
+    suspend fun toggle(profile: ProfileId, url: String, title: String, pinTab: TabId? = null): Boolean {
         if (!WebAddress.isWebAddress(url)) return false
-        return dao.toggle(BookmarkEntity(profileId = profile.toLong(), url = url, title = title, createdAt = now()))
+        return dao.toggle(BookmarkEntity(profileId = profile.toLong(), url = url, title = title, createdAt = now()), pinTab?.value)
     }
 
     /**

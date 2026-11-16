@@ -496,15 +496,20 @@ abstract class BookmarkDao {
 
     /**
      * Removes the Profile's bookmark of that address if it has one, and adds it otherwise, decided
-     * by what is in the table now. Returns whether the address is bookmarked afterwards.
+     * by what is in the table now. A newly added bookmark takes the Tab [pinTabId], if that is a
+     * Tab of the same Profile, as its Pinned Tab, in the same step: two quick toggles can't leave
+     * the second one's removal undone by the first one's pinning. Returns whether the address is
+     * bookmarked afterwards.
      */
     @Transaction
-    open suspend fun toggle(bookmark: BookmarkEntity): Boolean {
+    open suspend fun toggle(bookmark: BookmarkEntity, pinTabId: Long? = null): Boolean {
         if (has(bookmark.profileId, bookmark.url)) {
             remove(bookmark.profileId, bookmark.url)
             return false
         }
-        return add(bookmark) != null
+        val id = add(bookmark) ?: return false
+        if (pinTabId != null && tab(pinTabId)?.profileId == bookmark.profileId) setTabBookmark(pinTabId, id)
+        return true
     }
 
     /**
