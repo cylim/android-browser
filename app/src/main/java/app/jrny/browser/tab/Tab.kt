@@ -91,12 +91,18 @@ class Tab(
     val scrollY: Int
         get() = if (restoreScrollY > 0) restoreScrollY else webView.scrollY
 
-    /** Where to scroll once the page being restored has loaded, or 0. */
+    /** Where to scroll once the page being restored has loaded and is laid out, or 0. */
     private var restoreScrollY = 0
 
     /**
-     * The saved title of the page being restored. It stays until the page reports its own title,
-     * and comes back if the page fails to load, in whichever order WebView reports that.
+     * True once the restored page has loaded. The restore ends when the next page starts. Until
+     * then a failure, in whatever order WebView reports it, still brings back the saved title.
+     */
+    private var restoreDone = false
+
+    /**
+     * The saved title of the page being restored. The page's own title replaces it on screen, and
+     * it comes back if the page fails to load.
      */
     private var restoringTitle: String? = null
 
@@ -108,6 +114,7 @@ class Tab(
         closePopup()
         crashed = false
         restoreScrollY = 0
+        restoreDone = false
         restoringTitle = null
         url = address
         onPageChanged(this)
@@ -194,6 +201,23 @@ class Tab(
         return view
     }
 
+    /**
+     * Scrolls the restored page to [scrollY] once it's ready to draw. When the load finishes the
+     * page may not be laid out yet, and scrolling then does nothing.
+     */
+    private fun scrollWhenLaidOut(view: WebView, scrollY: Int) {
+        view.postVisualStateCallback(
+            0,
+            object : WebView.VisualStateCallback() {
+                override fun onComplete(requestId: Long) {
+                    if (view != webView || !restoreDone || restoreScrollY != scrollY) return
+                    view.scrollTo(0, scrollY)
+                    restoreScrollY = 0
+                }
+            },
+        )
+    }
+
     private fun updateHistory() {
         canGoBack = webView.canGoBack()
         canGoForward = webView.canGoForward()
@@ -229,6 +253,12 @@ class Tab(
             if (view != webView) return
             isLoading = true
             loadFailed = false
+            if (restoreDone) {
+                // The restored page had loaded, and this is the next page.
+                restoreScrollY = 0
+                restoringTitle = null
+                restoreDone = false
+            }
             this@Tab.url = url
             updateHistory()
             onPageChanged(this@Tab)
@@ -240,9 +270,10 @@ class Tab(
             this@Tab.url = view.url ?: url
             updateHistory()
             onPageChanged(this@Tab)
-            if (restoreScrollY > 0) {
-                view.scrollTo(0, restoreScrollY)
-                restoreScrollY = 0
+            // A page that failed keeps its saved title and position for a reload.
+            if (!loadFailed && !restoreDone && (restoreScrollY > 0 || restoringTitle != null)) {
+                restoreDone = true
+                if (restoreScrollY > 0) scrollWhenLaidOut(view, restoreScrollY)
             }
         }
 
@@ -289,7 +320,6 @@ class Tab(
             if (view != webView || loadFailed) return
             // A restored page keeps its saved title until it has one of its own.
             if (restoringTitle != null && title.isNullOrBlank()) return
-            restoringTitle = null
             this@Tab.title = title.orEmpty()
             onPageChanged(this@Tab)
         }

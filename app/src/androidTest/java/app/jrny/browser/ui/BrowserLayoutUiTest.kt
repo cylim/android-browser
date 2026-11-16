@@ -438,7 +438,8 @@ class BrowserLayoutUiTest {
             assertEquals(1500, tab.scrollY)
         }
         compose.waitUntil(15_000) { !tab.isLoading && tab.title == "tall" }
-        compose.waitUntil(5_000) { tab.scrollY == 1500 }
+        // The page itself, not the position the Tab is still waiting to apply.
+        compose.waitUntil(15_000) { tab.webView.scrollY == 1500 }
         assertEquals(1500, tab.scrollY)
     }
 

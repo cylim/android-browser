@@ -170,12 +170,16 @@ class BrowserStateTest {
         val unreachable = "http://127.0.0.1:9/"
         val id = runBlocking { tabs.open(personal, unreachable) }
         runBlocking { tabs.savePage(id, unreachable, "Saved title") }
+        // The Tab must be created from the row that already has the title.
+        awaitSaved(browser, id, unreachable, "Saved title")
 
+        // WebView reports the failure, then its error page's own title. Neither may replace the
+        // saved title, on the Tab or in its saved row.
         val tab = show(browser, id)
         assertEquals("Saved title", onMain { tab.title })
         await("load failed") { !tab.isLoading }
-        // The saved row is written after each change. It must still carry the title.
         Thread.sleep(500)
+        assertEquals("Saved title", onMain { tab.title })
         assertEquals("Saved title", runBlocking { tabs.tabs(personal).first() }.single { it.id == id }.title)
     }
 
