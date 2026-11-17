@@ -3,6 +3,7 @@ package app.jrny.browser.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import app.jrny.browser.BrowserState
 import app.jrny.browser.BuildConfig
 import app.jrny.browser.LinkOffer
 import app.jrny.browser.address.AddressInput
+import app.jrny.browser.library.ProfilePages
 import app.jrny.browser.settings.Suggestion
 import kotlinx.coroutines.delay
 import app.jrny.browser.profile.Profile
@@ -47,6 +49,13 @@ class WindowSlots(
     val panel: (@Composable (PaddingValues) -> Unit)? = null,
     /** What the address field offers for the text typed so far, or null when there is nothing. */
     val suggestions: (@Composable (Modifier) -> Unit)? = null,
+    /**
+     * The Start Page, while the Tab has no web page, or null. The layout draws it over the page,
+     * under the prompts and suggestions. It passes the space the content must keep clear at the
+     * bottom, and the system's insets the content must keep clear of, while the Start Page's
+     * color runs under them.
+     */
+    val startPage: (@Composable (contentPadding: PaddingValues, contentInsets: WindowInsets) -> Unit)? = null,
 )
 
 /**
@@ -64,6 +73,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     var editing by remember { mutableStateOf<EditorTarget?>(null) }
     val profiles = ProfilesUi(all, profile, pending, browser::switchTo, edit = { editing = EditorTarget(it) })
     val pinned by browser.pinned.collectAsState()
+    val startPagePages by browser.startPagePages.collectAsState()
     val tabs = TabsUi(
         all = current.tabs,
         selected = current.selected,
@@ -95,6 +105,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
             deleteFolder = browser::deleteFolder,
             reorder = { browser.reorderPinned(profile, it) },
             reorderIn = { browser.reorderFolder(profile, it) },
+            openHere = { browser.openPinnedHere(profile, current.selected, it) },
         ),
     )
 
@@ -138,7 +149,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     // The browser wears the Active Profile's color: its accents here, its tint in the layouts.
     CompositionLocalProvider(LocalSiteIcons provides siteIcons) {
     ProfileTheme(profile.color.color) {
-        BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules)
+        BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules, startPagePages = startPagePages)
 
         editing?.let { target ->
             val existing = target.profile
@@ -182,6 +193,11 @@ fun BrowserWindow(
     /** What to offer for the text typed in the address field so far. */
     suggest: suspend (String) -> List<Suggestion> = { emptyList() },
     siteRules: SiteRulesUi = SiteRulesUi(),
+    /**
+     * The Pinned Tabs and history the Start Page shows, with the Profile they belong to, or null
+     * until they have loaded. The Start Page shows them only once they are the Active Profile's.
+     */
+    startPagePages: ProfilePages? = ProfilePages(profiles.active.id, tabs.pins.items, library.visits),
 ) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
@@ -235,6 +251,12 @@ fun BrowserWindow(
             focusManager.clearFocus(force = true)
             tab.webView.requestFocus()
         }
+    }
+    // Leaving the Start Page gives up an address being typed, and the keyboard closes.
+    val leaveStartPage = {
+        draft.value = null
+        suggestions = emptyList()
+        focusManager.clearFocus(force = true)
     }
     // What a Private Tab shows can't be captured (SPEC, "Private Tabs").
     SecureWindow(private)
@@ -309,6 +331,33 @@ fun BrowserWindow(
                 },
                 suggestions = if (suggestions.isNotEmpty() && draft.value != null) {
                     { modifier -> SuggestionList(suggestions, openSuggestion, modifier) }
+                } else {
+                    null
+                },
+                // A Tab without a web page shows the Start Page in the page's place. A dead
+                // renderer's message and a popup come first, though neither is likely there.
+                startPage = if (StartPage.shows(tab.url) && !tab.crashed && tab.popup == null) {
+                    { padding, insets ->
+                        StartPage(
+                            profile = profiles.active,
+                            private = private,
+                            pages = startPagePages,
+                            onOpenPinned = { bookmark ->
+                                leaveStartPage()
+                                tabs.pins.openHere(bookmark)
+                            },
+                            onOpenPage = { address ->
+                                leaveStartPage()
+                                tab.load(address)
+                            },
+                            onShowHistory = {
+                                leaveStartPage()
+                                panel = Panel.History
+                            },
+                            contentPadding = padding,
+                            contentInsets = insets,
+                        )
+                    }
                 } else {
                     null
                 },

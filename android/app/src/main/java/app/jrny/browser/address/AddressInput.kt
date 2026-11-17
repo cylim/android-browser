@@ -23,11 +23,24 @@ object AddressInput {
     const val GOOGLE_SEARCH = "https://www.google.com/search?q=%s"
 
     /**
-     * True when [input] would be searched for, not loaded as an address. Only such text may be
-     * sent to the search engine for suggestions: an address, or anything shaped like credentials,
-     * stays on the device while it is typed, as it does when it is submitted.
+     * True when [input] would be searched for, not loaded as an address, and typing on can't
+     * turn it into credentials. Only such text may be sent to the search engine for
+     * suggestions: an address, or anything shaped like credentials, stays on the device while
+     * it is typed, as it does when it is submitted.
+     *
+     * Suggestions are asked for at every pause in typing, so `admin:hunter2` is checked before
+     * the `@nas.local` that makes it credentials arrives. Any colon before the first `/`, `?` or
+     * `#` (after the scheme, if there is one) keeps the text on the device: an `@` typed later
+     * would make what follows the colon a password.
      */
-    fun isSearch(input: String): Boolean = toAddress(input, SEARCH_MARKER)?.startsWith(SEARCH_MARKER) == true
+    fun isSearch(input: String): Boolean =
+        !couldBecomeCredentials(input.trim()) && toAddress(input, SEARCH_MARKER)?.startsWith(SEARCH_MARKER) == true
+
+    /** True when appending `@host` to [text] would make it `name:secret@host`. */
+    private fun couldBecomeCredentials(text: String): Boolean {
+        val afterScheme = WebAddress.schemeOf(text)?.let { text.substring(it.length + 3) } ?: text
+        return afterScheme.substringBefore('/').substringBefore('?').substringBefore('#').contains(':')
+    }
 
     private const val SEARCH_MARKER = "search:"
 

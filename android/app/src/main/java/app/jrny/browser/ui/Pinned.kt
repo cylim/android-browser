@@ -99,6 +99,11 @@ class PinsUi(
     val reorder: (List<PinnedItem>) -> Unit = {},
     /** Puts the bookmarks of one Folder in this order. */
     val reorderIn: (List<Bookmark>) -> Unit = {},
+    /**
+     * Shows the bookmark as a Pinned Tab from the shown Tab's Start Page: a closed one opens in
+     * that Tab, so no empty Tab is left behind, and an open one is shown while that Tab closes.
+     */
+    val openHere: (Bookmark) -> Unit = open,
 ) {
     val folders: List<Folder> get() = items.filterIsInstance<PinnedItem.Group>().map { it.folder }
 

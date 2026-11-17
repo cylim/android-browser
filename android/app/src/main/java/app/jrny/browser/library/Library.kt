@@ -28,6 +28,12 @@ sealed interface PinnedItem {
     data class Group(val folder: Folder) : PinnedItem
 }
 
+/**
+ * [profile]'s top level of bookmarks and its history, newest first, read together, so what
+ * shows them never puts one Profile's pages under another's name.
+ */
+data class ProfilePages(val profile: ProfileId, val pinned: List<PinnedItem>, val visits: List<Visit>)
+
 /** Rules for a Folder's name. */
 object FolderName {
     const val MAX_LENGTH = 40

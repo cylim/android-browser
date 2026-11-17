@@ -11,6 +11,7 @@ import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Folder
 import app.jrny.browser.library.PinnedItem
+import app.jrny.browser.library.ProfilePages
 import app.jrny.browser.library.Visit
 import app.jrny.browser.address.AddressInput
 import app.jrny.browser.address.WebAddress
@@ -148,6 +149,20 @@ class BrowserState(
         .filterNotNull()
         .flatMapLatest { bookmarkRepository.pinned(it.id) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * The Active Profile's Pinned Tabs and history for the Start Page, tagged with the Profile
+     * they belong to and loaded together. Null until the first Profile's have loaded; after a
+     * switch it still holds the previous Profile's until the new ones arrive.
+     */
+    val startPagePages: StateFlow<ProfilePages?> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { profile ->
+            combine(bookmarkRepository.pinned(profile.id), history.visits(profile.id)) { pinned, visits ->
+                ProfilePages(profile.id, pinned, visits)
+            }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     /** The Active Profile's downloads, newest first. */
     val downloads: StateFlow<List<Download>> = profileRepository.activeProfile
@@ -531,6 +546,27 @@ class BrowserState(
         val choice = ++tabChoices
         scope.launch {
             if (tabRepository.openPinned(bookmark.id) != null && choice == tabChoices) privateTabs.select(profile.id, null)
+        }
+    }
+
+    /**
+     * Shows [bookmark] as a Pinned Tab, chosen on the Start Page of [tab] (SPEC, "Start Page").
+     * A closed one opens in [tab], which becomes its Pinned Tab, so no empty Tab is left behind;
+     * it loads as a Pinned Tab opened from the Tab list does. An open one is shown, and [tab]
+     * closes. A Private Tab never becomes a Pinned Tab: from one, the bookmark opens as
+     * [openPinned] opens it.
+     */
+    fun openPinnedHere(profile: Profile, tab: SavedTab, bookmark: Bookmark) {
+        if (tab.isPrivate) return openPinned(profile, bookmark)
+        val choice = ++tabChoices
+        scope.launch {
+            val shown = tabRepository.openPinnedIn(tab.id, bookmark.id) ?: return@launch
+            if (shown == tab.id) {
+                live[tab.id]?.tab?.restore(bookmark.url, bookmark.title, scrollY = 0)
+            } else {
+                retire(tab.id)
+            }
+            if (choice == tabChoices) privateTabs.select(profile.id, null)
         }
     }
 

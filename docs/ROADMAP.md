@@ -16,7 +16,7 @@ A throwaway app, kept on a separate branch and never merged, that answers one qu
 ## Milestone 1: Skeleton
 
 - Gradle/Compose project with application ID `app.jrny.browser`, minSdk 35.
-- CI builds, lints and tests every pull request.
+- CI builds, lints and tests every pull request that changes the app.
 - One Profile and one Tab: load a page, go back and forward, reload.
 - Sidebar (≥ 840dp) and Bottom Bar (< 840dp) layouts for that Tab, switching live when the window resizes. The Sidebar can collapse to a rail.
 

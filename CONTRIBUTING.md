@@ -1,6 +1,6 @@
-# Contributing to JRNY browser
+# Contributing to Okapi
 
-Thank you for helping. This project is built in public, and contributions of every size are welcome: bug reports, ideas, documentation and code.
+Okapi is a browser by JRNY. Thank you for helping. This project is built in public, and contributions of every size are welcome: bug reports, ideas, documentation and code.
 
 By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
@@ -57,6 +57,12 @@ You need:
   avdmanager create avd -n JRNY_Tablet_API_37 -d pixel_tablet -k "system-images;android-37.0;google_apis_playstore;x86_64"
   ```
 
+The app is the Gradle project in `android/`. Run the commands below from that folder:
+
+```sh
+cd android
+```
+
 Point Gradle at your SDK. `local.properties` is gitignored:
 
 ```sh
@@ -69,12 +75,16 @@ Build, lint and run the unit tests, the same as CI:
 ./gradlew assembleDebug lintDebug testDebugUnitTest
 ```
 
-Install the app and run the device tests on the phone, then on the tablet. CI does the same on every pull request. Run them on **one** device at a time: without `ANDROID_SERIAL`, `installDebug` and `connectedDebugAndroidTest` use every connected device and emulator.
+Install the app and run the device tests on the phone, then on the tablet. CI does the same on every pull request that changes `android/`. Run them on **one** device at a time: without `ANDROID_SERIAL`, `installDebug` and `connectedDebugAndroidTest` use every connected device and emulator.
 
 ```sh
 adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk
 ANDROID_SERIAL=<serial> ./gradlew connectedDebugAndroidTest
 ```
+
+### The website
+
+The product website is in `website/`. It needs only Python 3, with no Android tools. [website/README.md](website/README.md) explains how to preview it and how GitHub Pages publishes it. CI skips the Android jobs for a pull request that only changes `website/`, and skips the website job for one that only changes `android/`.
 
 ## Licensing of contributions
 

@@ -163,4 +163,5 @@ fun AddressField(
     }
 }
 
-private fun shownAddress(url: String?): String = if (url == null || url == "about:blank") "" else url
+/** The address the field shows: none while the Tab has no web page and shows the Start Page. */
+private fun shownAddress(url: String?): String = url?.takeUnless(StartPage::shows).orEmpty()

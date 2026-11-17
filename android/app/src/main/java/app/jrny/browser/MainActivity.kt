@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
         browser?.openIncomingLink(address.toString())
     }
 
-    /** True while Android would let the person make JRNY browser the default browser, and it isn't. */
+    /** True while Android would let the person make Okapi the default browser, and it isn't. */
     private var canBecomeDefaultBrowser by mutableStateOf(false)
 
     private val defaultBrowserRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {

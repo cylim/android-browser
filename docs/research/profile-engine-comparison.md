@@ -1,6 +1,6 @@
 # Profile engines: System WebView vs. GeckoView
 
-This note compares the two throwaway spikes against JRNY's three requirements:
+This note compares the two throwaway spikes against the three requirements of Okapi, a browser by JRNY:
 
 1. Several **Profiles**, each signed in to the same services with different **Accounts**.
 2. **Site Rules**: send addresses that match a pattern, including wildcards such as `*.example.com`, to a chosen Profile.
@@ -47,7 +47,7 @@ Both engines isolate cookies and storage per Profile, keep popups in the opener'
 - Isolation, persistence across a reinstall, and popups all pass. Private Tabs per Profile (`usePrivateMode` plus the Profile's `contextId`) are isolated and empty after a restart.
 - Real sign-ins in two Profiles were **not run**. The UA is plain Firefox for Android, which Google, Microsoft, GitHub and Apple all support, so the risk is low. It still needs testing.
 - `clearDataForSessionContext` deletes a Profile while the app runs.
-- Extensions see every Profile. Any extension with the `tabs` permission can read the addresses open in all Profiles. That weakens isolation if JRNY ever allows extensions.
+- Extensions see every Profile. Any extension with the `tabs` permission can read the addresses open in all Profiles. That weakens isolation if Okapi ever allows extensions.
 
 **Both:** passkeys need approval as a privileged browser, which is tied to the signing certificate. Password managers fill through Android Autofill, and 1Password only recognizes browsers on its own list.
 
@@ -95,7 +95,7 @@ The Gecko spike still had two extensions installed: the built-in bridge and the 
 
 ### Why the numbers differ
 
-- **WebView's code is shared with the system.** The engine library is preloaded and shared across apps through `webview_zygote`, so less of it is charged to JRNY. GeckoView loads its own 155 MB `libxul.so` in every process.
+- **WebView's code is shared with the system.** The engine library is preloaded and shared across apps through `webview_zygote`, so less of it is charged to Okapi. GeckoView loads its own 155 MB `libxul.so` in every process.
 - **Process model.** WebView ran **one renderer process for every Profile and Tab**. Extra Profiles cost little memory, but one renderer crash (`onRenderProcessGone`) takes down every Tab in every Profile. GeckoView runs a parent, a GPU process and several content processes, and starts more as sites open. That uses more memory and gives better crash isolation.
 - **APK and install size.** 3.6 MB vs. 227 MB installed per ABI. Updates of that size every 4 weeks also cost users storage and data.
 

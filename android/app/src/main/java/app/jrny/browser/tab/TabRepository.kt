@@ -45,6 +45,14 @@ class TabRepository(private val dao: TabDao) {
      */
     suspend fun openPinned(bookmarkId: Long): TabId? = dao.openPinned(bookmarkId)?.let(::TabId)
 
+    /**
+     * Shows the bookmark [bookmarkId] as a Pinned Tab, chosen on the Start Page of [tab]: a closed
+     * one makes [tab] its Pinned Tab, with the bookmark's address, and an open one is selected
+     * while [tab] closes. Returns the Tab that shows the bookmark, or null when the bookmark is
+     * gone or belongs to another Profile.
+     */
+    suspend fun openPinnedIn(tab: TabId, bookmarkId: Long): TabId? = dao.openPinnedIn(tab.value, bookmarkId)?.let(::TabId)
+
     /** Gives [profile] an empty Tab if it has none. */
     suspend fun ensureOne(profile: ProfileId) = dao.ensureOne(profile.toLong())
 

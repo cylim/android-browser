@@ -2,6 +2,7 @@ package app.jrny.browser.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.asPaddingValues
@@ -137,17 +138,8 @@ private fun BarAndPage(
             .windowInsetsPadding(WindowInsets.tappableElement.only(WindowInsetsSides.Horizontal))
             .testTag("bottom-bar-layout"),
     ) {
-        PageView(
-            tab,
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                // A freeform window's title bar, which statusBars doesn't include.
-                .windowInsetsPadding(WindowInsets.captionBar)
-                // Zero when the status bar is hidden. Under a top cutout it shows and takes its strip.
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
-        ) {
+        // What floats over the page: the address field's suggestions, else the page's prompt.
+        val floating: @Composable BoxScope.() -> Unit = {
             val suggestions = slots.suggestions
             if (suggestions != null) {
                 // What the address field offers, over the page and right above the bar, tinted like it.
@@ -156,6 +148,24 @@ private fun BarAndPage(
                 }
             } else {
                 Box(Modifier.align(Alignment.BottomCenter).padding(PROMPT_GAP)) { slots.pagePrompt() }
+            }
+        }
+        val startPage = slots.startPage
+        val pageInsets = pageTopInsets()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            PageView(
+                tab,
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(pageInsets),
+                covered = startPage != null,
+                overlay = if (startPage == null) floating else ({}),
+            )
+            if (startPage != null) {
+                // Runs up to the top edge, under a status bar kept for a cutout, with its content
+                // below it, and ends a gap above the bar.
+                startPage(PaddingValues(bottom = BAR_GAP), pageInsets)
+                Box(Modifier.fillMaxSize().windowInsetsPadding(pageInsets), content = floating)
             }
         }
         // Tinted with the Active Profile's color, like the Sidebar.
@@ -245,6 +255,16 @@ private fun TabOverview(tabs: TabsUi, tint: Color, onClose: () -> Unit) {
         }
     }
 }
+
+/**
+ * What the page keeps clear of at the top and sides: a freeform window's title bar (statusBars
+ * doesn't include it), the status bar (zero while hidden; under a top cutout it shows), and the
+ * display cutout.
+ */
+@Composable
+private fun pageTopInsets(): WindowInsets =
+    WindowInsets.captionBar.union(WindowInsets.statusBars)
+        .union(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
 
 /** Above the Tab Overview's list: a freeform window's title bar, a status bar kept under a top cutout, and the cutout. */
 @Composable

@@ -62,7 +62,7 @@ enum class ProfilePick { Move, OpenIn }
 
 /**
  * The page menu behind the "More" button, for the shown Tab: a new Tab, bookmarking the page, the
- * Active Profile's bookmarks and history, Move, Open in Profile, and making JRNY browser the
+ * Active Profile's bookmarks and history, Move, Open in Profile, and making Okapi the
  * default browser while it isn't. [showForward] adds Forward, for the narrow Bottom Bar, which has
  * no room for its button.
  */

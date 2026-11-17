@@ -165,4 +165,34 @@ class AddressInputTest {
         assertFalse(AddressInput.isSearch("ftp://user:secret@example.com"))
         assertFalse(AddressInput.isSearch("   "))
     }
+
+    @Test
+    fun aPasswordIsNotSentWhileItIsTypedBeforeTheAt() {
+        // Suggestions are asked for at every pause in typing, so each prefix of
+        // "admin:hunter2@nas.local" is checked on its own. Before the "@" arrives, the text
+        // isn't shaped like credentials yet, but the part after the colon may be a password.
+        for (typed in listOf("admin:", "admin:h", "admin:hunter2", "user:two words", "ftp://user:secret")) {
+            assertFalse(typed, AddressInput.isSearch(typed))
+        }
+        // The name alone, before the colon, isn't a secret.
+        assertTrue(AddressInput.isSearch("admin"))
+    }
+
+    @Test
+    fun aColonAfterThePathStartCanStillBeSearchedFor() {
+        // An "@" after a "/", "?" or "#" can't make credentials, so a colon there is harmless.
+        assertTrue(AddressInput.isSearch("what is a/b: ratio"))
+        assertTrue(AddressInput.isSearch("why #1: reasons"))
+    }
+
+    @Test
+    fun anyColonBeforeThePathKeepsTheTextOnTheDevice() {
+        // Typed text with a colon could still become "name:secret@host", even with spaces
+        // around it (such text is never searched for once the "@" is there either). These lose
+        // the search engine's suggestions; bookmarks and history are still offered, and Go
+        // still searches for them.
+        assertFalse(AddressInput.isSearch("python: list comprehension"))
+        assertFalse(AddressInput.isSearch("10:30 in london"))
+        assertEquals(search("10%3A30+in+london"), address("10:30 in london"))
+    }
 }

@@ -2,6 +2,7 @@ package app.jrny.browser.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -138,12 +139,19 @@ fun SidebarLayout(
                     // In the page's place, next to the Sidebar. Its list ends clear of the gesture handle.
                     panel(PaddingValues(bottom = floatingBottomSpace(GUTTER)))
                 } else {
-                    PageView(tab, Modifier.fillMaxSize()) {
+                    val prompt: @Composable BoxScope.() -> Unit = {
                         Box(
                             Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(start = PROMPT_GAP, end = PROMPT_GAP, bottom = floatingBottomSpace(PROMPT_GAP)),
                         ) { slots.pagePrompt() }
+                    }
+                    val startPage = slots.startPage
+                    PageView(tab, Modifier.fillMaxSize(), covered = startPage != null, overlay = if (startPage == null) prompt else ({}))
+                    if (startPage != null) {
+                        // In the page's place, its list ending clear of the gesture handle.
+                        startPage(PaddingValues(bottom = floatingBottomSpace(GUTTER)), WindowInsets(0))
+                        prompt()
                     }
                     LoadProgress(tab, Modifier.align(Alignment.TopCenter))
                 }

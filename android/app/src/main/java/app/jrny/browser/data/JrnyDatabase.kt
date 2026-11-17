@@ -203,6 +203,32 @@ abstract class TabDao {
         return insertRow(TabEntity(profileId = pinned.profileId, url = pinned.url, title = pinned.title, lastUsed = maxLastUsed() + 1, bookmarkId = bookmarkId))
     }
 
+    @Query("UPDATE tabs SET url = :url, title = :title, scrollY = 0, bookmarkId = :bookmarkId WHERE id = :id")
+    protected abstract suspend fun becomePinned(id: Long, url: String, title: String, bookmarkId: Long)
+
+    /**
+     * Shows the bookmark [bookmarkId] as a Pinned Tab from the Start Page of the Tab [tabId]: a
+     * closed one takes that Tab, which loads the bookmark's address, so no empty Tab is left
+     * behind. An open one is selected, and [tabId] closes. Returns the Tab that shows the
+     * bookmark, or null when the bookmark is gone or belongs to another Profile. When [tabId] is
+     * gone, the bookmark opens as [openPinned] opens it.
+     */
+    @Transaction
+    open suspend fun openPinnedIn(tabId: Long, bookmarkId: Long): Long? {
+        val pinned = bookmark(bookmarkId) ?: return null
+        val here = get(tabId) ?: return openPinned(bookmarkId)
+        if (here.profileId != pinned.profileId) return null
+        val open = tabOf(bookmarkId)
+        if (open != null && open != tabId) {
+            select(open)
+            deleteRow(tabId)
+            return open
+        }
+        becomePinned(tabId, pinned.url, pinned.title, bookmarkId)
+        select(tabId)
+        return tabId
+    }
+
     @Query(
         "UPDATE profiles SET activation = (SELECT COALESCE(MAX(activation), 0) + 1 FROM profiles) " +
             "WHERE id = :profileId AND pendingDeletion = 0",

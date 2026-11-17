@@ -986,6 +986,8 @@ class BrowserStateTest {
         // An address, or text shaped like credentials, is never sent.
         assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "https://bank.example/account?token=abc") })
         assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "user:secret@example.com") })
+        // Nor is a password typed before its "@", at a pause in typing.
+        assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "admin:hunter2") })
         assertEquals(emptyList<Suggestion>(), runBlocking { browser.suggest(tab, "   ") })
 
         // Nothing is sent from a Private Tab.

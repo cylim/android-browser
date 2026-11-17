@@ -1,5 +1,6 @@
 package app.jrny.browser.ui
 
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.compose.foundation.clickable
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -51,10 +53,19 @@ import app.jrny.browser.tab.Tab
  * screen after the renderer died.
  */
 @Composable
-fun PageView(tab: Tab, modifier: Modifier = Modifier, overlay: @Composable BoxScope.() -> Unit = {}) {
+fun PageView(
+    tab: Tab,
+    modifier: Modifier = Modifier,
+    /**
+     * True while something opaque, the Start Page, lies over the whole page: the page is then
+     * left out of what a screen reader reads and of where the keyboard's focus moves.
+     */
+    covered: Boolean = false,
+    overlay: @Composable BoxScope.() -> Unit = {},
+) {
     Box(modifier.testTag("page")) {
         // A new WebView replaces a dead one (Tab.replaceDeadWebView), so key the view on it.
-        key(tab.webView) { WebViewHost(tab.webView) }
+        key(tab.webView) { WebViewHost(tab.webView, covered = covered) }
         // Floats over the page, and under a popup.
         overlay()
         tab.popup?.let { popup ->
@@ -145,7 +156,7 @@ fun PopupBar(address: String, onClose: () -> Unit) {
 }
 
 @Composable
-private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier) {
+private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier, covered: Boolean = false) {
     AndroidView(
         factory = {
             // The WebView outlives this composition (and moves between layouts), so detach it
@@ -153,7 +164,15 @@ private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier) {
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView
         },
-        modifier = modifier.fillMaxSize(),
+        // Hidden from a screen reader while covered. Set each time, as the WebView keeps it
+        // when it moves to another layout or is shown again later.
+        update = { view ->
+            view.importantForAccessibility =
+                if (covered) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        },
+        // Out of the keyboard's focus order while covered. Only moving focus skips it: the page
+        // can still be handed focus directly, as the address field does after Go.
+        modifier = modifier.fillMaxSize().focusProperties { canFocus = !covered },
     )
 }
 

@@ -170,6 +170,39 @@ class PinnedRepositoryTest {
     }
 
     @Test
+    fun aPinnedTabChosenOnTheStartPageTakesThatTabOrShowsItsOpenOne() = runBlocking {
+        bookmarks.add(personal, "https://a.example/", "A")
+        val pin = bookmark("https://a.example/")
+        val other = tabs.open(personal, "https://other.example/")
+
+        // Closed: the empty Tab becomes its Pinned Tab, and no other Tab opens.
+        val empty = tabs.open(personal)
+        assertEquals(empty, tabs.openPinnedIn(empty, pin.id))
+        val pinnedTab = open().single { it.id == empty }
+        assertEquals(Triple("https://a.example/", "A", pin.id), Triple(pinnedTab.url, pinnedTab.title, pinnedTab.bookmarkId))
+        assertTrue(pinnedTab.selected)
+        assertEquals(2, open().size)
+
+        // Open already: that Tab is shown, and the empty one closes.
+        tabs.select(other)
+        val another = tabs.open(personal)
+        assertEquals(empty, tabs.openPinnedIn(another, pin.id))
+        assertTrue(open().single { it.id == empty }.selected)
+        assertTrue(open().none { it.id == another })
+
+        // A bookmark of another Profile is never taken.
+        val work = profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build).id
+        bookmarks.add(work, "https://w.example/", "W")
+        val workPin = marked(work).single()
+        val third = tabs.open(personal)
+        assertNull(tabs.openPinnedIn(third, workPin.id))
+        assertNull(open().single { it.id == third }.url)
+
+        bookmarks.delete(pin)
+        assertNull(tabs.openPinnedIn(third, pin.id))
+    }
+
+    @Test
     fun removingABookmarkLeavesItsTabOpenAsAnOrdinaryTab() = runBlocking {
         val tab = tabs.open(personal, "https://a.example/")
         bookmarks.pin(tab, "https://a.example/", "A")
