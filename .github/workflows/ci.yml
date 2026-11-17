@@ -49,9 +49,47 @@ jobs:
         with:
           fail-on-severity: moderate
 
+  # Which parts of the monorepo a pull request touches, so a website-only change skips the
+  # Android jobs and the other way round. Pushes to main run everything. A job skipped by its
+  # `if` still counts as passing for branch protection, so the jobs below fail closed: they
+  # skip only on an explicit "false", and run if this job fails and leaves its outputs empty.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.diff.outputs.android }}
+      website: ${{ steps.diff.outputs.website }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo android=true >> "$GITHUB_OUTPUT"
+            echo website=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --no-renames lists both paths of a move, so moving a file out of android/ still counts.
+          files=$(git diff --name-only --no-renames "$BASE...$HEAD")
+          printf '%s\n' "$files"
+          touched() { printf '%s\n' "$files" | grep -qE "$1" && echo true || echo false; }
+          echo "android=$(touched '^(android/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "website=$(touched '^(website/|\.github/workflows/(ci|pages)\.yml$)')" >> "$GITHUB_OUTPUT"
+
   android:
     name: Android build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.android != 'false' }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,9 +106,11 @@ jobs:
       - name: Build, lint and unit test
         run: ./gradlew assembleDebug lintDebug testDebugUnitTest
 
-  # The device tests (app/src/androidTest) on a phone and a tablet emulator, Android 17.
+  # The device tests (android/app/src/androidTest) on a phone and a tablet emulator, Android 17.
   device-tests:
     name: Device tests (${{ matrix.device.name }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.android != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -114,6 +154,7 @@ jobs:
           grep Pkg.Revision "$ANDROID_HOME/cmdline-tools/latest/source.properties"
 
       - name: Build the app and its tests
+        working-directory: android
         run: ./gradlew assembleDebug assembleDebugAndroidTest
 
       - name: Run the device tests
@@ -125,6 +166,7 @@ jobs:
           profile: ${{ matrix.device.profile }}
           ram-size: ${{ matrix.device.ram }}
           disable-animations: true
+          working-directory: android
           # No "isn't responding" dialogs from the emulator's own apps: one of those takes the
           # focus from the app's window, and every test that presses Back then times out.
           # On failure, print each failing test so the log says what broke.
@@ -138,7 +180,23 @@ jobs:
         with:
           name: device-test-reports-${{ matrix.device.name }}
           path: |
-            app/build/reports/androidTests/
-            app/build/outputs/androidTest-results/
+            android/app/build/reports/androidTests/
+            android/app/build/outputs/androidTest-results/
           if-no-files-found: ignore
           retention-days: 14
+
+  # The product website (website/public). pages.yml publishes it from main; this checks a PR.
+  website:
+    name: Website
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.website != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No outside addresses besides this repository on GitHub, and no broken links or assets.
+      # Building with the Pages project path also checks that the 404 page's paths fill in.
+      - name: Check the site
+        run: python3 -I website/build.py --base-path /android-browser --out "$RUNNER_TEMP/site"

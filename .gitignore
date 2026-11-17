@@ -41,3 +41,6 @@ out/
 .fleet/
 .DS_Store
 Thumbs.db
+
+# --- Website (website/): build.py output ---
+_site/
