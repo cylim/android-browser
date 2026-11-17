@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- GitHub Pages can't send headers, so the policy is here: only the site's own files load.
+       Two inline style attributes set spacing, hence style-src-attr. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Privacy policy · Okapi, a browser by JRNY</title>
+  <meta name="description" content="The privacy policy of Okapi, a browser by JRNY: what the app keeps on your device, what it sends off your device and who receives it, and how to delete it.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!--
+    The canonical text of this policy is docs/playstore/privacy-policy.md. Change both together,
+    and change the effective date in both.
+  -->
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-head wrap">
+    <a class="brand" href="./" aria-label="Okapi by JRNY, home">
+      <picture>
+        <source srcset="assets/mark-dark.svg" media="(prefers-color-scheme: dark)">
+        <img src="assets/mark.svg" alt="" width="56" height="64">
+      </picture>
+      <span>Okapi by JRNY</span>
+    </a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="./#profiles">Profiles</a></li>
+        <li><a href="./#layouts">Layouts</a></li>
+        <li><a href="./#privacy">Privacy</a></li>
+        <li><a href="./#changelog">Changelog</a></li>
+        <li><a href="https://github.com/cylim/android-browser">GitHub</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="pp-title">
+      <div class="hero-text">
+        <p class="eyebrow">Effective date: <time datetime="2026-11-17">17 November 2026</time></p>
+        <h1 id="pp-title">Privacy policy</h1>
+        <p class="lede">This policy covers Okapi by JRNY, the Android app with the application ID <code>app.jrny.browser</code>. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.</p>
+        <p class="lede">In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, and to Google through Android System WebView.</p>
+      </div>
+      <dl class="reqs">
+        <div><dt>Server</dt><dd>None</dd></div>
+        <div><dt>JRNY account</dt><dd>None</dd></div>
+        <div><dt>Ads and analytics</dt><dd>None</dd></div>
+        <div><dt>Browsing data</dt><dd>On your device</dd></div>
+      </dl>
+    </section>
+
+    <section id="who" class="band wrap" aria-labelledby="who-title">
+      <div class="section-head">
+        <h2 id="who-title">Who makes Okapi</h2>
+        <!-- TODO(owner): replace the next paragraph with the developer name, exactly as Google Play shows it. -->
+        <p class="note">TODO(owner): developer name, exactly as Google Play shows it.</p>
+        <p>Okapi is free software under the <a href="https://github.com/cylim/android-browser/blob/main/LICENSE">MIT License</a>. It is built in public on <a href="https://github.com/cylim/android-browser">GitHub</a>. In this policy, "we" means the people who maintain it.</p>
+        <p>We run no server for the app, and the app sends nothing to us.</p>
+      </div>
+    </section>
+
+    <section id="on-device" class="band wrap" aria-labelledby="on-device-title">
+      <div class="section-head">
+        <h2 id="on-device-title">What stays on your device</h2>
+        <p>Okapi keeps your data in its private storage on your device, where other apps can't read it. Android's cloud backup and device-to-device transfer leave all of it out, so none of it is copied to a backup or to a new device.</p>
+      </div>
+      <div class="ledger">
+        <div class="ledger-col">
+          <h3>Kept per Profile</h3>
+          <ul>
+            <li>Cookies and site storage</li>
+            <li>Cache, site permissions and service workers</li>
+            <li>Each normal Tab's address, title and scroll position, so that Tabs come back after Android closes the app</li>
+            <li>History, up to the latest 5,000 visits</li>
+            <li>Bookmarks, which are its Pinned Tabs, and Folders</li>
+            <li>The list of downloads</li>
+            <li>Site icons, as each site sent its icon while its page loaded</li>
+            <li>A name, a color and an avatar</li>
+          </ul>
+        </div>
+        <div class="ledger-col ledger-shared">
+          <h3>Kept for all Profiles</h3>
+          <ul>
+            <li>Search engine</li>
+            <li>Search suggestions on or off</li>
+            <li>Safe Browsing on or off</li>
+            <li>Theme and compact rows</li>
+            <li>Site Rules</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note">One Profile can't see another Profile's data. None of this is sent to us or to anyone else.</p>
+    </section>
+
+    <section id="leaves" class="band wrap" aria-labelledby="leaves-title">
+      <div class="section-head">
+        <h2 id="leaves-title">What leaves your device, and who receives it</h2>
+      </div>
+
+      <article class="feature" aria-labelledby="l-sites">
+        <div class="feature-name">
+          <h3 id="l-sites">Sites you open</h3>
+        </div>
+        <div class="feature-body">
+          <p>Okapi shows pages with Android System WebView, the web engine built into Android. When you open a page, WebView requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details that WebView sends. WebView also sends the app's ID, <code>app.jrny.browser</code>, in an <code>X-Requested-With</code> header with every request. Okapi doesn't turn this header off.</p>
+          <!-- TODO(owner): test androidx.webkit's setRequestedWithHeaderOriginAllowList on the installed WebView, as the comment in docs/playstore/privacy-policy.md describes, and update this paragraph to match. -->
+          <p>A site can store cookies and other data in the Profile you opened it in. What a site does with your data is up to that site and its own privacy policy.</p>
+          <p>If you use a password manager through Android Autofill, that app sees the forms it fills, under its own privacy policy. Okapi doesn't store passwords.</p>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="l-search">
+        <div class="feature-name">
+          <h3 id="l-search">Your search engine</h3>
+        </div>
+        <div class="feature-body">
+          <p>Your search engine is Google, unless you choose Bing, DuckDuckGo or Brave Search in Settings. It receives your text in two ways.</p>
+          <p><b>When you search.</b> The search opens as a page in the Tab, like any other site you open.</p>
+          <p><b>Search suggestions.</b> While you type in the address field, the app sends what you have typed to the search engine, a moment (150 milliseconds) after you stop typing, and shows the searches it suggests. The request goes over HTTPS and carries no cookies, so the search engine can't link it to an Account or a Profile. Its user agent names a browser, but not your device. The search engine still sees your IP address.</p>
+          <p>The app doesn't send text to the search engine for suggestions:</p>
+          <div class="release" style="margin-top: var(--s2)">
+            <ul>
+              <li>when Search suggestions is off in Settings</li>
+              <li>from a Private Tab</li>
+              <li>when the text starts with <code>http://</code> or <code>https://</code>, or reads as a web address</li>
+              <li>when the text is shaped like credentials, such as <code>name:secret@example.com</code></li>
+              <li>when the text has a colon before its first <code>/</code>, <code>?</code> or <code>#</code>, such as <code>admin:hunter2</code>, because an <code>@</code> typed next would make it credentials</li>
+            </ul>
+          </div>
+          <p>So a search such as <code>python: list comprehension</code> gets no suggestions from the search engine. Pressing Go still searches for it.</p>
+          <p class="note">With Search suggestions off, the address field still suggests pages from the Profile's bookmarks and history, from the device.</p>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="l-safe">
+        <div class="feature-name">
+          <h3 id="l-safe">Google Safe Browsing</h3>
+        </div>
+        <div class="feature-body">
+          <p>Android System WebView checks the addresses of pages with Google Safe Browsing, and warns you before a page known to be dangerous opens. Google runs the service. WebView makes the checks, not Okapi, and the app never sees them.</p>
+          <p>Safe Browsing is on by default. To turn it off, turn off Safe Browsing in Settings. The change also applies to pages that are already open.</p>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="l-downloads">
+        <div class="feature-name">
+          <h3 id="l-downloads">Android's download service</h3>
+        </div>
+        <div class="feature-body">
+          <p>A page can only offer a file. Nothing downloads until you agree. Then:</p>
+          <ol>
+            <li>The app asks the file's address whether it redirects somewhere else, one step at a time, for up to 5 steps. Each address gets only the Profile's cookies for that address.</li>
+            <li>The app gives the last address to Android's download service, with the Profile's cookies for that address, the browser's user agent and the address of the page you came from.</li>
+            <li>The download service, which is part of Android, fetches the file from that site and saves it to your device's Downloads folder.</li>
+          </ol>
+          <p>The site that serves the file receives what is listed under "Sites you open". Downloads is a shared folder, so other apps that can read your files can read the files you download. When you open a finished file, Android gives it to the app that you choose.</p>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="l-webview">
+        <div class="feature-name">
+          <h3 id="l-webview">Android System WebView's own reports</h3>
+        </div>
+        <div class="feature-body">
+          <p>Google makes Android System WebView and updates it through Google Play, separately from Okapi. If your device shares usage and diagnostics data with Google, WebView can send Google crash reports and usage statistics, such as system information, feature use, performance and memory use. Google's WebView documentation says that these reports don't contain the addresses of the pages you visit. Google handles them under its own privacy policy.</p>
+          <p>Okapi tells WebView not to send usage statistics, whatever your device's setting is. Crash reports still follow your device's setting. To stop them, turn off usage and diagnostics sharing with Google in your device's settings. Where that setting is depends on the device.</p>
+        </div>
+      </article>
+    </section>
+
+    <section id="private-tabs" class="band wrap" aria-labelledby="private-title">
+      <div class="section-head">
+        <h2 id="private-title">Private Tabs</h2>
+        <p>Each Profile can open Private Tabs. They share a temporary store of cookies and site data, separate from the Profile's own.</p>
+      </div>
+      <ul class="checks">
+        <li><b>No history.</b> Private Tabs never write to history and never take links from other apps.</li>
+        <li><b>Not saved.</b> They don't come back after the app closes.</li>
+        <li><b>No screenshots.</b> Screenshots and the recent-apps preview are blocked while one is showing.</li>
+        <li><b>No suggestions sent.</b> Nothing typed in a Private Tab goes to the search engine for suggestions.</li>
+        <li><b>No icons kept.</b> A Private Tab's site icons aren't stored.</li>
+        <li><b>Cleared when they end.</b> When the last Private Tab of a Profile closes, the app clears its cookies and site storage. The rest of the temporary store is deleted the next time the app starts fresh.</li>
+      </ul>
+      <p class="note">A file you download in a Private Tab is saved to your Downloads folder, but isn't added to the Profile's list of downloads. Private Tabs don't hide you from the sites you open, from your network or from Safe Browsing. Sites still receive what is listed under "Sites you open".</p>
+    </section>
+
+    <section id="delete" class="band wrap" aria-labelledby="delete-title">
+      <div class="section-head">
+        <h2 id="delete-title">How to delete your data</h2>
+        <p>We hold no data about you, so there is nothing for us to give you or delete. Your data is on your device, and you delete it there.</p>
+      </div>
+      <div class="facts">
+        <article>
+          <h3>Clear history</h3>
+          <p>In a Profile's history, Clear history removes every visit, and the icons of sites the Profile has no bookmark or open Tab of. Sign-ins, cookies and open Tabs stay. You can also delete one visit at a time.</p>
+        </article>
+        <article>
+          <h3>Delete a Profile</h3>
+          <p>Its history, bookmarks, Folders, list of downloads, site icons and the Site Rules that name it are deleted at once, and its Tabs close. Its cookies, site storage and cache are wiped the next time the app starts fresh, for example after you restart your device. Until then, Settings shows how many Profiles are waiting to be removed. The last Profile can't be deleted.</p>
+        </article>
+        <article>
+          <h3>Uninstall the app</h3>
+          <p>Android deletes all of the app's data. Clearing the app's storage in Android's settings does the same and keeps the app.</p>
+        </article>
+        <article>
+          <h3>Downloaded files</h3>
+          <p>They stay in your Downloads folder in every case. Delete them with a file manager.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="protection" class="band wrap" aria-labelledby="protection-title">
+      <div class="section-head">
+        <h2 id="protection-title">How your data is protected</h2>
+      </div>
+      <ul class="checks">
+        <li><b>No server.</b> We have no copy of your data to lose.</li>
+        <li><b>Separate Profiles.</b> Each Profile has its own web data store. A Move to another Profile carries only the page's address.</li>
+        <li><b>Private storage.</b> App data stays in the app's private storage, and backups and device transfers leave it out.</li>
+        <li><b>Suggestions over HTTPS.</b> Search suggestion requests use HTTPS and carry no cookies.</li>
+        <li><b>Cookies stay with their site.</b> During a download, each redirect step receives only its own cookies, so one site's session cookies don't go to another site.</li>
+        <li><b>Quiet logs.</b> Release builds don't write addresses, page titles or cookies to the device log.</li>
+        <li><b>No secrets in the app.</b> The app contains no API keys or other secrets.</li>
+      </ul>
+    </section>
+
+    <section id="does-not" class="band wrap" aria-labelledby="does-not-title">
+      <div class="section-head">
+        <h2 id="does-not-title">What Okapi doesn't do</h2>
+      </div>
+      <!-- TODO(owner): check the emoji font request, as the comment in docs/playstore/privacy-policy.md describes. -->
+      <ul class="checks">
+        <li><b>No JRNY account.</b> You don't sign in to the app itself.</li>
+        <li><b>No ads.</b> The app shows no ads of its own.</li>
+        <li><b>No analytics.</b> The app has no analytics and no crash reporting of its own, and it tells WebView not to send usage statistics.</li>
+        <li><b>No Google Play Services libraries.</b> The app contains no Google Play Services or Firebase libraries.</li>
+        <li><b>Nothing sent to us.</b> The app sends none of your data to us, and we don't sell data.</li>
+        <li><b>One permission.</b> The app asks Android for internet access only. It doesn't ask for your location, camera, microphone or contacts, so it can't give them to sites.</li>
+      </ul>
+    </section>
+
+    <section id="more" class="band wrap" aria-labelledby="more-title">
+      <div class="section-head">
+        <h2 id="more-title">Children, changes and contact</h2>
+      </div>
+      <div class="facts">
+        <article id="children">
+          <h3>Children</h3>
+          <p>Okapi is a general-purpose web browser. It opens any site and has no content filter or parental controls, so it isn't designed for children. It sends us nothing about anyone, children included.</p>
+        </article>
+        <article id="changes">
+          <h3>Changes to this policy</h3>
+          <p>When a release of Okapi changes what leaves your device, we update this policy in that release and change its effective date. Every change to this policy is in <a href="https://github.com/cylim/android-browser/commits/main/docs/playstore/privacy-policy.md">its history on GitHub</a>.</p>
+        </article>
+        <article id="contact">
+          <h3>Contact</h3>
+          <p>To ask about this policy or about privacy in Okapi, <a href="https://github.com/cylim/android-browser/issues">open an issue on GitHub</a>. Issues are public, so don't put personal information in one.</p>
+          <p style="margin-top: var(--s3)">To report a privacy problem privately, for example data that leaves your device when this policy says it doesn't, follow the <a href="https://github.com/cylim/android-browser/blob/main/SECURITY.md">security policy</a>: on the repository's Security tab, select Report a vulnerability.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot wrap">
+    <p class="foot-brand"><picture><source srcset="assets/mark-compact-dark.svg" media="(prefers-color-scheme: dark)"><img src="assets/mark-compact.svg" alt="" width="21" height="24"></picture><span>Okapi, a browser by JRNY, is free software under the <a href="https://github.com/cylim/android-browser/blob/main/LICENSE">MIT License</a>.</span></p>
+    <ul>
+      <li><a href="https://github.com/cylim/android-browser">Source</a></li>
+      <li><a href="privacy.html" aria-current="page">Privacy policy</a></li>
+      <li><a href="https://github.com/cylim/android-browser/blob/main/SECURITY.md">Security policy</a></li>
+      <li><a href="https://github.com/cylim/android-browser/blob/main/CONTRIBUTING.md">Contributing</a></li>
+    </ul>
+    <p class="fine">Found a security problem? Report it privately through the Security policy, never in a public issue.</p>
+  </footer>
+</body>
+</html>

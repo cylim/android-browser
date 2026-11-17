@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- GitHub Pages can't send headers, so the policy is here: only the site's own files load.
+       Inline style attributes set the Profile colors (style="--c:…"), hence style-src-attr. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Okapi, a browser by JRNY</title>
+  <meta name="description" content="Okapi by JRNY is an Android browser with separate Profiles, so you can be signed in to a different Account on the same site in each one. No telemetry, no Google Play Services, MIT licensed.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-reload" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.2"/><rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4" fill="currentColor"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0z" fill="currentColor"/></symbol>
+    <symbol id="i-case" viewBox="0 0 24 24"><path d="M9 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm2 0h2V5h-2z" fill="currentColor"/></symbol>
+  </svg>
+
+  <header class="site-head wrap">
+    <a class="brand" href="./" aria-label="Okapi by JRNY, home">
+      <picture>
+        <source srcset="assets/mark-dark.svg" media="(prefers-color-scheme: dark)">
+        <img src="assets/mark.svg" alt="" width="56" height="64">
+      </picture>
+      <span>Okapi by JRNY</span>
+    </a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#profiles">Profiles</a></li>
+        <li><a href="#layouts">Layouts</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="#changelog">Changelog</a></li>
+        <li><a href="https://github.com/cylim/android-browser">GitHub</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-text">
+        <p class="eyebrow">Okapi for Android, in early development</p>
+        <h1 id="hero-title">Sign in to the same site twice.</h1>
+        <p class="lede">Okapi keeps separate Profiles, and each one has its own cookies, Tabs, history, bookmarks and downloads. Work mail in one Profile, personal mail in another, both signed in. Nothing in one Profile is visible from another.</p>
+
+        <fieldset class="tint">
+          <legend>The browser wears the color of the Profile you're in. Pick one for this page.</legend>
+          <div class="tint-options">
+            <label><input type="radio" name="profile" id="p-blue" checked><span class="swatch" style="--c:#1E5AC8"></span>Blue</label>
+            <label><input type="radio" name="profile" id="p-purple"><span class="swatch" style="--c:#6A1B9A"></span>Purple</label>
+            <label><input type="radio" name="profile" id="p-pink"><span class="swatch" style="--c:#AD1457"></span>Pink</label>
+            <label><input type="radio" name="profile" id="p-amber"><span class="swatch" style="--c:#A65F00"></span>Amber</label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/cylim/android-browser">Read the source on GitHub</a>
+          <a class="btn btn-quiet" href="https://github.com/cylim/android-browser/releases">Releases <span class="soon">first one coming</span></a>
+        </div>
+        <p class="fine">No APK to download yet. The first signed release will go on GitHub Releases.</p>
+      </div>
+
+      <div class="hero-art">
+        <picture>
+          <source srcset="assets/mark-dark.svg" media="(prefers-color-scheme: dark)">
+          <img src="assets/mark.svg" alt="The Okapi logo, an okapi curled into the letter O with its head looking over the top." width="778" height="897">
+        </picture>
+      </div>
+    </section>
+
+    <section id="profiles" class="band wrap" aria-labelledby="profiles-title">
+      <div class="section-head">
+        <h2 id="profiles-title">What a Profile keeps to itself</h2>
+        <p>Each Profile is its own androidx.webkit profile inside Android System WebView, with its own cookies and storage on disk.</p>
+      </div>
+      <div class="ledger">
+        <div class="ledger-col">
+          <h3>Kept per Profile</h3>
+          <ul>
+            <li>Cookies and site storage</li>
+            <li>Cache and site permissions</li>
+            <li>Service workers</li>
+            <li>Tabs and Pinned Tabs</li>
+            <li>History, up to the latest 5,000 visits</li>
+            <li>Bookmarks and Folders</li>
+            <li>The list of downloads</li>
+            <li>Site icons</li>
+            <li>A name, a color and an avatar</li>
+          </ul>
+        </div>
+        <div class="ledger-col ledger-shared">
+          <h3>Shared by all Profiles</h3>
+          <ul>
+            <li>Search engine</li>
+            <li>Suggestions on or off</li>
+            <li>Safe Browsing on or off</li>
+            <li>Theme: device, light or dark</li>
+            <li>Site Rules</li>
+            <li>Compact rows</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note">A Profile's web data store is named after its ID, never its name. Rename a Profile and you stay signed in. Delete it and its data is wiped at the next cold start (<a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0004-profile-web-data-is-named-by-profile-id.md">ADR 0004</a>).</p>
+    </section>
+
+    <section id="features" class="band wrap" aria-labelledby="features-title">
+      <div class="section-head">
+        <h2 id="features-title">Moving between Profiles</h2>
+        <p>A Tab can go to another Profile, or its page can open there while the Tab stays put.</p>
+      </div>
+
+      <article class="feature" aria-labelledby="f-move">
+        <div class="feature-name">
+          <h3 id="f-move">Move and Open in Profile</h3>
+        </div>
+        <div class="feature-body">
+          <p>Move takes a Tab to another Profile. The original Tab closes, and the page reloads under that Profile's Accounts. Open in Profile does the same and keeps the original Tab. Both live in the page menu.</p>
+          <div class="goes" role="group" aria-label="What a Move carries">
+            <div>
+              <h4>Goes with the Tab</h4>
+              <ul><li>Its current address</li></ul>
+            </div>
+            <div>
+              <h4>Stays behind</h4>
+              <ul>
+                <li>Back/forward history</li>
+                <li>Title and scroll position</li>
+                <li>Unsaved form input (you're warned first)</li>
+              </ul>
+            </div>
+          </div>
+          <p class="note">The history belongs to the Profile the Tab came from. Carrying it over would leak one Profile's browsing into another (<a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0003-move-carries-only-the-address.md">ADR 0003</a>).</p>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="f-links">
+        <div class="feature-name">
+          <h3 id="f-links">Incoming Links and Site Rules</h3>
+        </div>
+        <div class="feature-body">
+          <p>Make Okapi your default browser and a link from another app opens as a new Tab in the Active Profile, the one you were last using. If that's the wrong one, "Move to Profile…" is one tap away on the page.</p>
+          <p>A Site Rule decides for you: links for that site always open in the Profile you chose. After you Move a link, the page offers "Always" to make the rule in one tap.</p>
+          <table class="rules">
+            <caption>How a Site Rule matches</caption>
+            <thead>
+              <tr><th scope="col">Rule</th><th scope="col">Covers</th><th scope="col">Doesn't cover</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row" data-label="Rule"><span><code>example.com</code></span></th>
+                <td data-label="Covers"><span><code>example.com</code>, <code>www.example.com</code>, <code>mail.example.com</code></span></td>
+                <td data-label="Doesn't cover"><span><code>example.org</code></span></td>
+              </tr>
+              <tr>
+                <th scope="row" data-label="Rule"><span><code>example.com/work</code></span></th>
+                <td data-label="Covers"><span><code>/work</code>, <code>/work/today</code></span></td>
+                <td data-label="Doesn't cover"><span><code>/workshop</code></span></td>
+              </tr>
+              <tr>
+                <th scope="row" data-label="Rule"><span><code>*.example.com</code></span></th>
+                <td data-label="Covers"><span>Only the sites under <code>example.com</code></span></td>
+                <td data-label="Doesn't cover"><span><code>example.com</code> itself</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">"Check a link" under Settings → Site Rules tells you which Profile a link would open in. Incoming Links never open as Private Tabs, and only <code>http</code> and <code>https</code> links get in.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="band wrap" aria-labelledby="tabs-title">
+      <div class="section-head">
+        <h2 id="tabs-title">Tabs, as each Profile keeps them</h2>
+      </div>
+
+      <div class="facts">
+        <article>
+          <h3>Pinned Tabs and Folders</h3>
+          <p>A Profile's bookmarks are its Pinned Tabs. They sit under "Pinned" at the top of the Tab list, open or closed. Closing one closes its Tab and keeps the bookmark. Group them in Folders, one level deep, and hold a row to drag it into place.</p>
+        </article>
+        <article>
+          <h3>Private Tabs</h3>
+          <p>Every Profile can open Private Tabs. They share a temporary store apart from the Profile's own and write no history. Screenshots are blocked while one shows. Close the last one, or the app's window, and they end. Their cookies and site storage are cleared.</p>
+        </article>
+        <article>
+          <h3>Tabs that come back</h3>
+          <p>When Android kills the app, each normal Tab returns with its address, title and scroll position. Private Tabs don't. At most 5 Tabs stay live across all Profiles. The rest reload when you open them.</p>
+        </article>
+        <article>
+          <h3>A color per Profile</h3>
+          <p>Pick one of 12 colors, soft, medium or strong, and an icon or any emoji for the avatar. The Sidebar, Bottom Bar and Tab Overview take that color, so you can tell which Profile you're in.</p>
+        </article>
+        <article>
+          <h3>History, bookmarks, downloads</h3>
+          <p>All three are per Profile. A page can only offer a file. It downloads after you agree, with that Profile's cookies. Each row of the Tab list shows its site's icon, kept per Profile too.</p>
+        </article>
+        <article>
+          <h3>Search and suggestions</h3>
+          <p>Google, Bing, DuckDuckGo or Brave Search. Suggestions come from the Profile's bookmarks and history first. An address or text shaped like credentials never goes to the search engine, and suggestion requests carry no cookies.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="layouts" class="band wrap" aria-labelledby="layouts-title">
+      <div class="section-head">
+        <h2 id="layouts-title">Two layouts, picked by window width</h2>
+        <p>The layout follows the width of the window, not the kind of device. It switches live when you rotate, split the screen or unfold, and your Tabs stay put.</p>
+      </div>
+
+      <div class="ruler" role="img" aria-label="Window width scale: Bottom Bar below 840dp, Sidebar from 840dp. From 600dp the Bottom Bar gets its own Forward button.">
+        <div class="ruler-seg ruler-phone" aria-hidden="true"><span>Bottom Bar</span></div>
+        <div class="ruler-seg ruler-tablet" aria-hidden="true"><span>Sidebar</span></div>
+        <div class="ruler-ticks" aria-hidden="true">
+          <span class="tick" style="--at:0%">0</span>
+          <span class="tick" style="--at:41.6%">600dp</span>
+          <span class="tick tick-key" style="--at:58.3%">840dp</span>
+        </div>
+      </div>
+
+      <div class="devices">
+        <figure class="device-fig fig-tablet">
+          <div class="tablet" role="img" aria-label="Tablet with the Sidebar: the Profile's Pinned Tabs and a Folder at the top, its other Tabs below, and the Profile switcher at the bottom. The page fills the rest of the screen.">
+            <div class="screen" aria-hidden="true">
+              <div class="sidebar">
+                <div class="sb-nav">
+                  <svg><use href="#i-back"/></svg><svg><use href="#i-fwd"/></svg><svg><use href="#i-reload"/></svg><svg class="push"><use href="#i-more"/></svg>
+                </div>
+                <div class="sb-addr">news.example.org</div>
+                <p class="sb-label">Pinned</p>
+                <div class="row"><span class="mark" style="--m:#2E7D32">M</span><span>Mail</span></div>
+                <div class="row row-closed"><span class="mark" style="--m:#AD1457">C</span><span>Calendar</span></div>
+                <div class="row"><svg class="mark-ico"><use href="#i-folder"/></svg><span>Reading</span></div>
+                <div class="row row-in row-closed"><span class="mark" style="--m:#D84315">B</span><span>Blog</span></div>
+                <div class="sb-rule"></div>
+                <div class="row row-on"><span class="mark" style="--m:#00838F">N</span><span>News</span></div>
+                <div class="row"><span class="mark" style="--m:#6D4C41">R</span><span>Recipes</span></div>
+                <div class="row row-private"><svg class="mark-ico"><use href="#i-lock"/></svg><span>Private Tab</span></div>
+                <div class="row row-new"><svg class="mark-ico"><use href="#i-plus"/></svg><span>New Tab</span></div>
+                <div class="sb-profiles">
+                  <span class="avatar is-on"><svg><use href="#i-person"/></svg></span>
+                  <span class="avatar alt-teal"><svg><use href="#i-case"/></svg></span>
+                  <span class="avatar alt-slate">S</span>
+                  <span class="sb-pname">Personal</span>
+                </div>
+              </div>
+              <div class="page page-tablet">
+                <span class="pg-kicker"></span>
+                <span class="pg-title"></span>
+                <span class="pg-img"></span>
+                <span class="line w90"></span><span class="line w80"></span><span class="line w85"></span><span class="line w60"></span>
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            <h3>Sidebar <span class="dp">840dp and wider</span></h3>
+            <p>A vertical list of the Active Profile's Tabs: Pinned Tabs and Folders first, then the rest. The Profile switcher sits at the bottom, and swiping across the list changes Profile. Collapse it to the Rail, a narrow column with back, forward, reload and the Profile's avatar, and the page gets almost the full width.</p>
+          </figcaption>
+        </figure>
+
+        <figure class="device-fig fig-phone">
+          <div class="phone" role="img" aria-label="Phone with the Bottom Bar: the page fills the screen, and along the bottom edge sit the Profile's avatar, the address field and the Tab count.">
+            <div class="screen" aria-hidden="true">
+              <div class="page page-phone">
+                <span class="pg-kicker"></span>
+                <span class="pg-title"></span>
+                <span class="pg-img"></span>
+                <span class="line w90"></span><span class="line w80"></span><span class="line w85"></span><span class="line w70"></span><span class="line w50"></span>
+              </div>
+              <div class="bottombar">
+                <span class="avatar"><svg><use href="#i-person"/></svg></span>
+                <span class="bb-field"><span>news.example.org</span><svg><use href="#i-reload"/></svg></span>
+                <span class="bb-count">4</span>
+                <svg class="bb-more"><use href="#i-more"/></svg>
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            <h3>Bottom Bar <span class="dp">narrower than 840dp</span></h3>
+            <p>The address and search field runs along the bottom edge, with the Profile's avatar on its left. Swipe along the bar to change Tab, or tap the Tab count for the Tab Overview, which lists them all. From 600dp wide, Forward gets its own button; narrower, it waits in the page menu.</p>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="privacy" class="band band-privacy wrap" aria-labelledby="privacy-title">
+      <div class="section-head">
+        <h2 id="privacy-title">No telemetry, no Google Play Services</h2>
+        <p>A browser sees everything you do online. So Okapi has no analytics, no crash reporter and no service that needs a key (<a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0002-no-proprietary-dependencies-or-telemetry.md">ADR 0002</a>).</p>
+      </div>
+      <ul class="checks">
+        <li><b>No telemetry.</b> No analytics, no crash-reporting SDK, and Android System WebView's usage statistics are turned off. Crash reports come from people who open a GitHub issue and paste a log they've read. WebView's own crash reports follow your device's setting, as the <a href="privacy.html#l-webview">privacy policy</a> explains.</li>
+        <li><b>No Google Play Services.</b> No Firebase, no API keys. A public repository with no secrets in the app has no secret to leak.</li>
+        <li><b>Sessions stay on the device.</b> Cloud backup and device-to-device transfer leave out all of the app's data, so your signed-in sessions are never copied off the device.</li>
+        <li><b>Quiet logs.</b> Release builds never log addresses, page titles or cookies.</li>
+        <li><b>Safe Browsing without a key.</b> It's built into Android System WebView, so the app doesn't need one.</li>
+        <li><b>Built in public, MIT licensed.</b> The code, the spec and the architecture decisions, with the reasons behind them, are on GitHub.</li>
+      </ul>
+      <p class="note">This page follows the same rule: no fonts, scripts or trackers from other servers.</p>
+    </section>
+
+    <section id="requirements" class="band wrap" aria-labelledby="req-title">
+      <div class="section-head">
+        <h2 id="req-title">What you need</h2>
+      </div>
+      <dl class="reqs">
+        <div><dt>Android</dt><dd>15 (API 35) or later</dd></div>
+        <div><dt>Engine</dt><dd>Android System WebView, already on the device</dd></div>
+        <div><dt>Google Play Services</dt><dd>Not needed</dd></div>
+        <div><dt>Screens</dt><dd>Phones, tablets and foldables</dd></div>
+      </dl>
+    </section>
+
+    <section id="changelog" class="band wrap" aria-labelledby="changelog-title">
+      <div class="section-head">
+        <h2 id="changelog-title">Changelog</h2>
+        <p>Nothing is released yet. Version 0.1.0 ships once a signed APK is built by GitHub Actions, published on GitHub Releases and checked against F-Droid's requirements. The full text is in <a href="https://github.com/cylim/android-browser/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+      </div>
+
+      <div class="log">
+        <section class="release" aria-labelledby="rel-010">
+          <h3 id="rel-010" class="release-head"><span class="ver">0.1.0</span> <span class="tag">not released yet</span></h3>
+
+          <details>
+            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Browsing in one Profile</span> <span class="pr">Milestone 1, #1</span></summary>
+            <ul>
+              <li>Load a page, go back and forward, reload, and stop loading.</li>
+              <li>The address field loads an address or searches for the text. An address, or text shaped like credentials, is never sent to the search engine.</li>
+              <li>Two layouts that follow the window's width: the Sidebar at 840dp and wider, which collapses to the Rail, and the Bottom Bar below that. They switch live when the window resizes.</li>
+              <li>Sign-in popups open in the Tab's Profile, under a bar that shows the popup's own address.</li>
+              <li>A Tab survives a crash of the page's renderer instead of closing the app.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Profiles</span> <span class="pr">Milestone 2, #2</span></summary>
+            <ul>
+              <li>Create, switch, rename, recolor and delete Profiles. Each Profile keeps its own cookies, site storage, cache, site permissions and service workers.</li>
+              <li>Deleting a Profile asks first and warns that every Account signed in within it will be signed out. The Profile disappears at once, and its web data is wiped at the next cold start. The last Profile can't be deleted.</li>
+              <li>In the Sidebar, the Profile switcher sits at the bottom, and swiping across the Tab list switches Profiles. In the Bottom Bar, the Profile's avatar opens the Profile sheet.</li>
+              <li>The Sidebar and the Bottom Bar take the Active Profile's color.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Tabs</span> <span class="pr">Milestone 3, #3</span></summary>
+            <ul>
+              <li>Several Tabs per Profile. After Android kills the app, each Tab comes back with its address, title and scroll position.</li>
+              <li>At most 5 Tabs are live at once, across all Profiles. The others reload when you open them.</li>
+              <li>The Sidebar lists the Active Profile's Tabs. In the Bottom Bar, the Tab count opens the Tab Overview, and swiping along the bar switches Tabs.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Move, Open in Profile and Incoming Links</span> <span class="pr">Milestone 4, #4</span></summary>
+            <ul>
+              <li>Move takes a Tab to another Profile. Only its address goes along, and the page reloads there. The Profile picker says what is lost before you choose.</li>
+              <li>Open in Profile opens the Tab's address in another Profile and keeps the original Tab.</li>
+              <li>A page menu ("More") in the Sidebar, the Rail and the Bottom Bar holds Move, Open in Profile and a new Tab.</li>
+              <li>Okapi can be the default browser. An Incoming Link opens as a new Tab in the Active Profile, with a one-tap "Move to Profile…". Only <code>http</code> and <code>https</code> links are accepted.</li>
+              <li>The menu offers "Set as default browser" while Okapi isn't.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>History and bookmarks</span> <span class="pr">Milestone 5, #5</span></summary>
+            <ul>
+              <li>Each Profile keeps its own history and bookmarks.</li>
+              <li>History keeps the pages you go to, not reloads, Back, Forward or restored Tabs, and leaves out a redirect's stops on the way. A Profile keeps its latest 5,000 visits.</li>
+              <li>Bookmarks and History open in the page's place: beside the Sidebar, or full screen on a phone. History can be cleared after a confirmation.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Downloads</span> <span class="pr">Milestone 5, #6</span></summary>
+            <ul>
+              <li>A page can only offer a file. It downloads once you agree, in a dialog that names the file, the site and the size.</li>
+              <li>Android's download service fetches the file with the Profile's cookies and saves it to the device's Downloads folder.</li>
+              <li>Each Profile has its own list of downloads. A finished file opens, and a running one can be cancelled.</li>
+              <li>A download that redirects to another site doesn't take the first site's cookies with it.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Private Tabs</span> <span class="pr">Milestone 5, #7</span></summary>
+            <ul>
+              <li>Each Profile can open Private Tabs. They share one temporary web data store, apart from the Profile's own, and never write to history.</li>
+              <li>When the last Private Tab of a Profile closes, its cookies and site storage are cleared. Private Tabs end when the app's window closes and are never restored.</li>
+              <li>While a Private Tab shows, screenshots and the recent-apps preview are blocked. In the Tab list it carries a lock.</li>
+              <li>A Private Tab can't be Moved or opened in another Profile, and never takes an Incoming Link.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Settings</span> <span class="pr">Milestone 5, #8</span></summary>
+            <ul>
+              <li>Search engine: Google, Bing, DuckDuckGo or Brave Search.</li>
+              <li>Suggestions while you type: pages from the Active Profile's bookmarks and history first, then the search engine's suggestions. Suggestion requests carry no cookies, and a Private Tab offers none.</li>
+              <li>Safe Browsing can be turned off, and the change reaches pages that are already open.</li>
+              <li>Theme: the device's, light or dark.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Fixed: the keyboard</span> <span class="pr">#9</span></summary>
+            <ul>
+              <li>On a tablet in landscape, the on-screen keyboard no longer covers the New Profile dialog's buttons.</li>
+              <li>With the keyboard up, the Sidebar's suggestions and Tab list end above it and scroll.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Site Rules</span> <span class="pr">#10</span></summary>
+            <ul>
+              <li>A Site Rule sends Incoming Links for a site, optionally with a path, to the Profile you chose. <code>*</code> stands for anything.</li>
+              <li>Site Rules live under Settings → Site Rules, where "Check a link" says which Profile a link would open in.</li>
+              <li>After you Move an Incoming Link to another Profile, the page offers a rule with one tap ("Always").</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Pinned Tabs and Folders</span> <span class="pr">#11</span></summary>
+            <ul>
+              <li>A Profile's bookmarks are its Pinned Tabs, listed under "Pinned" above its other Tabs, in the Sidebar and the Tab Overview.</li>
+              <li>A Pinned Tab is open while a Tab shows it and dimmed otherwise. Closing it keeps the bookmark.</li>
+              <li>Folders group Pinned Tabs, one level deep. A Folder can be collapsed, renamed and deleted, and deleting it keeps its bookmarks.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Styling</span> <span class="pr">#12</span></summary>
+            <ul>
+              <li>Each Profile picks one of 12 colors and a color strength: soft, medium or strong. While it is active, the Sidebar, the Bottom Bar and the Tab Overview are tinted with it, and switching Profiles glides from one color to the next.</li>
+              <li>A Profile's avatar shows one of 8 icons or any one emoji.</li>
+              <li>"Compact rows" in Settings makes every row of the Tab list one line.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Site icons</span> <span class="pr">#13</span></summary>
+            <ul>
+              <li>Every row of the Tab list starts with its site's own icon, or the first letter of the site's name until the Profile has shown a page of that site.</li>
+              <li>Icons are kept per Profile on the device. A Private Tab's icons are never kept, and clearing a Profile's history removes the icons it no longer needs.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Drag to reorder Pinned Tabs</span> <span class="pr">#14</span></summary>
+            <ul>
+              <li>Hold a Pinned Tab or a Folder and drag it to a new place. Let a Pinned Tab go on a Folder to put it in, or drag it past its Folder's ends to take it out.</li>
+              <li>Held without dragging, a row opens its menu, where "Move up" and "Move down" do the same.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><em class="pending">not merged</em> <span>Start Page</span></summary>
+            <ul>
+              <li>A new Tab opens on a Start Page built into the app, with the Profile's Pinned Tabs and recent pages. In a new Private Tab, it says what Private Tabs keep apart and what they erase.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><em class="pending">not merged</em> <span>The name Okapi</span></summary>
+            <ul>
+              <li>The browser is now called Okapi. JRNY stays the maker's name. The launcher shows "Okapi", and the Google Play title will be "Okapi Browser by JRNY". The application ID stays <code>app.jrny.browser</code>, so an installed copy updates in place and keeps its Profiles. <a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0005-product-name-okapi.md">ADR 0005</a> says why.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><em class="pending">not merged</em> <span>WebView usage metrics are turned off</span></summary>
+            <ul>
+              <li>Okapi tells Android System WebView not to send its usage statistics to Google, whatever the device's usage and diagnostics setting is. WebView's crash reports still follow that setting and contain no page addresses.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><em class="pending">not merged</em> <span>Fixed: suggestions and passwords typed before the <code>@</code></span></summary>
+            <ul>
+              <li>While you type, text with a colon before its first <code>/</code>, <code>?</code> or <code>#</code>, such as <code>admin:hunter2</code>, is no longer sent to the search engine for suggestions, because an <code>@</code> typed next would make it credentials. Before, a pause before the <code>@</code> could send the password.</li>
+              <li>A search with an early colon, such as <code>python: list comprehension</code>, now gets only bookmark and history suggestions while you type. Go still searches for it.</li>
+            </ul>
+          </details>
+        </section>
+
+        <section class="release limits" aria-labelledby="rel-limits">
+          <h3 id="rel-limits" class="release-head"><span class="ver">Known limits</span></h3>
+          <ul>
+            <li>Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.</li>
+            <li>There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.</li>
+            <li>Files a page makes itself (<code>blob:</code> and <code>data:</code> addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.</li>
+            <li>Back/forward history isn't restored after Android kills the app.</li>
+            <li>A Move loses unsaved form input and pages reached by submitting a form.</li>
+            <li>A deleted Profile's web data stays on the device until the next cold start.</li>
+            <li>Sign-in with two Accounts at once is confirmed for Google. Microsoft, GitHub and Apple are untested.</li>
+            <li>Android System WebView sends the app's package name with every request (<code>X-Requested-With</code>), and this can't be turned off. A site could use it to block sign-in.</li>
+            <li>Not in v1: sync, extensions, a built-in password manager, content blocking and a lock per Profile.</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <section id="next" class="band wrap" aria-labelledby="next-title">
+      <div class="section-head">
+        <h2 id="next-title">After v1</h2>
+        <p>On the roadmap once the first release is out. None of it is built yet.</p>
+      </div>
+      <ul class="next">
+        <li>Passkeys, after approval as a privileged browser</li>
+        <li>A Custom Tabs service</li>
+        <li>A biometric lock per Profile</li>
+        <li>Content blocking</li>
+        <li>Bookmark export and import</li>
+        <li>A Google Play release</li>
+      </ul>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/cylim/android-browser">Follow along on GitHub</a>
+        <a class="btn btn-quiet" href="https://github.com/cylim/android-browser/blob/main/docs/ROADMAP.md">Read the roadmap</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot wrap">
+    <p class="foot-brand"><picture><source srcset="assets/mark-compact-dark.svg" media="(prefers-color-scheme: dark)"><img src="assets/mark-compact.svg" alt="" width="21" height="24"></picture><span>Okapi, a browser by JRNY, is free software under the <a href="https://github.com/cylim/android-browser/blob/main/LICENSE">MIT License</a>.</span></p>
+    <ul>
+      <li><a href="https://github.com/cylim/android-browser">Source</a></li>
+      <li><a href="privacy.html">Privacy policy</a></li>
+      <li><a href="https://github.com/cylim/android-browser/blob/main/SECURITY.md">Security policy</a></li>
+      <li><a href="https://github.com/cylim/android-browser/blob/main/CONTRIBUTING.md">Contributing</a></li>
+    </ul>
+    <p class="fine">Found a security problem? Report it privately through the Security policy, never in a public issue.</p>
+  </footer>
+</body>
+</html>

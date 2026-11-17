@@ -1,0 +1,53 @@
+Okapi, a browser by JRNY, signs you in to the same site with two different accounts at once. It keeps separate Profiles, and each Profile has its own cookies, site data, Tabs, history, bookmarks and downloads. Use your work account in one Profile and your personal account in another, both signed in. Nothing in one Profile is visible from another.
+
+Profiles
+- Give each Profile a name, a color and an icon or an emoji. The browser takes the color of the Profile you are in.
+- Move a Tab to another Profile to open the same page under that Profile's accounts. Only the address goes along, and the page reloads there.
+- Open in Profile opens the page in another Profile and keeps the original Tab.
+
+Links from other apps
+- Make Okapi your default browser, and a link from another app opens in the Profile you used last. "Move to Profile…" is one tap away on the page.
+- Site Rules send links for a site, or for part of a site, to the Profile you chose.
+
+Tabs
+- After Android closes the app, Tabs come back with their address, title and scroll position.
+- Pinned Tabs: a Profile's bookmarks sit at the top of its Tab list. Group them in Folders and drag them into order.
+- Private Tabs never write to history. When the last one in a Profile closes, its cookies and site data are cleared. Screenshots are blocked while a Private Tab shows.
+- A new Tab opens on a Start Page with the Profile's Pinned Tabs and recent pages.
+
+Layouts
+- In a wide window, a Sidebar lists the Tabs, with the Profile switcher at its bottom. It collapses to a narrow Rail.
+- In a narrow window, a Bottom Bar holds the address field. Swipe along it to switch Tabs, or open the Tab Overview.
+
+Settings
+- Search engine: Google, Bing, DuckDuckGo or Brave Search.
+- Suggestions from the Profile's bookmarks and history, then from the search engine.
+- Safe Browsing, theme (the device's, light or dark) and compact rows.
+
+Privacy
+Okapi has no ads, no telemetry, no crash-reporting SDK and no Google Play Services libraries. It turns off Android System WebView's usage statistics. It has no accounts of its own and no server. History, bookmarks, the downloads list, cookies, site data and site icons stay on your device, in their Profile, and Android backup leaves them out.
+
+Besides the pages you open, these requests leave your device:
+- Search suggestions: while you type, the text goes to your search engine, without cookies. You can turn suggestions off.
+- Safe Browsing: Android System WebView checks pages with Google. You can turn it off.
+- Downloads: Android's download service fetches the file with the Profile's cookies.
+- Site icons: fetched from the sites you visit.
+- Crash reports: Android System WebView can send them to Google if you share usage and diagnostics in Android's settings.
+
+The only permission Okapi asks for is internet access.
+
+Requirements
+Android 15 or later, and an Android System WebView with multi-profile support. If yours is too old, Okapi asks you to update it.
+
+Open source
+Okapi is open source under the MIT license and built in public. The code, the specification and the reasons behind its design are on GitHub, where you can also report bugs:
+https://github.com/cylim/android-browser
+
+Early development
+This is version 0.1.0. Expect rough edges. Known limits:
+- Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
+- No Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.
+- Files a page makes itself (blob: and data: addresses) can't be downloaded yet.
+- Two accounts at once is confirmed for Google sign-in. Other sign-in providers are untested.
+- Android System WebView sends the app's package name with every request, and a site could use it to block sign-in.
+- Not included: sync, extensions, a built-in password manager, content blocking.
