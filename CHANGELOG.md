@@ -137,12 +137,19 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Desktop site, a switch in the page menu, asks a site for its desktop version and lays the page out at desktop width. Each Profile remembers it for the site, and it shows in Site settings. A Private Tab keeps it until it closes.
 - Settings → Pages: text size for every page (50% to 200%), "Darken pages without a dark theme" while Okapi's theme is dark, and pull to refresh, which is on by default.
 
+### Tabs and data (not merged yet)
+
+- Closing a Tab offers "Undo" for a few seconds, which puts it back where it was. The last ten closed Tabs of each Profile are listed under "Recently closed" at the top of the history. Private Tabs and Pinned Tabs are never listed.
+- Settings → Clear browsing data clears the Active Profile's history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs or site icons, from all time. Checking cookies warns that the Profile's Accounts will be signed out.
+- Add to Home screen pins the page to the launcher with the site's icon and the Profile's badge. It opens in that Profile, whichever Profile is active, and stops working when the Profile is deleted.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
 - There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.
 - A site that only answers a real browser may refuse the download service. A page that drops a file it made in the same moment it offers it leaves nothing to save.
 - Back/forward history isn't restored after Android kills the app.
+- On an Android System WebView too old to delete all of a store's browsing data, "cookies and site data" in Clear browsing data clears cookies and site storage but can leave service workers and Cache Storage behind. Updating Android System WebView fixes this.
 - A Move loses unsaved form input and pages reached by submitting a form.
 - A deleted Profile's web data stays on the device until the next cold start.
 - Sign-in with two Accounts at once is confirmed for Google. Microsoft, GitHub and Apple are untested.

@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Folder
 import app.jrny.browser.library.Visit
+import app.jrny.browser.tab.ClosedTab
 import app.jrny.browser.tab.displayHost
 import kotlinx.coroutines.delay
 
@@ -80,6 +82,10 @@ class LibraryUi(
     val openDownload: (Download) -> Boolean = { false },
     /** Takes a download off the list, stopping it first if it is still running. */
     val removeDownload: (Download) -> Unit = {},
+    /** The Profile's recently closed Tabs, newest first (SPEC, "Reopen closed Tab"). */
+    val recentlyClosed: List<ClosedTab> = emptyList(),
+    /** Opens a closed Tab again, at the end of the Tab list, and shows it. */
+    val reopenClosed: (ClosedTab) -> Unit = {},
 ) {
     fun isBookmarked(url: String?): Boolean = url != null && bookmarks.any { it.url == url }
 }
@@ -124,7 +130,7 @@ fun LibraryPanel(
         onClose = onClose,
         modifier = modifier,
         action = {
-            if (panel == Panel.History && library.visits.isNotEmpty()) {
+            if (panel == Panel.History && (library.visits.isNotEmpty() || library.recentlyClosed.isNotEmpty())) {
                 TextButton(onClick = { confirmClear = true }, modifier = Modifier.testTag("clear-history")) {
                     Text(stringResource(R.string.clear_history))
                 }
@@ -132,20 +138,61 @@ fun LibraryPanel(
         },
     ) {
                 when (panel) {
-                    Panel.History -> PanelList(
-                        items = library.visits,
-                        key = { it.id },
-                        emptyText = R.string.history_empty,
-                        contentPadding = contentPadding,
-                    ) { visit ->
-                        PanelRow(
-                            title = visit.title,
-                            url = visit.url,
-                            detail = visitTime(visit.visitedAt),
-                            deleteLabel = R.string.delete_from_history,
-                            onOpen = { onOpen(visit.url) },
-                            onDelete = { library.deleteVisit(visit) },
-                        )
+                    Panel.History -> {
+                        // "Recently closed" first, under its heading, then the history under its own.
+                        val closed = library.recentlyClosed
+                        val rows: List<Any> = if (closed.isEmpty()) {
+                            library.visits
+                        } else {
+                            listOf(R.string.recently_closed) + closed + (if (library.visits.isEmpty()) emptyList() else listOf(R.string.history_heading) + library.visits)
+                        }
+                        PanelList(
+                            items = rows,
+                            key = {
+                                when (it) {
+                                    is Int -> "heading-$it"
+                                    is ClosedTab -> "closed-${it.id}"
+                                    else -> (it as Visit).id
+                                }
+                            },
+                            emptyText = R.string.history_empty,
+                            contentPadding = contentPadding,
+                        ) { row ->
+                            when (row) {
+                                is Int -> Text(
+                                    stringResource(row),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .padding(start = PANEL_TEXT_INSET, end = PANEL_TEXT_INSET, top = 24.dp, bottom = 8.dp)
+                                        .semantics { heading() }
+                                        .testTag("history-heading"),
+                                )
+                                is ClosedTab -> PanelRow(
+                                    title = row.title,
+                                    url = row.url,
+                                    detail = null,
+                                    deleteLabel = R.string.reopen_tab,
+                                    deleteIcon = Icons.Filled.Add,
+                                    onOpen = {
+                                        library.reopenClosed(row)
+                                        onClose()
+                                    },
+                                    onDelete = {
+                                        library.reopenClosed(row)
+                                        onClose()
+                                    },
+                                )
+                                is Visit -> PanelRow(
+                                    title = row.title,
+                                    url = row.url,
+                                    detail = visitTime(row.visitedAt),
+                                    deleteLabel = R.string.delete_from_history,
+                                    onOpen = { onOpen(row.url) },
+                                    onDelete = { library.deleteVisit(row) },
+                                )
+                            }
+                        }
                     }
                     Panel.Bookmarks -> {
                         // The bookmarks outside a Folder first, then each Folder under its name.

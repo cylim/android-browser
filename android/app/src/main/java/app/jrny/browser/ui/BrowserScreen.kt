@@ -27,6 +27,7 @@ import app.jrny.browser.BrowserState
 import app.jrny.browser.BuildConfig
 import app.jrny.browser.LinkOffer
 import app.jrny.browser.address.AddressInput
+import app.jrny.browser.shortcut.HomeShortcuts
 import app.jrny.browser.library.ProfilePages
 import app.jrny.browser.settings.Suggestion
 import kotlinx.coroutines.delay
@@ -139,10 +140,13 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
         removeDownload = browser::removeDownload,
+        // Only the Active Profile's own list; none while it is still being read.
+        recentlyClosed = browser.recentlyClosed.collectAsState().value?.takeIf { it.first == profile.id }?.second.orEmpty(),
+        reopenClosed = browser::reopenClosed,
     )
 
     val appSettings by browser.settings.collectAsState()
-    val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME)
+    val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME, clearBrowsingData = { browser.clearBrowsingData(profile, it) })
 
     val rules by browser.siteRules.collectAsState()
     val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
@@ -157,6 +161,14 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         pageFileSaved = browser.pageFileSaved,
         dismissPageFileSaved = browser::dismissPageFileSaved,
         setDesktopSite = { on -> browser.setDesktopSite(current.selected, browser.tabFor(current.selected), on) },
+        addToHomeScreen = if (current.selected.isPrivate || !HomeShortcuts.supported(LocalContext.current)) {
+            null
+        } else {
+            { browser.addToHomeScreen(current.selected, browser.tabFor(current.selected), profile) }
+        },
+        justClosed = browser.justClosed?.takeIf { it.profileId == profile.id },
+        undoClose = browser::undoClose,
+        dismissJustClosed = browser::dismissJustClosed,
     )
 
     val sitesOfProfile by browser.siteSettings.collectAsState()
@@ -355,6 +367,7 @@ fun BrowserWindow(
                             tab.openFind()
                         },
                         onDesktopSite = links.setDesktopSite,
+                        onAddToHome = links.addToHomeScreen,
                     )
                 },
                 findBar = if (tab.find != null) {
@@ -367,6 +380,7 @@ fun BrowserWindow(
                     val savedFile = links.pageFileSaved
                     val behind = links.openedBehind
                     val handoff = tab.handoff
+                    val closed = links.justClosed
                     if (started != null) {
                         DownloadStartedPrompt(
                             started,
@@ -405,6 +419,9 @@ fun BrowserWindow(
                             },
                             onDismiss = tab::dismissHandoff,
                         )
+                    } else if (closed != null) {
+                        // It goes by itself after a while (BrowserState).
+                        JustClosedPrompt(closed.title, onUndo = links.undoClose, onDismiss = links.dismissJustClosed)
                     } else if (behind != null) {
                         // A note, not a question: it goes by itself.
                         LaunchedEffect(behind) {
@@ -479,6 +496,7 @@ fun BrowserWindow(
                         if (open == Panel.Settings) {
                             SettingsPanel(
                                 settings,
+                                profileId = profiles.active.id.value,
                                 onClose = { panel = null },
                                 contentPadding = padding,
                                 siteRules = siteRules.rules.size,

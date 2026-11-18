@@ -23,6 +23,8 @@ class Repositories(database: JrnyDatabase) {
     val downloads = DownloadRepository(database.downloads())
     val siteRules = SiteRuleRepository(database.siteRules())
     val siteSettings = SiteSettingsRepository(database.siteSettings())
+    val closedTabs = app.jrny.browser.tab.ClosedTabRepository(database.closedTabs())
+    val shortcuts = app.jrny.browser.shortcut.ShortcutRepository(database.shortcuts())
 }
 
 /** What a [BrowserState] works with besides the screen: what is stored, and the services around it. */

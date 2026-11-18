@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.webkit.WebViewFeature
 import androidx.lifecycle.lifecycleScope
 import app.jrny.browser.address.WebAddress
+import app.jrny.browser.shortcut.HomeShortcuts
+import android.widget.Toast
+import kotlinx.coroutines.launch
 import app.jrny.browser.ui.BrowserScreen
 import app.jrny.browser.ui.SystemBarsFollowTheme
 import app.jrny.browser.ui.theme.JrnyTheme
@@ -56,7 +59,10 @@ class MainActivity : ComponentActivity() {
         val browser = BrowserState(this, app.services, lifecycleScope)
         this.browser = browser
         // Not after a restore: the link's Tab is already saved, and would open a second time.
-        if (savedInstanceState == null) openIncomingLink(intent)
+        if (savedInstanceState == null) {
+            openIncomingLink(intent)
+            openShortcut(intent)
+        }
         setContent {
             // The theme is a setting: the device's, or always light or dark.
             val settings by browser.settings.collectAsState()
@@ -71,6 +77,23 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openIncomingLink(intent)
+        openShortcut(intent)
+    }
+
+    /**
+     * Opens a Home Screen Shortcut's page in its own Profile (SPEC, "Add to Home screen"). The
+     * intent names only the shortcut's random id; the address and the Profile are looked up here.
+     */
+    private fun openShortcut(intent: Intent?) {
+        if (intent?.action != HomeShortcuts.ACTION_OPEN) return
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val id = intent.getStringExtra(HomeShortcuts.EXTRA_ID) ?: return
+        val browser = browser ?: return
+        lifecycleScope.launch {
+            if (!browser.openShortcut(id)) {
+                Toast.makeText(this@MainActivity, R.string.shortcut_profile_deleted, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     /** Dark mode doesn't recreate the activity (configChanges), so the browser hears of it here. */

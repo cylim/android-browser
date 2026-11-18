@@ -57,6 +57,12 @@ class LinksUi(
     val dismissPageFileSaved: () -> Unit = {},
     /** Desktop site on or off for the shown page's site, or null where it can't be set. */
     val setDesktopSite: ((Boolean) -> Unit)? = null,
+    /** Pins a shortcut to the shown page, in its Profile, or null where there can be none (a Private Tab). */
+    val addToHomeScreen: (() -> Unit)? = null,
+    /** The Tab that just closed, while "Undo" is offered, or null. */
+    val justClosed: app.jrny.browser.tab.ClosedTab? = null,
+    val undoClose: () -> Unit = {},
+    val dismissJustClosed: () -> Unit = {},
 )
 
 /**

@@ -181,6 +181,26 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version10AddsClosedTabsAndShortcutsAndKeepsTabs() {
+        helper.createDatabase(DB, 9).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion, tint) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0, 'Medium')")
+            db.execSQL("INSERT INTO tabs (id, profileId, url, title, scrollY, lastUsed) VALUES (3, 1, 'https://example.com/', 'Example', 0, 1)")
+        }
+        helper.runMigrationsAndValidate(DB, 10, true).use { db ->
+            db.query("SELECT url FROM tabs WHERE id = 3").use { rows ->
+                rows.moveToFirst()
+                assertEquals("https://example.com/", rows.getString(0))
+            }
+            for (table in listOf("closed_tabs", "shortcuts")) {
+                db.query("SELECT COUNT(*) FROM $table").use { rows ->
+                    rows.moveToFirst()
+                    assertEquals(table, 0, rows.getInt(0))
+                }
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

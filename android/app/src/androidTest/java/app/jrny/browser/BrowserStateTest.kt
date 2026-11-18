@@ -1169,4 +1169,133 @@ class BrowserStateTest {
             assertEquals("hello from the page", String(downloader.saved.values.single().second))
         }
     }
+
+    @Test
+    fun aClosedTabCanBeOpenedAgainInItsPlace() {
+        TestServer(mapOf("/first" to "<title>first</title>", "/second" to "<title>second</title>")).use { server ->
+            val browser = newBrowser()
+            val profile = active(browser).profile
+            val first = active(browser).selected
+            load(show(browser, first.id), server.url("/first"), "first")
+            onMain { browser.openTab(profile) }
+            await("second tab") { browser.active.value?.tabs?.size == 2 }
+            val second = active(browser).selected
+            load(show(browser, second.id), server.url("/second"), "second")
+            awaitSaved(browser, first.id, server.url("/first"), "first")
+
+            onMain { browser.closeTab(first.id) }
+            await("undo offered") { browser.justClosed?.tabId == first.id }
+            await("listed") { browser.recentlyClosed.value?.second.orEmpty().size == 1 }
+            onMain { browser.undoClose() }
+            await("back in its place") { browser.active.value?.tabs?.firstOrNull()?.id == first.id }
+            assertEquals(first.id, active(browser).selected.id)
+            assertEquals(server.url("/first"), active(browser).selected.url)
+            await("off the list") { browser.recentlyClosed.value?.second.orEmpty().isEmpty() }
+        }
+    }
+
+    @Test
+    fun aClosedTabReopenedFromTheListCantBeReopenedAgainWithUndo() {
+        TestServer(mapOf("/page" to "<title>page</title>")).use { server ->
+            val browser = newBrowser()
+            val profile = active(browser).profile
+            val first = active(browser).selected
+            load(show(browser, first.id), server.url("/page"), "page")
+            onMain { browser.openTab(profile) }
+            await("second tab") { browser.active.value?.tabs?.size == 2 }
+            show(browser, active(browser).selected.id)
+            awaitSaved(browser, first.id, server.url("/page"), "page")
+
+            onMain { browser.closeTab(first.id) }
+            await("listed") { browser.recentlyClosed.value?.second.orEmpty().size == 1 }
+            val closed = onMain { browser.recentlyClosed.value!!.second.single() }
+            onMain { browser.reopenClosed(closed) }
+            await("reopened") { browser.active.value?.tabs?.count { it.url == server.url("/page") } == 1 }
+            await("no undo left") { browser.justClosed == null }
+            onMain { browser.undoClose() }
+            Thread.sleep(500)
+            assertEquals(1, onMain { browser.active.value!!.tabs.count { it.url == server.url("/page") } })
+        }
+    }
+
+    @Test
+    fun aPrivateTabOrAnEmptyTabIsNeverRemembered() {
+        val browser = newBrowser()
+        val profile = active(browser).profile
+        val empty = active(browser).selected
+        onMain { browser.openTab(profile) }
+        await("second tab") { browser.active.value?.tabs?.size == 2 }
+        onMain { browser.closeTab(empty.id) }
+        val (privateId, privateTab) = openPrivate(browser)
+        load(privateTab, titled("secret"), "secret navigate")
+        onMain { browser.closeTab(privateId) }
+        Thread.sleep(500)
+        assertEquals(null, onMain { browser.justClosed })
+        assertTrue(onMain { browser.recentlyClosed.value?.second.orEmpty().isEmpty() })
+    }
+
+    @Test
+    fun aShortcutOpensInItsOwnProfileAndAnUnknownOneOpensNothing() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        val shortcut = runBlocking { repositories.shortcuts.add(work.id, "https://example.com/work", "Work page") }!!
+        // Personal is the Active Profile; the shortcut still opens in Work.
+        assertEquals(personal.id, active(browser).profile.id)
+        assertTrue(runBlocking { browser.openShortcut(shortcut.id) })
+        await("work active") { browser.active.value?.profile?.id == work.id }
+        await("page open") { browser.active.value?.selected?.url == "https://example.com/work" }
+        assertFalse(runBlocking { browser.openShortcut("okapi-not-a-shortcut") })
+    }
+
+    @Test
+    fun clearingCookiesSignsTheProfileOutAndLeavesOthersAlone() {
+        val browser = newBrowser()
+        val personal = active(browser).profile
+        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+        val site = "https://example.com"
+        val set = java.util.concurrent.CountDownLatch(2)
+        onMain {
+            WebProfile.of(personal.id).cookieManager.setCookie(site, "a=1; Max-Age=600; Secure") { set.countDown() }
+            WebProfile.of(work.id).cookieManager.setCookie(site, "b=2; Max-Age=600; Secure") { set.countDown() }
+        }
+        assertTrue(set.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies, BrowsingData.Cache)) }
+        await("personal signed out") { WebProfile.of(personal.id).cookieManager.getCookie(site).isNullOrEmpty() }
+        assertEquals("b=2", onMain { WebProfile.of(work.id).cookieManager.getCookie(site) })
+    }
+
+
+    @Test
+    fun clearingSiteDataEmptiesTheProfilesCacheStorageAndLeavesOthersAlone() {
+        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA))
+        // Cache Storage needs a secure origin: a server on 127.0.0.1 is one.
+        val page = "<title>cache</title><script>" +
+            "function count(){caches.keys().then(function(k){document.title='caches '+k.length})}" +
+            "caches.open('okapi-test').then(function(c){return c.put('/x',new Response('a'))}).then(count)</script>"
+        TestServer(mapOf("/cache" to page), loopback = true).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            val mine = show(browser, active(browser).selected.id)
+            val theirs = onMain { Tab(context, WebProfile.of(work.id)) }
+            try {
+                load(mine, server.url("/cache"), "caches 1")
+                load(theirs, server.url("/cache"), "caches 1")
+
+                onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies)) }
+                // The clear runs in the background: each look asks the page again.
+                val count = "caches.keys().then(function(k){document.title='left '+k.length})"
+                await("personal emptied") {
+                    mine.webView.evaluateJavascript(count, null)
+                    mine.title == "left 0"
+                }
+                onMain { theirs.webView.evaluateJavascript(count, null) }
+                await("work kept") { theirs.title == "left 1" }
+            } finally {
+                onMain { theirs.destroy() }
+            }
+        }
+    }
+
 }

@@ -18,7 +18,15 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Slider
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import app.jrny.browser.BrowsingData
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +53,8 @@ class SettingsUi(
     /** Deleted Profiles whose web data is wiped at the next cold start (SPEC, "Profiles"). */
     val pendingDeletions: Int = 0,
     val version: String = "",
+    /** Clears what is chosen from the Active Profile (SPEC, "Clear browsing data"). */
+    val clearBrowsingData: (Set<BrowsingData>) -> Unit = {},
 )
 
 /**
@@ -66,8 +76,21 @@ fun SettingsPanel(
     /** How many sites the Active Profile has Site settings for. */
     sites: Int = 0,
     onSiteSettings: () -> Unit = {},
+    /** The Active Profile's id: Clear browsing data's dialog belongs to it, and closes if it changes. */
+    profileId: String = "",
 ) {
     val settings = ui.settings
+    var clearing by remember(profileId) { mutableStateOf(false) }
+    if (clearing) {
+        ClearBrowsingDataDialog(
+            profileName,
+            onClear = {
+                ui.clearBrowsingData(it)
+                clearing = false
+            },
+            onDismiss = { clearing = false },
+        )
+    }
     PanelFrame(
         tag = "panel-Settings",
         title = stringResource(R.string.settings),
@@ -116,6 +139,13 @@ fun SettingsPanel(
                 checked = settings.safeBrowsing,
                 tag = "setting-safe-browsing",
             ) { on -> ui.update { it.copy(safeBrowsing = on) } }
+            Link(
+                title = R.string.clear_browsing_data,
+                explanation = stringResource(R.string.clear_browsing_data_explanation, profileName),
+                value = "",
+                tag = "setting-clear-data",
+                onClick = { clearing = true },
+            )
 
             Section(R.string.theme)
             Column(Modifier.selectableGroup()) {
@@ -258,6 +288,62 @@ private fun TextSize(zoom: Int, onChange: (Int) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * Asks what to clear from the Active Profile (SPEC, "Clear browsing data"), from all time: a
+ * checkbox each, history and cached files checked at first. Checking cookies says that every
+ * Account in the Profile will be signed out.
+ */
+@Composable
+private fun ClearBrowsingDataDialog(profileName: String, onClear: (Set<BrowsingData>) -> Unit, onDismiss: () -> Unit) {
+    var chosen by remember { mutableStateOf(setOf(BrowsingData.History, BrowsingData.Cache)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("clear-data-dialog"),
+        title = { Text(stringResource(R.string.clear_browsing_data_title, profileName)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(stringResource(R.string.clear_browsing_data_body), modifier = Modifier.padding(bottom = 8.dp))
+                BrowsingData.entries.forEach { data ->
+                    val label = when (data) {
+                        BrowsingData.History -> R.string.data_history
+                        BrowsingData.Cookies -> R.string.data_cookies
+                        BrowsingData.Cache -> R.string.data_cache
+                        BrowsingData.SiteSettings -> R.string.data_site_settings
+                        BrowsingData.ClosedTabs -> R.string.data_closed_tabs
+                        BrowsingData.SiteIcons -> R.string.data_site_icons
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .toggleable(value = data in chosen, role = Role.Checkbox) { on -> chosen = if (on) chosen + data else chosen - data }
+                            .testTag("clear-${data.name}"),
+                    ) {
+                        Checkbox(checked = data in chosen, onCheckedChange = null)
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
+                if (BrowsingData.Cookies in chosen) {
+                    Text(
+                        stringResource(R.string.clear_cookies_warning, profileName),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp).testTag("clear-cookies-warning"),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onClear(chosen) }, enabled = chosen.isNotEmpty(), modifier = Modifier.testTag("confirm-clear-data")) {
+                Text(stringResource(R.string.clear))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** An on/off setting with what it means underneath. The whole row is the target. */

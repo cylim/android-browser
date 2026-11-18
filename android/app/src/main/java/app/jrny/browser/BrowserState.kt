@@ -34,6 +34,9 @@ import app.jrny.browser.site.SiteOrigin
 import app.jrny.browser.site.SiteSetting
 import app.jrny.browser.site.SiteSettingsEntry
 import app.jrny.browser.tab.PermissionAsk
+import app.jrny.browser.tab.ClosedTab
+import app.jrny.browser.shortcut.HomeShortcuts
+import androidx.compose.ui.graphics.toArgb
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.PrivateSession
 import app.jrny.browser.tab.Tab
@@ -55,10 +58,14 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+/** What Clear browsing data can clear from a Profile (SPEC, "Clear browsing data"). */
+enum class BrowsingData { History, Cookies, Cache, SiteSettings, ClosedTabs, SiteIcons }
 
 /** The Active Profile with its Tabs, read together so they always belong to each other. */
 data class ActiveProfileTabs(val profile: Profile, val tabs: List<SavedTab>) {
@@ -115,6 +122,8 @@ class BrowserState(
     private val downloadRepository = repositories.downloads
     private val siteRuleRepository = repositories.siteRules
     private val siteSettingsRepository = repositories.siteSettings
+    private val closedTabRepository = repositories.closedTabs
+    private val shortcutRepository = repositories.shortcuts
 
     /** The icons of the sites each Profile has shown, for the Tab list. */
     val siteIcons = services.siteIcons
@@ -185,6 +194,66 @@ class BrowserState(
 
     /** The Site Rules, oldest first. They belong to the app, not to one Profile. */
     val siteRules: StateFlow<List<SiteRule>> = siteRuleRepository.rules.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * The Active Profile's recently closed Tabs, newest first (SPEC, "Reopen closed Tab"), tagged
+     * with that Profile: right after a switch the last list is still the previous Profile's.
+     */
+    val recentlyClosed: StateFlow<Pair<ProfileId, List<ClosedTab>>?> = profileRepository.activeProfile
+        .filterNotNull()
+        .flatMapLatest { profile -> closedTabRepository.closed(profile.id).map { profile.id to it } }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** The Tab that just closed, while the window offers "Undo" for it. */
+    var justClosed: ClosedTab? by mutableStateOf(null)
+        private set
+
+    fun dismissJustClosed() {
+        justClosed = null
+    }
+
+    /** Ends the "Undo" offer after a while, even while a panel hides it. */
+    private var undoExpiry: Job? = null
+
+    private fun offerUndo(closed: ClosedTab) {
+        justClosed = closed
+        undoExpiry?.cancel()
+        undoExpiry = scope.launch {
+            delay(UNDO_MS)
+            if (justClosed == closed) justClosed = null
+        }
+    }
+
+    /** Undo: opens the Tab that just closed again, in its old place, and shows it. */
+    fun undoClose() {
+        val closed = justClosed ?: return
+        justClosed = null
+        reopen(closed, atEnd = false)
+    }
+
+    /** Opens [closed] again, chosen from "Recently closed", at the end of the Tab list, and shows it. */
+    fun reopenClosed(closed: ClosedTab) = reopen(closed, atEnd = true)
+
+    private fun reopen(closed: ClosedTab, atEnd: Boolean) {
+        val choice = ++tabChoices
+        scope.launch {
+            // Opened and taken off the list in one step. Gone already (reopened from the other
+            // place, or cleared): nothing opens twice.
+            tabRepository.reopen(closed, atEnd) ?: return@launch
+            if (justClosed?.id == closed.id) justClosed = null
+            if (choice == tabChoices) privateTabs.select(closed.profileId, null)
+        }
+    }
+
+    /**
+     * What a closing Tab is remembered by: its web page's address and title. Null for a Private
+     * Tab, a Pinned Tab (its bookmark keeps it) or a Tab without a web page, which aren't.
+     */
+    private fun closedPage(tab: SavedTab): Pair<String, String>? {
+        if (tab.isPrivate || tab.isPinned) return null
+        val url = currentUrl(tab)?.takeIf(WebAddress::isWebAddress) ?: return null
+        return url to (live[tab.id]?.tab?.pageTitle ?: tab.pageTitle.orEmpty())
+    }
 
     /** The Active Profile's Site settings: its sites with a permission or a Desktop site choice. */
     val siteSettings: StateFlow<Pair<ProfileId, List<SiteSettingsEntry>>?> = profileRepository.activeProfile
@@ -576,6 +645,8 @@ class BrowserState(
         } else if (linkOfferSeen) {
             dismissIncomingLink()
         }
+        // A closed Tab can come back with its id (Undo): then it is no longer to be destroyed.
+        retired.remove(id)
         retired.filter { it != id }.forEach { destroy(it); retired.remove(it) }
         while (live.size > MAX_LIVE_TABS) {
             val (oldest, _) = live.entries.first()
@@ -601,7 +672,10 @@ class BrowserState(
      */
     fun delete(profile: Profile) {
         scope.launch {
+            // Its Home Screen Shortcuts stop working with it. Their ids go with its rows, so read them first.
+            val shortcuts = shortcutRepository.idsOf(profile.id)
             if (profileRepository.delete(profile.id)) {
+                HomeShortcuts.disable(context, shortcuts, context.getString(R.string.shortcut_profile_deleted))
                 live.entries.filter { it.value.saved.profileId == profile.id }.map { it.key }.forEach(::retire)
                 // Its Private Tabs close with it.
                 privateTabs.closeAll(profile.id)?.let(::discard)
@@ -646,11 +720,15 @@ class BrowserState(
     }
 
     fun closeTab(id: TabId) {
+        val page = active.value?.tabs?.firstOrNull { it.id == id }?.let(::closedPage)
         retire(id)
         if (id.isPrivate) {
             // Its session ends with the last Private Tab, and the session's store is discarded.
             val tab = privateTabs.find(id) ?: return
             privateTabs.close(tab.profileId, id)?.let(::discard)
+        } else if (page != null) {
+            // Closed and remembered in one step; "Undo" once both are written.
+            scope.launch { tabRepository.closeRemembering(id, page.first, page.second)?.let(::offerUndo) }
         } else {
             scope.launch { tabRepository.close(id) }
         }
@@ -894,6 +972,9 @@ class BrowserState(
     fun clearHistory(profile: Profile) {
         scope.launch {
             history.clear(profile.id)
+            // Recently closed Tabs are part of what the Profile visited.
+            closedTabRepository.clear(profile.id)
+            if (justClosed?.profileId == profile.id) justClosed = null
             // What its live Tabs show now counts too: a page just opened may not be in its Tab's
             // saved row yet. A closed Tab still on screen is not one of them.
             val showing = live.entries
@@ -938,6 +1019,97 @@ class BrowserState(
         val session = privateTabs.current(tab.profileId) ?: return
         val cookieManager = WebProfile.privateOf(tab.profileId, session.session).cookieManager
         scope.launch { withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) } }
+    }
+
+    /**
+     * Clears what [choices] names from [profile] (SPEC, "Clear browsing data"). Cookies and site
+     * storage are cleared in the Profile's store; the cache with a WebView of that store, as
+     * WebView keeps it per store. Icons of its bookmarks and open Tabs stay.
+     */
+    fun clearBrowsingData(profile: Profile, choices: Set<BrowsingData>) {
+        if (choices.isEmpty()) return
+        val store = WebProfile.of(profile.id)
+        if (BrowsingData.Cookies in choices) {
+            val webStorage = androidx.webkit.ProfileStore.getInstance().getOrCreateProfile(store.name).webStorage
+            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DELETE_BROWSING_DATA)) {
+                // Everything sites stored in this Profile's store: cookies, site storage, service
+                // workers and Cache Storage. Other Profiles' stores aren't touched.
+                androidx.webkit.WebStorageCompat.deleteBrowsingData(webStorage) { store.flush() }
+            } else {
+                webStorage.deleteAllData()
+            }
+            store.cookieManager.removeAllCookies(null)
+            store.flush()
+        }
+        if (BrowsingData.Cache in choices) {
+            val view = live.values.firstOrNull { it.tab.profile.name == store.name }?.tab?.webView
+            if (view != null) {
+                view.clearCache(true)
+            } else {
+                // A WebView of the store only to clear its cache, gone at once.
+                val temporary = android.webkit.WebView(context)
+                androidx.webkit.WebViewCompat.setProfile(temporary, store.name)
+                temporary.clearCache(true)
+                temporary.destroy()
+            }
+        }
+        scope.launch {
+            if (BrowsingData.History in choices) history.clear(profile.id)
+            if (BrowsingData.SiteSettings in choices) siteSettingsRepository.resetAll(profile.id)
+            if (BrowsingData.ClosedTabs in choices || BrowsingData.History in choices) {
+                closedTabRepository.clear(profile.id)
+                if (justClosed?.profileId == profile.id) justClosed = null
+            }
+            if (BrowsingData.SiteIcons in choices || BrowsingData.History in choices) {
+                val showing = live.entries
+                    .filter { (id, tab) -> id !in retired && tab.saved.profileId == profile.id && !tab.saved.isPrivate }
+                    .mapNotNull { it.value.tab.url }
+                val kept = bookmarkRepository.bookmarks(profile.id).first().map { it.url } + tabRepository.tabs(profile.id).first().mapNotNull { it.url } + showing
+                siteIcons.keepOnly(profile.id, kept)
+            }
+        }
+    }
+
+    /**
+     * Pins a shortcut to the page [live] shows to the launcher, which opens it in [tab]'s Profile
+     * (SPEC, "Add to Home screen"). Never for a Private Tab.
+     */
+    fun addToHomeScreen(tab: SavedTab, live: Tab, profile: Profile) {
+        if (tab.isPrivate) return
+        val url = live.url?.takeIf(WebAddress::isWebAddress) ?: return
+        val title = live.pageTitle ?: live.displayHost
+        scope.launch {
+            val shortcut = shortcutRepository.add(tab.profileId, url, title) ?: return@launch
+            // Android takes a pin request only from an app in the foreground. If the person left
+            // while the icon was made, nothing is asked, and nothing is kept.
+            fun foreground() = (context as? androidx.lifecycle.LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) != false
+            val (letter, color) = app.jrny.browser.ui.siteLetterMark(url) ?: ("?" to androidx.compose.ui.graphics.Color.Gray)
+            val mark = profile.emoji ?: profile.name.take(1).uppercase()
+            val icon = siteIcons.load(tab.profileId, url)
+            val asked = foreground() && HomeShortcuts.pin(
+                context,
+                shortcut,
+                siteIcon = icon,
+                siteLetter = letter,
+                siteColor = color.toArgb(),
+                profileColor = profile.color.argb.toInt(),
+                profileMark = mark,
+            )
+            if (!asked) shortcutRepository.remove(shortcut)
+        }
+    }
+
+    /**
+     * Opens the page of the Home Screen Shortcut [id] in its own Profile, which becomes the Active
+     * Profile. Site Rules don't apply. Returns false when there is no such shortcut, as when its
+     * Profile was deleted.
+     */
+    suspend fun openShortcut(id: String): Boolean {
+        val shortcut = shortcutRepository.find(id) ?: return false
+        if (tabRepository.openIn(shortcut.profileId, shortcut.url) == null) return false
+        privateTabs.select(shortcut.profileId, null)
+        history.record(shortcut.profileId, shortcut.url)
+        return true
     }
 
     /** Where each of [downloads] stands, by its list id. */
@@ -1034,6 +1206,9 @@ class BrowserState(
 
     companion object {
         private const val INCOMING_LINK_ATTEMPTS = 3
+
+        /** How long "Undo" for a closed Tab is offered. */
+        private const val UNDO_MS = 6_000L
         private const val MAX_PAGE_SUGGESTIONS = 3
         private const val MAX_SEARCH_SUGGESTIONS = 5
 

@@ -36,10 +36,10 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 
 - Each Profile remembers its last 10 closed Tabs, newest first, with only their address and title. Back/forward history is not kept.
 - The list is kept on disk, like the Tabs it restores, so it survives Android killing the app.
-- Right after a Tab closes, a snackbar offers "Undo", which reopens it in its old place in the Tab list.
+- Right after a Tab closes, a bar offers "Undo" for a few seconds, which reopens it in its old place in the Tab list and shows it.
 - "Recently closed" sits at the top of the history and lists the same Tabs. Choosing one reopens it at the end of the Tab list and takes it off the list.
 - Private Tabs and Pinned Tabs never go on the list. A closed Pinned Tab keeps its bookmark, so it can already be opened again.
-- Clearing a Profile's history or browsing data can clear the list too (see "Clear browsing data").
+- Clearing a Profile's history clears the list too, as does Clear browsing data with history or recently closed Tabs checked.
 
 ### Start Page
 
@@ -231,16 +231,16 @@ Holding a link or an image opens a menu:
 - Settings → "Clear browsing data" clears data of the Active Profile only. It names the Profile.
 - It offers checkboxes for: history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs, and site icons. History and cached files are checked at first.
 - It clears everything stored, from all time. WebView can't clear a Profile's cookies for a time range, so the dialog offers no range.
-- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out.
+- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out. It clears everything sites stored in the Profile's store: cookies, site storage, service workers and Cache Storage. An Android System WebView too old for this clears only cookies and site storage.
 - Site icons of the Profile's bookmarks and open Tabs are kept, as when history is cleared.
 - Bookmarks, downloaded files and Site Rules are never cleared here.
 
 ### Add to Home screen
 
-- "Add to Home screen" asks the launcher to pin a shortcut to the page, with the page's title as its name and the site's icon, marked with the Profile's avatar.
+- "Add to Home screen" asks the launcher to pin a shortcut to the page, with the page's title as its name and the site's icon (or its letter), marked at the lower left with the Profile's color and its emoji or initial. The launcher's own badge for the app takes the lower right. The launcher asks before it adds the shortcut.
 - The shortcut opens the page in a new Tab in the Profile it was made in, which becomes the Active Profile. Site Rules don't apply to it.
 - The shortcut carries only an id the app made. The address and the Profile stay in the app, so another app can't use a shortcut's form to open a page in a chosen Profile.
-- Deleting the Profile disables its shortcuts. Tapping one then says "This Profile was deleted".
+- Deleting the Profile disables its shortcuts. Tapping one then says "This Profile was deleted", and so does a shortcut the app no longer knows.
 - The action is hidden in Private Tabs.
 
 ## Browsing features

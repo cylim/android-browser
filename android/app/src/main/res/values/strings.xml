@@ -145,7 +145,7 @@
     <string name="remove_bookmark">Remove bookmark</string>
     <string name="clear_history">Clear history</string>
     <string name="clear_history_title">Clear the history of %1$s?</string>
-    <string name="clear_history_body">Every page in this Profile\'s history is removed. Sign-ins, cookies and open Tabs stay.</string>
+    <string name="clear_history_body">Every page in this Profile\'s history is removed, and its recently closed Tabs. Sign-ins, cookies and open Tabs stay.</string>
     <string name="history_empty">Pages you visit in this Profile show here.</string>
     <string name="bookmarks_empty">Pages you bookmark or pin in this Profile show here.</string>
     <string name="delete_from_history">Remove %1$s from history</string>
@@ -291,4 +291,26 @@
     <string name="darken_pages_explanation">While Okapi\'s theme is dark, pages show their dark theme, and pages without one are darkened. Open pages load again.</string>
     <string name="pull_to_refresh">Pull to refresh</string>
     <string name="pull_to_refresh_explanation">Pull down on a page at its top to load it again. Turn it off for sites with their own pull gesture.</string>
+
+    <!-- Tabs and data (SPEC, "Reopen closed Tab", "Clear browsing data", "Add to Home screen") -->
+    <string name="tab_closed">Closed %1$s</string>
+    <string name="tab_closed_untitled">Closed a Tab</string>
+    <string name="undo">Undo</string>
+    <string name="recently_closed">Recently closed</string>
+    <string name="history_heading">History</string>
+    <string name="reopen_tab">Open %1$s again</string>
+    <string name="clear_browsing_data">Clear browsing data</string>
+    <string name="clear_browsing_data_explanation">History, cookies, cached files and more of %1$s</string>
+    <string name="clear_browsing_data_title">Clear browsing data of %1$s?</string>
+    <string name="clear_browsing_data_body">From all time. Bookmarks, downloaded files and Site Rules stay.</string>
+    <string name="data_history">History</string>
+    <string name="data_cookies">Cookies and site data</string>
+    <string name="data_cache">Cached images and files</string>
+    <string name="data_site_settings">Site permissions and Desktop site choices</string>
+    <string name="data_closed_tabs">Recently closed Tabs</string>
+    <string name="data_site_icons">Site icons</string>
+    <string name="clear_cookies_warning">Every Account signed in within %1$s will be signed out.</string>
+    <string name="add_to_home_screen">Add to Home screen</string>
+    <string name="shortcut_profile_deleted">This Profile was deleted</string>
+    <string name="shortcut_requested">Your launcher asks before it adds %1$s.</string>
 </resources>
