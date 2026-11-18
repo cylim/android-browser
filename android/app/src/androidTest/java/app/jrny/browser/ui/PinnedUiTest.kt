@@ -150,9 +150,14 @@ class PinnedUiTest {
      * Confirms the name dialog and waits for its keyboard to go. A tablet-sized window forced
      * onto a phone's screen has no room for the list while the keyboard is up, and a slow device
      * takes a moment to put it away.
+     *
+     * The button is pressed through its click action, not a tap at its place: on a slow device
+     * the keyboard comes up a second or more after the dialog, and the dialog slides up with it,
+     * so a tap can land where the button was, outside the dialog, and dismiss it. These tests
+     * check what confirming does, not where the button is.
      */
     private fun confirmName() {
-        compose.onNodeWithTag("confirm-name").performClick()
+        compose.onNodeWithTag("confirm-name").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
         Espresso.closeSoftKeyboard()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("tab-row-11").fetchSemanticsNodes().isNotEmpty() }
     }
