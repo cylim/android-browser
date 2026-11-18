@@ -26,7 +26,6 @@ import app.jrny.browser.settings.Settings
 import app.jrny.browser.settings.ThemeChoice
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.settings.Suggestion
-import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.ProfileLook
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.rules.SitePattern
