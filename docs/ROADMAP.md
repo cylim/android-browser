@@ -49,17 +49,26 @@ Added to v1 after Milestone 5:
 - Site Rules: send Incoming Links for matching addresses to a specific Profile.
 - Pinned Tabs and folders in the Sidebar, shared with each Profile's bookmarks.
 - Styling: compact rows for the Tab list, a color and color strength per Profile, and emoji for Profiles.
+- Everyday browsing, in four parts:
+  1. Web capabilities: file upload, camera and microphone, location, fullscreen video, HTTP sign-in, and Site settings.
+  2. Links and files: links to other apps, `blob:` and `data:` downloads, the link and image menu, Share, Copy link, and Print.
+  3. Page tools: Find in page, Desktop site, text size, dark pages, and pull to refresh.
+  4. Tabs and data: Reopen closed Tab, Clear browsing data, and Add to Home screen.
 
 ## Milestone 6: First public release
 
 - Signed release APK built by GitHub Actions and published on GitHub Releases.
 - Check that the build meets F-Droid's requirements.
 
-## After v1
+## 0.2: Content blocking
+
+- Block known ad and tracker addresses, on by default, with a switch for each site in Site settings.
+- Keep the block lists up to date without contacting any service of ours, in line with [ADR 0002](adr/0002-no-proprietary-dependencies-or-telemetry.md).
+
+## After 0.2
 
 - Passkeys, after approval as a privileged browser.
 - Custom Tabs service.
 - Biometric lock per Profile.
-- Content blocking.
 - Bookmark export and import.
 - Google Play release.

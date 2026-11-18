@@ -57,9 +57,23 @@ _Avoid_: Duplicate, copy
 A link that another app hands to Okapi. It opens as a normal Tab in the Active Profile, or in the Profile a Site Rule names, and never as a Private Tab.
 _Avoid_: External link, intent
 
+**Handoff**:
+Passing a link a page opens to another app, such as a `tel:` link to the phone app. Only the link goes, never the Profile or its cookies.
+_Avoid_: Outgoing link, external app
+
+**Home Screen Shortcut**:
+A page pinned to the launcher from a Profile. It opens in that Profile, whatever the Active Profile is, and stops working when the Profile is deleted.
+_Avoid_: Bookmark, web app, PWA
+
 **Site Rule**:
 A person's rule that sends Incoming Links for matching addresses to a specific Profile instead of the Active Profile. It names a site, optionally with a path, and `*` stands for anything.
 _Avoid_: AirControl, Air Traffic Control, routing rule
+
+### Sites
+
+**Site settings**:
+What a Profile remembers about each site: the permissions it was given or refused (camera, microphone, location) and whether it gets its desktop version. Each Profile has its own.
+_Avoid_: Site permissions (for the whole list), content settings
 
 ### Layout
 

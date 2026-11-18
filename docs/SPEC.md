@@ -12,8 +12,8 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 
 ## Profiles
 
-- A **Profile** has a name and a look: a color, how strongly that color shows, and an icon or an emoji for its avatar. It owns its own web data (cookies, site storage, cache, site permissions, service workers), **Tabs**, history, bookmarks and downloads.
-- App settings (search engine, suggestions, Safe Browsing, theme) are shared by all Profiles.
+- A **Profile** has a name and a look: a color, how strongly that color shows, and an icon or an emoji for its avatar. It owns its own web data (cookies, site storage, cache, site permissions, service workers), **Tabs**, recently closed Tabs, history, bookmarks, downloads, Site settings and Home Screen Shortcuts.
+- App settings (search engine, suggestions, Safe Browsing, theme, text size, dark pages, pull to refresh) are shared by all Profiles.
 - On first launch the app creates one Profile, which becomes the **Active Profile**.
 - There is always exactly one **Active Profile**. Switching Profiles changes it.
 - Deleting a Profile:
@@ -21,6 +21,7 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
   2. The Profile disappears from the UI and its Tabs close.
   3. If it was the Active Profile, another Profile becomes active. The last remaining Profile cannot be deleted.
   4. Its web data is wiped at the next cold start. Settings show "N profiles pending removal" until then.
+  5. Its Site settings and recently closed Tabs are deleted at once, and its Home Screen Shortcuts are disabled.
 
 ## Tabs
 
@@ -30,6 +31,15 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 - At most 5 Tabs are live at once, across all Profiles: the visible Tab and the 4 most recently used. Other Tabs are unloaded and reload when opened.
 - After Android kills the app, each normal Tab is restored with its address, title and scroll position. Back/forward history is not restored, and page content is never written to disk.
 - A Tab without a web page shows the **Start Page**.
+
+### Reopen closed Tab
+
+- Each Profile remembers its last 10 closed Tabs, newest first, with only their address and title. Back/forward history is not kept.
+- The list is kept on disk, like the Tabs it restores, so it survives Android killing the app.
+- Right after a Tab closes, a snackbar offers "Undo", which reopens it in its old place in the Tab list.
+- "Recently closed" sits at the top of the history and lists the same Tabs. Choosing one reopens it at the end of the Tab list and takes it off the list.
+- Private Tabs and Pinned Tabs never go on the list. A closed Pinned Tab keeps its bookmark, so it can already be opened again.
+- Clearing a Profile's history or browsing data can clear the list too (see "Clear browsing data").
 
 ### Start Page
 
@@ -77,12 +87,16 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 - Private Tabs are kept in memory only: they survive the app's window being rebuilt, but not the app being closed or killed. Closing the app's window ends them even while Android keeps the app's process around.
 - A Private Tab is listed after the Profile's other Tabs, marked with a lock. Its page is named in the list only while a Private Tab is the one showing, which is when the window can't be captured.
 - A Private Tab can't be Moved or opened in another Profile. Its downloads are saved to the device but not put on the Profile's list of downloads.
+- In a Private Tab, Share, Copy link and Print work. A printed or saved PDF stays off the Profile's list of downloads, like its downloads. Add to Home screen is hidden: the shortcut would open a normal Tab and leave the private address on the Home screen.
+- A Private Tab never remembers a site permission. Each grant lasts until the page leaves its site or the Tab closes.
+- Links held in a Private Tab open only in Private Tabs, and handing a link to another app always asks first (see "Links to other apps").
 
 ## Incoming Links
 
 - When Okapi is the default browser, an **Incoming Link** opens as a new normal Tab in the Active Profile, unless a Site Rule names another Profile for it. It never opens in a Private Tab, even if the person left the app from one.
 - A newly opened Incoming Link shows a one-tap "Move to Profile…" action, until it is dismissed or another Tab is shown.
 - Only `http` and `https` links are accepted. Anything else another app sends is ignored.
+- A Home Screen Shortcut is not an Incoming Link: it opens in its own Profile (see "Add to Home screen").
 - v1 does not provide a Custom Tabs service. Apps that ask for Custom Tabs fall back to opening a normal Tab.
 
 ### Site Rules
@@ -115,7 +129,117 @@ The layout depends on window width, not device type. It switches live when the w
 - A Safari-style address and search field along the bottom edge.
 - The Active Profile's avatar sits at the left of the field. Tapping it opens the Profile sheet (switch, create, manage).
 - Swiping along the bar switches between the Active Profile's Tabs. A tab overview button shows them all.
-- The page menu holds Move, Open in Profile and, in a window narrower than 600dp, Forward.
+
+### Page menu
+
+The page menu ("More") is the same in the Sidebar, the Rail and the Bottom Bar:
+
+1. A row of icons: Forward, Bookmark this page, Share and Reload.
+2. **Page**: Find in page, Desktop site (a switch), Print, Add to Home screen.
+3. **Profile**: Move, Open in Profile.
+4. **Browser**: New Tab, New Private Tab, History, Bookmarks, Downloads, Settings, and "Set as default browser" while Okapi isn't.
+
+Items that need a web page, such as Share and Find in page, are disabled on the Start Page.
+
+## Pages
+
+### Site permissions and Site settings
+
+- A site that asks for the camera, the microphone or the device's location gets a prompt naming the site and what it wants: "Allow once", "Always allow" or "Block".
+- Each Profile keeps its own grants, for each site (scheme, host and port). Allowing meet.google.com the camera in one Profile doesn't allow it in another.
+- "Allow once" lasts until the page leaves that site or the Tab closes. "Block" stops the site from asking again; it gets a refusal at once.
+- Android asks for its own runtime permission the first time a site in any Profile needs it, never before. If the person refuses there, the site gets a refusal, and the prompt says how to allow it in Android's settings.
+- For location, Okapi asks Android for precise location, and Android's dialog lets the person choose approximate instead.
+- A site can only ask from a page the person is looking at. A site in a background Tab or an unloaded Tab gets a refusal.
+- Settings → Site settings lists the Active Profile's sites that have a permission or a Desktop site choice. Each permission can be changed to Allow or Block, or reset, which makes the site ask again. "Reset all" resets every site of the Profile.
+- Deleting a Profile deletes its Site settings.
+
+### File upload
+
+- A page's file field opens Android's file picker. The picker shows the kinds of file the page accepts, and allows several files if the page does.
+- When the page accepts images or video, the picker also offers "Take photo" or "Record video", which open the camera app. With `capture` set, the page still gets the choice, not the camera straight away.
+- A file the camera app makes is kept in the app's cache only until it is handed to the page.
+
+### Fullscreen video
+
+- A video's fullscreen button fills the whole screen with it and hides Android's status and navigation bars.
+- The screen turns to match the video: a wide video shows in landscape, and a tall one in portrait, even with auto-rotate off. The orientation goes back to normal afterwards.
+- Back, or the video's own button, leaves fullscreen.
+
+### HTTP sign-in
+
+- A site that asks for a username and password before it sends the page (HTTP authentication) gets a dialog that names the site and its realm.
+- The fields are marked as a username and a password, so a password manager can fill them through Android Autofill.
+- Okapi never stores what is typed. Cancelling shows the site's own error page.
+
+### Links to other apps
+
+- A web address (`http` or `https`) always stays in the Tab.
+- `tel:`, `mailto:`, `sms:`, `smsto:` and `geo:` links that the person taps go to the app that handles them at once.
+- Any other scheme, `intent:` and `market:` links included, shows a bar under the page that names the app that would open it, with an "Open" button. Nothing leaves the browser until "Open" is tapped. The bar goes when the page moves on.
+- A link that a page opens without a tap, such as a redirect, also waits for "Open", whatever its scheme.
+- In a Private Tab, every link to another app waits for "Open".
+- An `intent:` link may only open an app that accepts browsable links. Its component and selector are dropped. If no app can open it and it names a web fallback address, the Tab loads that address. If nothing can open it, the bar says so.
+- Only the link goes to the other app. The Profile, its cookies and the page's address do not.
+
+### Link and image menu
+
+Holding a link or an image opens a menu:
+
+- On a link: Open in new Tab, Open in Private Tab, Open in Profile…, Copy link, Share link.
+- On an image: Open image in new Tab, Save image, Copy image, Share image. An image that is also a link gets both sets.
+- "Open in new Tab" opens the address as a new Tab in the same Profile, after the current one, and stays on the current Tab.
+- In a Private Tab, "Open in new Tab" opens a Private Tab, "Open in Private Tab" is not offered, and "Open in Profile…" is hidden.
+- "Save image" works like a download from the page: it asks first, and it uses the Tab's Profile.
+
+### Share, Copy link and Print
+
+- Share hands the page's address and title to Android's share sheet. Copy link puts the address on the clipboard. Nothing else from the page goes with them.
+- Print opens Android's print dialog for the page, which can also save it as a PDF.
+
+### Find in page
+
+- Find in page shows a field, a "N of M" count and up and down arrows, and highlights every match on the page.
+- In the Bottom Bar layout the field takes the address bar's place at the bottom, above the keyboard. In the Sidebar layout it shows as a bar across the top of the page.
+- It closes with its own button, with Back, or when the page moves on.
+
+### Desktop site
+
+- "Desktop site" asks sites for their desktop version: the Tab sends a desktop user agent and lays out the page at desktop width.
+- The choice is remembered for each site, in each Profile, and shows in Site settings. It applies to every Tab of that Profile on that site.
+- In a Private Tab the choice lasts until the Tab closes.
+
+### Text size
+
+- Settings → Text size scales the text of every page, from 50% to 200%. The default is 100%. It is one setting for all Profiles.
+- Pinch zoom still works on top of it.
+
+### Dark pages
+
+- Settings → "Darken pages without a dark theme" is off by default. It applies only while the app's theme is dark.
+- When it's on, a page that has no dark theme of its own is darkened by WebView. A page with a dark theme uses that.
+
+### Pull to refresh
+
+- Pulling down on a page that is scrolled to its very top reloads it.
+- Settings → "Pull to refresh" turns it off, for sites with their own pull gesture.
+
+### Clear browsing data
+
+- Settings → "Clear browsing data" clears data of the Active Profile only. It names the Profile.
+- It offers checkboxes for: history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs, and site icons. History and cached files are checked at first.
+- It clears everything stored, from all time. WebView can't clear a Profile's cookies for a time range, so the dialog offers no range.
+- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out.
+- Site icons of the Profile's bookmarks and open Tabs are kept, as when history is cleared.
+- Bookmarks, downloaded files and Site Rules are never cleared here.
+
+### Add to Home screen
+
+- "Add to Home screen" asks the launcher to pin a shortcut to the page, with the page's title as its name and the site's icon, marked with the Profile's avatar.
+- The shortcut opens the page in a new Tab in the Profile it was made in, which becomes the Active Profile. Site Rules don't apply to it.
+- The shortcut carries only an id the app made. The address and the Profile stay in the app, so another app can't use a shortcut's form to open a page in a chosen Profile.
+- Deleting the Profile disables its shortcuts. Tapping one then says "This Profile was deleted".
+- The action is hidden in Private Tabs.
 
 ## Browsing features
 
@@ -123,12 +247,13 @@ The layout depends on window width, not device type. It switches live when the w
   - History keeps web pages the person goes to, not reloads, Back, Forward, or pages restored with a Tab. A redirect's stops on the way are left out. Each Profile keeps its latest 5,000 visits.
   - History and bookmarks open in the page's place: beside the Sidebar, or full screen above the Bottom Bar layout.
   - Deleting a Profile removes its history, its bookmarks, its Folders and its list of downloads at once. Downloaded files stay on the device.
-  - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. Files a page makes itself (`blob:` and `data:` addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.
+  - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. A site that only answers a real browser may refuse the download service.
+  - A file the page makes itself (a `blob:` or `data:` address) is saved by Okapi, not the download service, once the person agrees. A `data:` address holds the file, so Okapi decodes it. For a `blob:` address, the page keeps a copy of that one file when it offers it, and Okapi reads the copy out of the page only after the person agrees. Declining drops the copy. Nothing else on the page can be read this way. The file goes to the same Downloads folder and the same list of downloads.
 - Search: Google by default, and the engine can be changed in settings (Google, Bing, DuckDuckGo, Brave Search). Address-bar suggestions are on by default and can be turned off.
   - While the person types, the address field offers matching pages from the Active Profile's bookmarks and history, then searches the search engine suggests.
   - Typed text goes to the search engine only when it would be searched for anyway and typing on can't turn it into credentials. An address, text shaped like credentials, or text with a colon before its first `/`, `?` or `#` (`admin:hunter2`, where an `@` may come next) is never sent. So a search with an early colon, such as `python: list comprehension`, gets only bookmark and history suggestions while it is typed, and Go still searches for it. The request carries no cookies. A Private Tab offers no suggestions at all.
 - Safe Browsing: on by default and can be turned off. The change also reaches pages that are already open.
-- Theme: the device's, light or dark. It sets the browser's own bars and lists; pages keep following the device's setting.
+- Theme: the device's, light or dark. It sets the browser's own bars and lists; pages keep following the device's setting, unless "Darken pages without a dark theme" is on (see "Dark pages").
 - Settings open in the page's place, like history and bookmarks.
 - Password managers work through the Android Autofill framework. Okapi does not store passwords itself.
 - Passkeys are not supported until the app is approved as a privileged browser ([ADR 0001](adr/0001-system-webview-as-engine.md)).
@@ -139,6 +264,7 @@ The layout depends on window width, not device type. It switches live when the w
 - The app has no telemetry and no crash-reporting SDK.
 - The manifest sets `android.webkit.WebView.MetricsOptOut`, so Android System WebView sends no usage statistics from the app, whatever the device's usage and diagnostics setting is. WebView's crash reports still follow that setting.
 - Logs never contain addresses, page titles or cookies in release builds.
+- The app asks Android for the camera, microphone and location permissions only to pass them on to a site the person allowed (see "Site permissions and Site settings"). It never uses them itself.
 
 ## Out of scope for v1
 
