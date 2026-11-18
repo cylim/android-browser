@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea for JRNY browser.
+description: Suggest an idea for Okapi.
 labels: [enhancement]
 body:
   - type: markdown

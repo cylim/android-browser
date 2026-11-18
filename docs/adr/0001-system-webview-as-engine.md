@@ -4,7 +4,7 @@ status: accepted
 
 # Use Android System WebView as the rendering engine
 
-JRNY browser renders pages with Android System WebView and keeps each Profile separate through androidx.webkit's `ProfileStore`. The minimum Android version is 15, so every supported device has a recent, Play-updated WebView with multi-profile support. We chose WebView because Google ships its security fixes, it gives Chrome-level site compatibility, and the app stays small. A solo, public project cannot reliably ship a browser engine update every month.
+Okapi, a browser by JRNY, renders pages with Android System WebView and keeps each Profile separate through androidx.webkit's `ProfileStore`. The minimum Android version is 15, so every supported device has a recent, Play-updated WebView with multi-profile support. We chose WebView because Google ships its security fixes, it gives Chrome-level site compatibility, and the app stays small. A solo, public project cannot reliably ship a browser engine update every month.
 
 ## Considered Options
 

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in JRNY browser does not work as expected.
+description: Something in Okapi does not work as expected.
 labels: [bug]
 body:
   - type: markdown
@@ -28,7 +28,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: JRNY browser version
+      label: Okapi version
     validations:
       required: true
   - type: input

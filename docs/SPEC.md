@@ -1,6 +1,6 @@
-# JRNY browser v1 specification
+# Okapi v1 specification
 
-This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY.md](../GLOSSARY.md). For the reasons behind major decisions, see [docs/adr](adr/).
+This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bold** are defined in [GLOSSARY.md](../GLOSSARY.md). For the reasons behind major decisions, see [docs/adr](adr/).
 
 ## Platform
 
@@ -8,7 +8,7 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - Kotlin, Jetpack Compose, Material 3, Room. Gradle uses the Kotlin DSL and a version catalog.
 - Pages render in Android System WebView, with one androidx.webkit profile for each **Profile** ([ADR 0001](adr/0001-system-webview-as-engine.md)).
 - No Google Play Services, Firebase, analytics or API keys ([ADR 0002](adr/0002-no-proprietary-dependencies-or-telemetry.md)).
-- Application ID: `app.jrny.browser`. Display name: JRNY browser.
+- Application ID: `app.jrny.browser`. Display name: Okapi ([ADR 0005](adr/0005-product-name-okapi.md)). Google Play title: "Okapi Browser by JRNY".
 
 ## Profiles
 
@@ -29,6 +29,17 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 - **Open in Profile**: opens the current address as a new Tab in another Profile and keeps the original.
 - At most 5 Tabs are live at once, across all Profiles: the visible Tab and the 4 most recently used. Other Tabs are unloaded and reload when opened.
 - After Android kills the app, each normal Tab is restored with its address, title and scroll position. Back/forward history is not restored, and page content is never written to disk.
+- A Tab without a web page shows the **Start Page**.
+
+### Start Page
+
+- The Start Page takes the page's place in a Tab that has no web page: a new Tab, a restored Tab without an address, or `about:blank`. The address field stays empty.
+- It belongs to the Tab's Profile. It shows the Profile's avatar and name, and its tiles and cards are tinted with the Profile's color, as strongly as the Profile sets.
+- "Pinned" shows the Profile's bookmarks as tiles, in the Tab list's order, with each Folder's tiles under its name. Choosing a tile works like choosing that Pinned Tab, except that a bookmark without an open Tab opens in this Tab, which becomes its Pinned Tab, so no empty Tab is left behind. A bookmark with an open Tab shows that Tab, and this one closes.
+- "Recent" lists the Profile's latest 6 pages, each page once, newest first. Choosing one loads it in this Tab. "Show all" opens the history.
+- With nothing pinned and no history, a short note says how to pin a Tab and what a Profile is, in place of both sections.
+- A Private Tab's Start Page shows neither section. It shows the lock and says what a Private Tab keeps and what it discards (see "Private Tabs").
+- The Start Page makes no network requests. A tile or row shows a site's icon only if the Profile already keeps it (see "Site icons"), and the first letter otherwise.
 
 ### Pinned Tabs
 
@@ -69,7 +80,7 @@ This document describes what v1 does. Terms in **bold** are defined in [GLOSSARY
 
 ## Incoming Links
 
-- When JRNY browser is the default browser, an **Incoming Link** opens as a new normal Tab in the Active Profile, unless a Site Rule names another Profile for it. It never opens in a Private Tab, even if the person left the app from one.
+- When Okapi is the default browser, an **Incoming Link** opens as a new normal Tab in the Active Profile, unless a Site Rule names another Profile for it. It never opens in a Private Tab, even if the person left the app from one.
 - A newly opened Incoming Link shows a one-tap "Move to Profile…" action, until it is dismissed or another Tab is shown.
 - Only `http` and `https` links are accepted. Anything else another app sends is ignored.
 - v1 does not provide a Custom Tabs service. Apps that ask for Custom Tabs fall back to opening a normal Tab.
@@ -115,17 +126,18 @@ The layout depends on window width, not device type. It switches live when the w
   - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. Files a page makes itself (`blob:` and `data:` addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.
 - Search: Google by default, and the engine can be changed in settings (Google, Bing, DuckDuckGo, Brave Search). Address-bar suggestions are on by default and can be turned off.
   - While the person types, the address field offers matching pages from the Active Profile's bookmarks and history, then searches the search engine suggests.
-  - Typed text goes to the search engine only when it would be searched for anyway. An address, or text shaped like credentials, is never sent. The request carries no cookies. A Private Tab offers no suggestions at all.
+  - Typed text goes to the search engine only when it would be searched for anyway and typing on can't turn it into credentials. An address, text shaped like credentials, or text with a colon before its first `/`, `?` or `#` (`admin:hunter2`, where an `@` may come next) is never sent. So a search with an early colon, such as `python: list comprehension`, gets only bookmark and history suggestions while it is typed, and Go still searches for it. The request carries no cookies. A Private Tab offers no suggestions at all.
 - Safe Browsing: on by default and can be turned off. The change also reaches pages that are already open.
 - Theme: the device's, light or dark. It sets the browser's own bars and lists; pages keep following the device's setting.
 - Settings open in the page's place, like history and bookmarks.
-- Password managers work through the Android Autofill framework. JRNY browser does not store passwords itself.
+- Password managers work through the Android Autofill framework. Okapi does not store passwords itself.
 - Passkeys are not supported until the app is approved as a privileged browser ([ADR 0001](adr/0001-system-webview-as-engine.md)).
 
 ## Data protection
 
 - `android:allowBackup="false"`, and `dataExtractionRules` exclude everything from cloud backup and device-to-device transfer. Session cookies must never leave the device.
 - The app has no telemetry and no crash-reporting SDK.
+- The manifest sets `android.webkit.WebView.MetricsOptOut`, so Android System WebView sends no usage statistics from the app, whatever the device's usage and diagnostics setting is. WebView's crash reports still follow that setting.
 - Logs never contain addresses, page titles or cookies in release builds.
 
 ## Out of scope for v1

@@ -1,6 +1,6 @@
-# JRNY browser
+# Okapi
 
-JRNY browser is an Android web browser that keeps several separate browsing identities on one device, so a person can be signed in to different accounts on the same site at the same time.
+Okapi, a browser by JRNY, is an Android web browser that keeps several separate browsing identities on one device, so a person can be signed in to different accounts on the same site at the same time.
 
 ## Language
 
@@ -22,6 +22,10 @@ _Avoid_: Default Profile, current profile, selected profile
 
 **Tab**:
 A single open page, owned by exactly one Profile.
+
+**Start Page**:
+What a Tab shows while it has no web page: the Profile's Pinned Tabs and recent pages, or, in a Private Tab, what a Private Tab keeps and discards. It belongs to the Tab's Profile and is drawn by the browser, not loaded from the web.
+_Avoid_: New Tab Page, home page, speed dial
 
 **Private Tab**:
 A Tab whose web data is discarded once the last Private Tab of its Profile closes, and which never writes to history.
@@ -50,7 +54,7 @@ _Avoid_: Duplicate, copy
 ### Links
 
 **Incoming Link**:
-A link that another app hands to JRNY browser. It opens as a normal Tab in the Active Profile, or in the Profile a Site Rule names, and never as a Private Tab.
+A link that another app hands to Okapi. It opens as a normal Tab in the Active Profile, or in the Profile a Site Rule names, and never as a Private Tab.
 _Avoid_: External link, intent
 
 **Site Rule**:
