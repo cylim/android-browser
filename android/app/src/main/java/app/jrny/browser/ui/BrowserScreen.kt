@@ -27,6 +27,7 @@ import app.jrny.browser.BrowserState
 import app.jrny.browser.BuildConfig
 import app.jrny.browser.LinkOffer
 import app.jrny.browser.address.AddressInput
+import app.jrny.browser.shortcut.HomeShortcuts
 import app.jrny.browser.library.ProfilePages
 import app.jrny.browser.settings.Suggestion
 import kotlinx.coroutines.delay
@@ -139,10 +140,12 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
         removeDownload = browser::removeDownload,
+        recentlyClosed = browser.recentlyClosed.collectAsState().value,
+        reopenClosed = browser::reopenClosed,
     )
 
     val appSettings by browser.settings.collectAsState()
-    val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME)
+    val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME, clearBrowsingData = { browser.clearBrowsingData(profile, it) })
 
     val rules by browser.siteRules.collectAsState()
     val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
@@ -157,6 +160,14 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         pageFileSaved = browser.pageFileSaved,
         dismissPageFileSaved = browser::dismissPageFileSaved,
         setDesktopSite = { on -> browser.setDesktopSite(current.selected, browser.tabFor(current.selected), on) },
+        addToHomeScreen = if (current.selected.isPrivate || !HomeShortcuts.supported(LocalContext.current)) {
+            null
+        } else {
+            { browser.addToHomeScreen(current.selected, browser.tabFor(current.selected), profile) }
+        },
+        justClosed = browser.justClosed?.takeIf { it.profileId == profile.id },
+        undoClose = browser::undoClose,
+        dismissJustClosed = browser::dismissJustClosed,
     )
 
     val sites by browser.siteSettings.collectAsState()
@@ -354,6 +365,7 @@ fun BrowserWindow(
                             tab.openFind()
                         },
                         onDesktopSite = links.setDesktopSite,
+                        onAddToHome = links.addToHomeScreen,
                     )
                 },
                 findBar = if (tab.find != null) {
@@ -366,6 +378,7 @@ fun BrowserWindow(
                     val savedFile = links.pageFileSaved
                     val behind = links.openedBehind
                     val handoff = tab.handoff
+                    val closed = links.justClosed
                     if (started != null) {
                         DownloadStartedPrompt(
                             started,
@@ -404,6 +417,13 @@ fun BrowserWindow(
                             },
                             onDismiss = tab::dismissHandoff,
                         )
+                    } else if (closed != null) {
+                        // A note with an action: it goes by itself after a while.
+                        LaunchedEffect(closed) {
+                            delay(JUST_CLOSED_MS)
+                            links.dismissJustClosed()
+                        }
+                        JustClosedPrompt(closed.title, onUndo = links.undoClose, onDismiss = links.dismissJustClosed)
                     } else if (behind != null) {
                         // A note, not a question: it goes by itself.
                         LaunchedEffect(behind) {
@@ -591,6 +611,9 @@ fun BrowserWindow(
         )
     }
 }
+
+/** How long "Undo" for a closed Tab stays before it goes by itself. */
+private const val JUST_CLOSED_MS = 6_000L
 
 /** How long "Opened in a new Tab" stays before it goes by itself. */
 private const val OPENED_BEHIND_MS = 4_000L

@@ -2,6 +2,7 @@ package app.jrny.browser.ui
 
 import android.text.format.Formatter
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Switch
@@ -86,6 +87,8 @@ fun PageMenu(
     onFind: () -> Unit = {},
     /** Desktop site on or off for the page's site, or null where it can't be set. */
     onDesktopSite: ((Boolean) -> Unit)? = null,
+    /** Add to Home screen, or null where it isn't offered: a Private Tab, or a launcher without pinned shortcuts. */
+    onAddToHome: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -175,6 +178,9 @@ fun PageMenu(
             )
             Item(R.string.print, JrnyIcons.Print, "menu-print", enabled = url != null) {
                 Sharing.print(context, tab.webView, tab.pageTitle ?: tab.displayHost)
+            }
+            if (onAddToHome != null) {
+                Item(R.string.add_to_home_screen, Icons.Filled.Home, "menu-add-to-home", enabled = url != null, onClick = onAddToHome)
             }
 
             Section(R.string.menu_profile)
@@ -331,6 +337,19 @@ fun HandoffPrompt(appName: String?, canOpen: Boolean, onOpen: () -> Unit, onDism
         onAction = onOpen,
         onDismiss = onDismiss,
         tag = "handoff",
+        modifier = modifier,
+    )
+}
+
+/** Shown once a Tab closed, with "Undo" to open it again in its place (SPEC, "Reopen closed Tab"). */
+@Composable
+fun JustClosedPrompt(title: String, onUndo: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = if (title.isBlank()) stringResource(R.string.tab_closed_untitled) else stringResource(R.string.tab_closed, title),
+        action = stringResource(R.string.undo),
+        onAction = onUndo,
+        onDismiss = onDismiss,
+        tag = "tab-closed",
         modifier = modifier,
     )
 }

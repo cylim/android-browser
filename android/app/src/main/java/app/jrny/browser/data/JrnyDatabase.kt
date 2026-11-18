@@ -95,6 +95,12 @@ abstract class ProfileDao {
     @Query("DELETE FROM site_settings WHERE profileId = :id")
     protected abstract suspend fun deleteSiteSettings(id: Long)
 
+    @Query("DELETE FROM closed_tabs WHERE profileId = :id")
+    protected abstract suspend fun deleteClosedTabs(id: Long)
+
+    @Query("DELETE FROM shortcuts WHERE profileId = :id")
+    protected abstract suspend fun deleteShortcuts(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -123,6 +129,8 @@ abstract class ProfileDao {
         deleteDownloads(id)
         deleteSiteRules(id)
         deleteSiteSettings(id)
+        deleteClosedTabs(id)
+        deleteShortcuts(id)
         return true
     }
 }
@@ -239,6 +247,21 @@ abstract class TabDao {
             "WHERE id = :profileId AND pendingDeletion = 0",
     )
     protected abstract suspend fun activateProfile(profileId: Long): Int
+
+    @Query("SELECT EXISTS(SELECT 1 FROM tabs WHERE id = :id)")
+    protected abstract suspend fun exists(id: Long): Boolean
+
+    /**
+     * Opens [url] again as the Tab [id] in [profileId] and selects it: back in its old place in
+     * the list, which is ordered by id. If that id has been taken, it opens at the end. Returns the
+     * Tab's id, or null when the Profile is gone.
+     */
+    @Transaction
+    open suspend fun reopen(profileId: Long, id: Long, url: String, title: String): Long? {
+        if (!profileIsLive(profileId)) return null
+        val row = TabEntity(profileId = profileId, url = url, title = title, lastUsed = maxLastUsed() + 1)
+        return insertRow(if (exists(id)) row else row.copy(id = id))
+    }
 
     /** Opens a Tab at the end of [profileId]'s list, selects it, and returns its id. */
     @Transaction
@@ -763,12 +786,117 @@ abstract class SiteSettingDao {
     }
 }
 
+/**
+ * One row per recently closed Tab of a Profile (SPEC, "Reopen closed Tab"): its address and
+ * title, and the id it had, so Undo puts it back in its place. A Profile keeps its latest
+ * [ClosedTabDao.KEEP].
+ */
+@Entity(
+    tableName = "closed_tabs",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId", "closedAt")],
+)
+data class ClosedTabEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val tabId: Long,
+    val url: String,
+    val title: String,
+    val closedAt: Long,
+)
+
+@Dao
+abstract class ClosedTabDao {
+    /** A Profile's recently closed Tabs, newest first. */
+    @Query("SELECT * FROM closed_tabs WHERE profileId = :profileId ORDER BY closedAt DESC, id DESC")
+    abstract fun observe(profileId: Long): Flow<List<ClosedTabEntity>>
+
+    @Query("SELECT * FROM closed_tabs WHERE id = :id")
+    abstract suspend fun get(id: Long): ClosedTabEntity?
+
+    @Insert
+    protected abstract suspend fun insertRow(row: ClosedTabEntity): Long
+
+    @Query(
+        "DELETE FROM closed_tabs WHERE profileId = :profileId AND id NOT IN " +
+            "(SELECT id FROM closed_tabs WHERE profileId = :profileId ORDER BY closedAt DESC, id DESC LIMIT :keep)",
+    )
+    protected abstract suspend fun trim(profileId: Long, keep: Int)
+
+    @Query("DELETE FROM closed_tabs WHERE id = :id")
+    abstract suspend fun delete(id: Long)
+
+    @Query("DELETE FROM closed_tabs WHERE profileId = :profileId")
+    abstract suspend fun clear(profileId: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+
+    /** Keeps [row] at the top of its Profile's list, and drops what falls past [KEEP]. Returns its id, or null when the Profile is gone. */
+    @Transaction
+    open suspend fun add(row: ClosedTabEntity): Long? {
+        if (!profileIsLive(row.profileId)) return null
+        val id = insertRow(row)
+        trim(row.profileId, KEEP)
+        return id
+    }
+
+    companion object {
+        const val KEEP = 10
+    }
+}
+
+/**
+ * One row per Home Screen Shortcut (SPEC, "Add to Home screen"). The launcher holds only [id], a
+ * random name; the address and the Profile stay here, so no other app can make a shortcut's
+ * intent open a page in a chosen Profile.
+ */
+@Entity(
+    tableName = "shortcuts",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId")],
+)
+data class ShortcutEntity(
+    @PrimaryKey val id: String,
+    val profileId: Long,
+    val url: String,
+    val title: String,
+    val createdAt: Long,
+)
+
+@Dao
+abstract class ShortcutDao {
+    @Query("SELECT * FROM shortcuts WHERE id = :id")
+    abstract suspend fun get(id: String): ShortcutEntity?
+
+    @Query("SELECT id FROM shortcuts WHERE profileId = :profileId")
+    abstract suspend fun idsOf(profileId: Long): List<String>
+
+    @Insert
+    protected abstract suspend fun insertRow(row: ShortcutEntity)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+
+    /** Keeps [row]. False, with nothing kept, when the Profile is gone. */
+    @Transaction
+    open suspend fun add(row: ShortcutEntity): Boolean {
+        if (!profileIsLive(row.profileId)) return false
+        insertRow(row)
+        return true
+    }
+}
+
 @Database(
     entities = [
         ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class,
-        SiteRuleEntity::class, FolderEntity::class, SiteSettingEntity::class,
+        SiteRuleEntity::class, FolderEntity::class, SiteSettingEntity::class, ClosedTabEntity::class, ShortcutEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -779,6 +907,7 @@ abstract class SiteSettingDao {
         AutoMigration(from = 6, to = 7),
         AutoMigration(from = 7, to = 8),
         AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 9, to = 10),
     ],
 )
 abstract class JrnyDatabase : RoomDatabase() {
@@ -789,6 +918,8 @@ abstract class JrnyDatabase : RoomDatabase() {
     abstract fun downloads(): DownloadDao
     abstract fun siteRules(): SiteRuleDao
     abstract fun siteSettings(): SiteSettingDao
+    abstract fun closedTabs(): ClosedTabDao
+    abstract fun shortcuts(): ShortcutDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

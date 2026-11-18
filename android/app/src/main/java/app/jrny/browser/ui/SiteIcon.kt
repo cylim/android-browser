@@ -101,6 +101,16 @@ val LocalSiteIcons = staticCompositionLocalOf<SiteIconSource?> { null }
 /** The mark's size in a list row. */
 val SITE_ICON_SIZE = 20.dp
 
+/**
+ * The letter and color that stand for the site of [url] where it has no icon, as the Tab list
+ * draws them, or null for an address that isn't a web page's.
+ */
+fun siteLetterMark(url: String?): Pair<String, Color>? {
+    val site = siteName(url)
+    if (site.isEmpty()) return null
+    return site.first().uppercase() to SITE_COLORS[Math.floorMod(site.hashCode(), SITE_COLORS.size)]
+}
+
 /** Dark enough for a white letter on top, as the Profile colors are. */
 private val SITE_COLORS = listOf(
     Color(0xFF3B5BA9), Color(0xFF00796B), Color(0xFF2E7D32), Color(0xFF8D5A00),
