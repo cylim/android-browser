@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only the photos and videos the camera app makes for a page's file field (SPEC, "File upload"). -->
+<!--
+    Only the photos and videos the camera app makes for a page's file field (SPEC, "File upload"),
+    and images handed to other apps by Copy image and Share image (SPEC, "Link and image menu").
+-->
 <paths>
     <cache-path name="captures" path="captures/" />
+    <cache-path name="shared" path="shared/" />
 </paths>

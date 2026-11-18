@@ -246,4 +246,34 @@
     <string name="username">Username</string>
     <string name="password">Password</string>
     <string name="sign_in">Sign in</string>
+
+    <!-- Page menu (SPEC, "Page menu") -->
+    <string name="menu_page">Page</string>
+    <string name="menu_profile">Profile</string>
+    <string name="menu_browser">Browser</string>
+    <string name="share">Share</string>
+    <string name="copy_link">Copy link</string>
+    <string name="print">Print</string>
+
+    <!-- Link and image menu (SPEC, "Link and image menu") -->
+    <string name="link">Link</string>
+    <string name="image">Image</string>
+    <string name="open_in_new_tab">Open in new Tab</string>
+    <string name="open_in_private_tab">Open in Private Tab</string>
+    <string name="share_link">Share link</string>
+    <string name="open_image_in_new_tab">Open image in new Tab</string>
+    <string name="save_image">Save image</string>
+    <string name="copy_image">Copy image</string>
+    <string name="share_image">Share image</string>
+    <string name="opened_in_new_tab">Opened in a new Tab</string>
+
+    <!-- Links to other apps (SPEC, "Links to other apps") -->
+    <string name="handoff_offer_named">This page wants to open %1$s.</string>
+    <string name="handoff_offer">This page wants to open another app.</string>
+    <string name="handoff_none">No app on this device can open this link.</string>
+    <string name="open_app">Open</string>
+
+    <!-- Files a page makes (SPEC, "Browsing features") -->
+    <string name="page_file_saved">Saved %1$s to Downloads</string>
+    <string name="page_file_failed">%1$s couldn\'t be saved</string>
 </resources>

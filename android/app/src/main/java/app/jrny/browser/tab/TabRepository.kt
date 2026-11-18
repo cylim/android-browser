@@ -26,6 +26,9 @@ class TabRepository(private val dao: TabDao) {
     /** Opens [url] as a new Tab in [profile] and selects it. Returns null, and opens nothing, when the Profile is gone. */
     suspend fun openUrl(profile: ProfileId, url: String): TabId? = dao.openInLive(profile.toLong(), url)?.let(::TabId)
 
+    /** Opens [url] as a new Tab at the end of [profile]'s list, leaving the shown Tab shown. Null when the Profile is gone. */
+    suspend fun openBehind(profile: ProfileId, url: String): TabId? = dao.openBehind(profile.toLong(), url)?.let(::TabId)
+
     /**
      * Open in Profile: opens [url] as a new Tab in [profile] and makes it the Active Profile.
      * Returns null when the Profile is gone.

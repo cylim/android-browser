@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.Message
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
@@ -28,6 +31,11 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
+import app.jrny.browser.download.PageFiles
+import app.jrny.browser.handoff.AppLink
+import app.jrny.browser.handoff.HandoffRules
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.site.SiteOrigin
 import app.jrny.browser.site.SiteSetting
@@ -62,6 +70,11 @@ class Tab(
      * it with [showPermissionAsk]. Without an owner every ask is refused.
      */
     private val onPermissionAsk: (Tab, PermissionAsk) -> Unit = { _, ask -> ask.deny() },
+    /**
+     * The page opened a link that belongs to another app ([tapped] when the person tapped it).
+     * The owner hands it over, or offers it with [offerHandoff]. Without an owner it is offered.
+     */
+    private val onHandoff: (Tab, AppLink, tapped: Boolean) -> Unit = { tab, link, _ -> tab.offerHandoff(link) },
 ) {
     /**
      * Whether WebView checks pages against Safe Browsing and warns before a dangerous one
@@ -127,6 +140,76 @@ class Tab(
     /** The page's video, shown fullscreen until [exitFullscreen] or the page ends it. */
     var fullscreen: FullscreenVideo? by mutableStateOf(null)
         private set
+
+    /**
+     * A link to another app the page opened, offered under the page with "Open" until the person
+     * answers or the page moves on (SPEC, "Links to other apps").
+     */
+    var handoff: AppLink? by mutableStateOf(null)
+        private set
+
+    fun offerHandoff(link: AppLink) {
+        handoff = link
+    }
+
+    /**
+     * The page that opened the offered link. WebView can report that this page started only
+     * after the page has already opened the link, so only another page's start ends the offer.
+     */
+    private var handoffPage: String? = null
+
+    fun dismissHandoff() {
+        handoff = null
+    }
+
+    /** A link or an image the person is holding on the page, for its menu (SPEC, "Link and image menu"). */
+    var pressed: PressedItem? by mutableStateOf(null)
+        private set
+
+    fun dismissPressed() {
+        pressed = null
+    }
+
+    /**
+     * Offers the file at [url] for download, as if the page had: the person agrees first. Used for
+     * "Save image". A `blob:` image is copied in the page first, as a page's own file is.
+     */
+    fun offerFile(url: String, mimeType: String = "") {
+        val view = webView
+        val name = DownloadRequest.safeFileName(URLUtil.guessFileName(url, null, mimeType.ifBlank { null }))
+        val copy = if (url.startsWith("blob:", ignoreCase = true)) keepPageCopy(view, url) else null
+        val referrer = shownPage(view)?.takeIf { WebAddress.isWebAddress(it) }?.substringBefore('#')
+        download = DownloadRequest(url, view.settings.userAgentString.orEmpty(), name, mimeType, -1, referrer, copy)
+    }
+
+    /**
+     * Runs [script] in the page and gives its result as JSON, or null when the page has gone.
+     * Call it on the main thread.
+     */
+    suspend fun evaluate(script: String): String? {
+        val view = webView
+        return suspendCancellableCoroutine { done -> view.evaluateJavascript(script) { done.resume(it) } }
+    }
+
+    /**
+     * A file the page made has no name of its own: WebView passes on none. The link that offered
+     * it may name it (`<a download="name">`), and then the offer takes that name.
+     */
+    private fun takeNameFromPage(view: WebView, url: String) {
+        view.evaluateJavascript(PageFiles.nameOf(url)) { result ->
+            val named = result?.let { runCatching { org.json.JSONArray("[$it]").optString(0) }.getOrNull() }?.takeIf { it.isNotBlank() && it != "null" }
+                ?: return@evaluateJavascript
+            val offered = download?.takeIf { it.url == url } ?: return@evaluateJavascript
+            download = offered.copy(fileName = DownloadRequest.safeFileName(named))
+        }
+    }
+
+    /** Makes the page keep its own copy of the `blob:` file at [url], and returns the copy's name. */
+    private fun keepPageCopy(view: WebView, url: String): String {
+        val name = PageFiles.newCopyName()
+        view.evaluateJavascript(PageFiles.keep(url, name), null)
+        return name
+    }
 
     /** What WebView asked with, so the page can withdraw [permissionAsk]: a request, or a location origin. */
     private var permissionSource: Any? = null
@@ -204,6 +287,8 @@ class Tab(
         httpAuth?.cancel()
         closeHttpAuth()
         exitFullscreen()
+        handoff = null
+        pressed = null
     }
 
     /** The page's address, or null before anything has loaded. Set as soon as a load starts. */
@@ -326,9 +411,14 @@ class Tab(
 
     fun stop() = webView.stopLoading()
 
-    /** Ends the [download] offer, after the person has answered it. */
-    fun dismissDownload() {
+    /**
+     * Ends the [download] offer, after the person has answered it. When they declined, the page's
+     * copy of a file it made goes too; [kept] leaves it for Okapi to read.
+     */
+    fun dismissDownload(kept: Boolean = false) {
+        val offered = download ?: return
         download = null
+        if (!kept) offered.pageCopy?.let { webView.evaluateJavascript(PageFiles.drop(it), null) }
     }
 
     /** Closes the [popup], if one is open. */
@@ -382,8 +472,13 @@ class Tab(
             // web page, without its fragment, which never leaves the browser. An address the
             // person typed, or one another app sent, was linked from nowhere.
             val referrer = shownPage(view)?.takeIf { !addressRequested && WebAddress.isWebAddress(it) && it != url }?.substringBefore('#')
-            offerDownload(view, DownloadRequest(url, userAgent.orEmpty(), name, mimeType.orEmpty(), contentLength, referrer))
+            // A file the page made itself may be dropped by the page at once: it keeps a copy
+            // until the person answers.
+            val copy = if (url.startsWith("blob:", ignoreCase = true)) keepPageCopy(view, url) else null
+            offerDownload(view, DownloadRequest(url, userAgent.orEmpty(), name, mimeType.orEmpty(), contentLength, referrer, copy))
+            if (!WebAddress.isWebAddress(url)) takeNameFromPage(view, url)
         }
+        if (!popup) view.setOnLongClickListener { longPress(view) }
         view.webViewClient = if (popup) PopupViewClient() else PageViewClient()
         view.webChromeClient = if (popup) PopupChromeClient() else PageChromeClient()
         return view
@@ -458,12 +553,50 @@ class Tab(
         canGoForward = false
     }
 
-    /** Only web pages load. Other schemes (`mailto:`, `intent:`, app links) are dropped; nothing is handed to other apps yet. */
-    private fun isBlocked(request: WebResourceRequest) = !WebAddress.isWebScheme(request.url.scheme)
+    /**
+     * Only web pages load in a Tab. A link for another app, opened by the page itself rather than
+     * one of its frames, goes to the owner to hand over (SPEC, "Links to other apps"). Anything
+     * else is dropped.
+     */
+    private fun isBlocked(view: WebView, request: WebResourceRequest): Boolean {
+        val scheme = request.url.scheme
+        if (WebAddress.isWebScheme(scheme)) return false
+        if (request.isForMainFrame && HandoffRules.isForAnotherApp(scheme)) {
+            AppLink.of(request.url.toString())?.let {
+                handoffPage = view.url
+                onHandoff(this, it, request.hasGesture())
+            }
+        }
+        return true
+    }
+
+    /**
+     * Holding a link or an image opens its menu. Anything else keeps WebView's own handling, such
+     * as selecting text. An image that is also a link asks WebView for the link's address first.
+     */
+    private fun longPress(view: WebView): Boolean {
+        if (view != webView) return false
+        val hit = view.hitTestResult
+        val extra = hit.extra?.takeIf { it.isNotBlank() }
+        when (hit.type) {
+            WebView.HitTestResult.SRC_ANCHOR_TYPE -> pressed = PressedItem(link = extra ?: return false, image = null)
+            WebView.HitTestResult.IMAGE_TYPE -> pressed = PressedItem(link = null, image = extra ?: return false)
+            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                val reply = Handler(Looper.getMainLooper()) { message ->
+                    if (view == webView) pressed = PressedItem(link = message.data.getString("url")?.takeIf { it.isNotBlank() }, image = extra)
+                    true
+                }.obtainMessage()
+                view.requestFocusNodeHref(reply)
+            }
+            else -> return false
+        }
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        return true
+    }
 
     /** Navigation callbacks for the Tab's page. */
     private inner class PageViewClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(request)
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(view, request)
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             if (view != webView) return
@@ -477,6 +610,8 @@ class Tab(
                 restoreDone = false
             }
             this@Tab.url = url
+            // An offer to open another app belongs to the page that made it.
+            if (url != handoffPage) handoff = null
             // A grant for once ends when the page leaves its site.
             val origin = SiteOrigin.of(url)
             if (origin != pageOrigin) allowedOnce.clear()
@@ -658,7 +793,7 @@ class Tab(
 
     /** Navigation callbacks for a popup. */
     private inner class PopupViewClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(request)
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(view, request)
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             if (view == popup) popupUrl = url
@@ -698,3 +833,6 @@ class Tab(
                 "var v=e.tagName==='VIDEO'?e:e.querySelector('video');return v?[v.videoWidth,v.videoHeight]:null})()"
     }
 }
+
+/** What the person is holding on the page: a link, an image, or an image that is a link. */
+data class PressedItem(val link: String?, val image: String?)

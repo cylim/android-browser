@@ -37,6 +37,18 @@ class FakeDownloader : Downloader {
         return canOpen
     }
 
+    /** Files saved as a page's own, by their address. */
+    val saved = java.util.concurrent.ConcurrentHashMap<String, Pair<String, ByteArray>>()
+
+    override fun save(fileName: String, mimeType: String, file: java.io.File): String {
+        val address = "content://test/${saved.size + 1}/$fileName"
+        saved[address] = mimeType to file.readBytes()
+        return address
+    }
+
+    override fun savedStatus(fileUri: String): DownloadStatus =
+        saved[fileUri]?.let { DownloadStatus.Done(it.second.size.toLong()) } ?: DownloadStatus.Gone
+
     override fun cancel(downloadId: Long) {
         cancelled += downloadId
         status.remove(downloadId)

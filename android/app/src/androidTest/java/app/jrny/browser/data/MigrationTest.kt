@@ -165,6 +165,22 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version9KeepsDownloadsAndLetsOkapiListFilesItSaved() {
+        helper.createDatabase(DB, 8).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion, tint) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0, 'Medium')")
+            db.execSQL("INSERT INTO downloads (id, profileId, downloadId, url, fileName, mimeType, startedAt) VALUES (1, 1, 42, 'https://example.com/a.zip', 'a.zip', 'application/zip', 5)")
+        }
+        helper.runMigrationsAndValidate(DB, 9, true).use { db ->
+            db.query("SELECT downloadId, fileName, fileUri FROM downloads").use { rows ->
+                rows.moveToFirst()
+                assertEquals(42L, rows.getLong(0))
+                assertEquals("a.zip", rows.getString(1))
+                assertEquals(true, rows.isNull(2))
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

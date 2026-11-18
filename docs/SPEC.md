@@ -134,8 +134,8 @@ The layout depends on window width, not device type. It switches live when the w
 
 The page menu ("More") is the same in the Sidebar, the Rail and the Bottom Bar:
 
-1. A row of icons: Forward, Bookmark this page, Share and Reload.
-2. **Page**: Find in page, Desktop site (a switch), Print, Add to Home screen.
+1. A row of icons: Forward (only when the bar has no room for its own Forward button), Bookmark this page, Share and Reload.
+2. **Page**: Copy link, Find in page, Desktop site (a switch), Print, Add to Home screen.
 3. **Profile**: Move, Open in Profile.
 4. **Browser**: New Tab, New Private Tab, History, Bookmarks, Downloads, Settings, and "Set as default browser" while Okapi isn't.
 
@@ -177,10 +177,10 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 
 - A web address (`http` or `https`) always stays in the Tab.
 - `tel:`, `mailto:`, `sms:`, `smsto:` and `geo:` links that the person taps go to the app that handles them at once.
-- Any other scheme, `intent:` and `market:` links included, shows a bar under the page that names the app that would open it, with an "Open" button. Nothing leaves the browser until "Open" is tapped. The bar goes when the page moves on.
+- Any other scheme, `intent:` and `market:` links included, shows a bar under the page with an "Open" button. It names the app that would open the link when Android tells Okapi which one: Android hides most apps from other apps, so for many links the bar only says that the page wants to open another app. Nothing leaves the browser until "Open" is tapped. The bar goes when the page moves on.
 - A link for another app that a page opens without a tap, such as a redirect to `tel:`, also waits for "Open", whatever its scheme. A web address opened without a tap still loads in the Tab.
 - In a Private Tab, every link to another app waits for "Open".
-- An `intent:` link may only open an app that accepts browsable links. Its component and selector are dropped. If no app can open it and it names a web fallback address, the Tab loads that address. If nothing can open it, the bar says so.
+- An `intent:` link may only open an app that accepts browsable links. Its component, selector, extras and flags are dropped. An `intent:` link for a web page that names no app loads in the Tab. Android hides most apps from other apps, so whether an app can open a link is known only once "Open" tries: if no app takes it and it names a web fallback address, the Tab loads that address, and otherwise the bar says that no app can open it.
 - Only the link goes to the other app. The Profile, its cookies and the page's address do not.
 
 ### Link and image menu
@@ -189,7 +189,7 @@ Holding a link or an image opens a menu:
 
 - On a link: Open in new Tab, Open in Private Tab, Open in Profile…, Copy link, Share link.
 - On an image: Open image in new Tab, Save image, Copy image, Share image. An image that is also a link gets both sets.
-- "Open in new Tab" opens the address as a new Tab in the same Profile, after the current one, and stays on the current Tab.
+- "Open in new Tab" opens the address as a new Tab at the end of the Profile's Tab list and stays on the current Tab. A bar offers "Show" to go to it.
 - In a Private Tab, "Open in new Tab" opens a Private Tab, "Open in Private Tab" is not offered, and "Open in Profile…" is hidden.
 - "Save image" works like a download from the page: it asks first, and it uses the Tab's Profile.
 
@@ -249,7 +249,7 @@ Holding a link or an image opens a menu:
   - History and bookmarks open in the page's place: beside the Sidebar, or full screen above the Bottom Bar layout.
   - Deleting a Profile removes its history, its bookmarks, its Folders and its list of downloads at once. Downloaded files stay on the device.
   - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. A site that only answers a real browser may refuse the download service.
-  - A file the page makes itself (a `blob:` or `data:` address) is saved by Okapi, not the download service, once the person agrees. A `data:` address holds the file, so Okapi decodes it. For a `blob:` address, the page keeps a copy of that one file when it offers it, and Okapi reads the copy out of the page only after the person agrees. Declining drops the copy. Nothing else on the page can be read this way. The file goes to the same Downloads folder and the same list of downloads.
+  - A file the page makes itself (a `blob:` or `data:` address) is saved by Okapi, not the download service, once the person agrees. A `data:` address holds the file, so Okapi decodes it. For a `blob:` address, the page keeps a copy of that one file when it offers it, and Okapi reads the copy out of the page only after the person agrees. Declining drops the copy. Nothing else on the page can be read this way. A page that drops its file in the same moment it offers it may leave nothing to copy, and then the file can't be saved. The file takes the name the page's link gives it (`download`), and goes to the same Downloads folder and the same list of downloads. A bar says once it is saved.
 - Search: Google by default, and the engine can be changed in settings (Google, Bing, DuckDuckGo, Brave Search). Address-bar suggestions are on by default and can be turned off.
   - While the person types, the address field offers matching pages from the Active Profile's bookmarks and history, then searches the search engine suggests.
   - Typed text goes to the search engine only when it would be searched for anyway and typing on can't turn it into credentials. An address, text shaped like credentials, or text with a colon before its first `/`, `?` or `#` (`admin:hunter2`, where an `@` may come next) is never sent. So a search with an early colon, such as `python: list comprehension`, gets only bookmark and history suggestions while it is typed, and Go still searches for it. The request carries no cookies. A Private Tab offers no suggestions at all.

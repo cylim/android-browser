@@ -56,12 +56,15 @@ class DownloadRequestTest {
     }
 
     @Test
-    fun onlyWebAddressesCanBeFetched() {
-        fun request(url: String) = DownloadRequest(url, "", "file", "", -1)
-        assertTrue(request("https://example.com/file.zip").supported)
+    fun webAddressesAreFetchedAndPageFilesAreSavedByOkapi() {
+        fun request(url: String, copy: String? = null) = DownloadRequest(url, "", "file", "", -1, pageCopy = copy)
+        assertTrue(request("https://example.com/file.zip").fromWeb)
         assertTrue(request("http://example.com/file.zip").supported)
+        // A file the page made: a data: address holds it, and a blob: one only once the page kept a copy.
+        assertTrue(request("data:text/plain,hello").fromPage)
+        assertTrue(request("blob:https://example.com/1234", copy = "__okapi_1").fromPage)
         assertFalse(request("blob:https://example.com/1234").supported)
-        assertFalse(request("data:text/plain,hello").supported)
+        assertFalse(request("data:text/plain,hello").fromWeb)
         assertFalse(request("file:///sdcard/secret").supported)
     }
 }

@@ -99,7 +99,8 @@ class SettingsUiTest {
 
     private fun openSettings() {
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-settings").performClick()
+        // With the keyboard up the menu is short, and Settings is further down it.
+        compose.onNodeWithTag("menu-settings").performScrollTo().performClick()
         compose.onNodeWithTag("panel-Settings").assertExists()
     }
 
