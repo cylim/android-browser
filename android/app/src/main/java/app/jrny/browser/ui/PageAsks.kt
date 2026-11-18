@@ -118,7 +118,8 @@ private fun PermissionAskHost(tab: Tab, profileName: String, private: Boolean, o
             ask.deny()
             refused = ask.wanted
         }
-        owner.closePermissionAsk()
+        // A newer ask may have taken the place meanwhile: it stays.
+        if (owner.permissionAsk === ask) owner.closePermissionAsk()
     }
     val proceed: (PermissionAsk) -> Unit = { ask ->
         if (hasAndroidPermission(context, ask.wanted)) {
@@ -274,7 +275,11 @@ private fun FileChooserHost(tab: Tab) {
     // by the time they come back.
     var started by remember { mutableStateOf<Pair<Tab, FileChooserAsk>?>(null) }
     var capture by remember { mutableStateOf<Uri?>(null) }
-    val answer: (List<Uri>?) -> Unit = { files -> started?.first?.answerFileChooser(files) }
+    // Only to the file field that asked: one the page has given up on gets nothing.
+    val answer: (List<Uri>?) -> Unit = { files ->
+        val (owner, asked) = started ?: (null to null)
+        if (owner != null && owner.fileChooser === asked) owner.answerFileChooser(files)
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         answer(if (result.resultCode == Activity.RESULT_OK) pickedFiles(result.data) else null)
     }
