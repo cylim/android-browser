@@ -9,7 +9,9 @@ import android.os.Looper
 import android.os.Message
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ContextThemeWrapper
 import android.view.ViewGroup
+import android.webkit.WebSettings
 import android.webkit.ConsoleMessage
 import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
@@ -26,9 +28,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import app.jrny.browser.R
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.PageFiles
@@ -75,7 +79,105 @@ class Tab(
      * The owner hands it over, or offers it with [offerHandoff]. Without an owner it is offered.
      */
     private val onHandoff: (Tab, AppLink, tapped: Boolean) -> Unit = { tab, link, _ -> tab.offerHandoff(link) },
+    /** Whether the Tab's Profile asks [SiteOrigin] for its desktop version (SPEC, "Desktop site"). */
+    private val desktopFor: (SiteOrigin) -> Boolean = { false },
+    /** How large page text is, in percent (SPEC, "Text size"). */
+    textZoom: Int = 100,
+    /** Whether pages are shown dark, darkened when they have no dark theme of their own (SPEC, "Dark pages"). */
+    darkPages: Boolean = false,
 ) {
+    /** How large page text is, in percent. It reaches pages that are already open. */
+    var textZoom: Int = textZoom
+        set(value) {
+            field = value
+            webView.settings.textZoom = value
+            popup?.settings?.textZoom = value
+        }
+
+    /**
+     * Whether pages are shown dark. WebView takes this from the theme of the context it was made
+     * with, so a change gives the Tab a new WebView, which loads the page again.
+     */
+    var darkPages: Boolean = darkPages
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuildWebView()
+        }
+
+    /** The Desktop site choices a Private Tab made: it keeps them only here. A normal Tab follows its Profile's. */
+    private val desktopHere = mutableMapOf<SiteOrigin, Boolean>()
+
+    /** True while the Tab asks the shown page's site for its desktop version. */
+    var desktopSite by mutableStateOf(false)
+        private set
+
+    /**
+     * Asks [origin] for its desktop version, or its mobile one, from now on in this Tab only: a
+     * Private Tab's choice (SPEC, "Desktop site"). A normal Tab follows its Profile's choices,
+     * which the owner keeps, and hears of them through [desktopChoicesChanged].
+     */
+    fun setDesktopSite(origin: SiteOrigin, on: Boolean) {
+        desktopHere[origin] = on
+        desktopChoicesChanged()
+    }
+
+    /**
+     * The site's choice may have changed (it was set, reset, or has just been read at start): the
+     * page loads again with the agent its site wants now, if that isn't the one it was loaded with.
+     */
+    fun desktopChoicesChanged() {
+        val shown = url ?: return
+        val desktop = wantsDesktop(SiteOrigin.of(shown))
+        if (desktop == desktopSite && UserAgents.isDesktop(webView.settings.userAgentString) == desktop) return
+        applyUserAgent(webView, desktop)
+        if (!crashed) webView.reload()
+    }
+
+    private fun wantsDesktop(origin: SiteOrigin?): Boolean = origin != null && (desktopHere[origin] ?: desktopFor(origin))
+
+    /** Sends the desktop user agent, or WebView's own, from the next request on. */
+    private fun applyUserAgent(view: WebView, desktop: Boolean) {
+        if (view == webView) desktopSite = desktop
+        val settings = view.settings
+        if (UserAgents.isDesktop(settings.userAgentString) == desktop) return
+        settings.userAgentString = if (desktop) UserAgents.desktop(WebSettings.getDefaultUserAgent(context)) else null
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+            val metadata = WebSettingsCompat.getUserAgentMetadata(settings)
+            WebSettingsCompat.setUserAgentMetadata(
+                settings,
+                UserAgentMetadata.Builder(metadata).setMobile(!desktop).setPlatform(if (desktop) "Linux" else "Android").build(),
+            )
+        }
+    }
+
+    /** What Find in page is looking for and has found, or null while it is closed (SPEC, "Find in page"). */
+    var find: FindState? by mutableStateOf(null)
+        private set
+
+    /** Opens Find in page, empty. */
+    fun openFind() {
+        if (find == null) find = FindState("", 0, 0)
+    }
+
+    /** Looks for [text] in the page and highlights every match. */
+    fun find(text: String) {
+        find = FindState(text, 0, 0)
+        if (text.isEmpty()) webView.clearMatches() else webView.findAllAsync(text)
+    }
+
+    /** Moves to the next match, or the one before with [forward] false. */
+    fun findNext(forward: Boolean) {
+        if (find?.query.isNullOrEmpty()) return
+        webView.findNext(forward)
+    }
+
+    /** Closes Find in page and clears its highlights. */
+    fun closeFind() {
+        if (find == null) return
+        find = null
+        webView.clearMatches()
+    }
     /**
      * Whether WebView checks pages against Safe Browsing and warns before a dangerous one
      * (SPEC, "Browsing features"). It follows the app's setting, also for pages already open.
@@ -347,6 +449,7 @@ class Tab(
     /** Loads [address] in the Tab. A popup over the page closes, so the new page is what shows. */
     fun load(address: String) {
         closePopup()
+        applyUserAgent(webView, wantsDesktop(SiteOrigin.of(address)))
         crashed = false
         restoreScrollY = 0
         restoreDone = false
@@ -433,6 +536,7 @@ class Tab(
     /** Frees the WebViews. The Tab can't be used afterwards. */
     fun destroy() {
         endAsks()
+        find = null
         allowedOnce.clear()
         closePopup()
         // WebView must leave the view hierarchy before destroy().
@@ -443,7 +547,8 @@ class Tab(
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun newWebView(popup: Boolean): WebView {
-        val view = WebView(context)
+        // WebView shows pages dark when the theme of its context is dark.
+        val view = WebView(if (darkPages) ContextThemeWrapper(context, R.style.Theme_Jrny_DarkPages) else context)
         // Must be the first call on a new WebView: the profile is fixed once the WebView is used.
         WebViewCompat.setProfile(view, profile.name)
         with(view.settings) {
@@ -463,6 +568,15 @@ class Tab(
             setSupportMultipleWindows(!popup)
         }
         applySafeBrowsing(view)
+        view.settings.textZoom = textZoom
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, darkPages)
+        }
+        // A desktop width for pages that ask for the device's, while the Tab asks for desktop sites.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(view, UserAgents.DESKTOP_VIEWPORT_SCRIPT, setOf("*"))
+        }
+        if (!popup) view.setFindListener { active, matches, _ -> find?.let { find = it.copy(current = if (matches == 0) 0 else active + 1, total = matches) } }
         // Sign-in flows rely on third-party cookies (the Milestone 0 spike signed in with them on).
         profile.cookieManager.setAcceptThirdPartyCookies(view, true)
         view.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
@@ -539,6 +653,28 @@ class Tab(
      * without this. The Tab gets a fresh WebView and waits for the person to reload, so a page
      * that crashes the renderer doesn't crash it in a loop.
      */
+    /**
+     * Gives the Tab a new WebView that loads the page again where it was, after a change only a
+     * new WebView can take (SPEC, "Dark pages"). Back/forward history is lost, as after a kill.
+     */
+    private fun rebuildWebView() {
+        val old = webView
+        val address = url
+        val savedTitle = title
+        val position = scrollY
+        endAsks()
+        closeFind()
+        closePopup()
+        (old.parent as? ViewGroup)?.removeView(old)
+        old.stopLoading()
+        old.destroy()
+        webView = newWebView(popup = false)
+        canGoBack = false
+        canGoForward = false
+        isLoading = false
+        if (address != null && !crashed) restore(address, savedTitle, position)
+    }
+
     private fun replaceDeadWebView(dead: WebView) {
         if (dead != webView) return
         restoreScrollY = scrollY
@@ -560,13 +696,31 @@ class Tab(
      */
     private fun isBlocked(view: WebView, request: WebResourceRequest): Boolean {
         val scheme = request.url.scheme
-        if (WebAddress.isWebScheme(scheme)) return false
+        if (WebAddress.isWebScheme(scheme)) return switchesUserAgent(view, request)
         if (request.isForMainFrame && HandoffRules.isForAnotherApp(scheme)) {
             AppLink.of(request.url.toString())?.let {
                 handoffPage = view.url
                 onHandoff(this, it, request.hasGesture())
             }
         }
+        return true
+    }
+
+    /**
+     * A page on a site that wants the other user agent than the Tab sends now: the Tab switches,
+     * and asks for the page again with it. Only a plain GET in the page itself is asked again; a
+     * form's POST keeps the agent it has, so nothing is sent twice.
+     */
+    private fun switchesUserAgent(view: WebView, request: WebResourceRequest): Boolean {
+        if (view != webView || !request.isForMainFrame || request.method != "GET") return false
+        val desktop = wantsDesktop(SiteOrigin.of(request.url.toString()))
+        if (UserAgents.isDesktop(view.settings.userAgentString) == desktop) {
+            desktopSite = desktop
+            return false
+        }
+        applyUserAgent(view, desktop)
+        val address = request.url.toString()
+        Handler(Looper.getMainLooper()).post { if (view == webView) view.loadUrl(address) }
         return true
     }
 
@@ -610,6 +764,8 @@ class Tab(
                 restoreDone = false
             }
             this@Tab.url = url
+            // Find in page belongs to the page it was opened on.
+            if (find != null && url != loadedUrl) closeFind()
             // An offer to open another app belongs to the page that made it.
             if (url != handoffPage) handoff = null
             // A grant for once ends when the page leaves its site.
@@ -833,6 +989,9 @@ class Tab(
                 "var v=e.tagName==='VIDEO'?e:e.querySelector('video');return v?[v.videoWidth,v.videoHeight]:null})()"
     }
 }
+
+/** What Find in page looks for, and which of its matches is the current one (1-based, 0 for none) of [total]. */
+data class FindState(val query: String, val current: Int, val total: Int)
 
 /** What the person is holding on the page: a link, an image, or an image that is a link. */
 data class PressedItem(val link: String?, val image: String?)

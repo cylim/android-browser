@@ -201,12 +201,13 @@ Holding a link or an image opens a menu:
 ### Find in page
 
 - Find in page shows a field, a "N of M" count and up and down arrows, and highlights every match on the page.
-- In the Bottom Bar layout the field takes the address bar's place at the bottom, above the keyboard. In the Sidebar layout it shows as a bar across the top of the page.
+- In the Bottom Bar layout the field takes the address bar's place at the bottom, above the keyboard. In the Sidebar layout it shows as a bar across the top of the page, which moves the page down so no match hides under it.
 - It closes with its own button, with Back, or when the page moves on.
 
 ### Desktop site
 
-- "Desktop site" asks sites for their desktop version: the Tab sends a desktop user agent and lays out the page at desktop width.
+- "Desktop site" asks sites for their desktop version: the Tab sends the user agent of Chrome on a Linux desktop (with the device's Chrome version), says it is no mobile in its client hints, and lays out a page that asks for the device's width at 1280 pixels instead.
+- The Tab switches agent before a page of the site loads. A form that is being sent (POST) keeps the agent it has, so nothing is sent twice.
 - The choice is remembered for each site, in each Profile, and shows in Site settings. It applies to every Tab of that Profile on that site.
 - In a Private Tab the choice lasts until the Tab closes.
 
@@ -218,11 +219,11 @@ Holding a link or an image opens a menu:
 ### Dark pages
 
 - Settings → "Darken pages without a dark theme" is off by default. It applies only while the app's theme is dark.
-- When it's on, a page that has no dark theme of its own is darkened by WebView. A page with a dark theme uses that.
+- When it's on, pages are asked for their dark theme, and a page that has no dark theme of its own is darkened by WebView. Turning it on or off, or a change of the app's theme while it's on, loads open pages again, without their back/forward history.
 
 ### Pull to refresh
 
-- Pulling down on a page that is scrolled to its very top reloads it.
+- Pulling down on a page that is scrolled to its very top reloads it. A page that scrolls inside itself instead of as a whole counts as at its top, so for such sites the setting below turns it off.
 - Settings → "Pull to refresh" turns it off, for sites with their own pull gesture.
 
 ### Clear browsing data

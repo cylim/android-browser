@@ -44,6 +44,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.toArgb
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import app.jrny.browser.R
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.tab.Tab
@@ -65,7 +68,7 @@ fun PageView(
 ) {
     Box(modifier.testTag("page")) {
         // A new WebView replaces a dead one (Tab.replaceDeadWebView), so key the view on it.
-        key(tab.webView) { WebViewHost(tab.webView, covered = covered) }
+        key(tab.webView) { WebViewHost(tab.webView, covered = covered, onPull = if (LocalPullToRefresh.current) tab::reload else null) }
         // Floats over the page, and under a popup.
         overlay()
         tab.popup?.let { popup ->
@@ -155,20 +158,41 @@ fun PopupBar(address: String, onClose: () -> Unit) {
     }
 }
 
+/** Whether pulling down on a page scrolled to its top reloads it: the setting (SPEC, "Pull to refresh"). */
+val LocalPullToRefresh = staticCompositionLocalOf { false }
+
+/**
+ * Hosts [webView]. With [onPull], it sits in a pull-to-refresh layout, which takes a pull only
+ * while the page is scrolled to its very top.
+ */
 @Composable
-private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier, covered: Boolean = false) {
+private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier, covered: Boolean = false, onPull: (() -> Unit)? = null) {
+    val accent = MaterialTheme.colorScheme.primary.toArgb()
     AndroidView(
-        factory = {
+        factory = { context ->
             // The WebView outlives this composition (and moves between layouts), so detach it
             // from any earlier parent.
             (webView.parent as? ViewGroup)?.removeView(webView)
-            webView
+            SwipeRefreshLayout(context).apply {
+                addView(webView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                // A page scrolled down scrolls up first. WebView's own scroll position is the page's.
+                setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
+                // With nested scrolling off, the refresh layout decides by that scroll position alone.
+                webView.isNestedScrollingEnabled = false
+            }
         },
         // Hidden from a screen reader while covered. Set each time, as the WebView keeps it
         // when it moves to another layout or is shown again later.
-        update = { view ->
-            view.importantForAccessibility =
+        update = { layout ->
+            webView.importantForAccessibility =
                 if (covered) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+            layout.isEnabled = onPull != null && !covered
+            layout.setColorSchemeColors(accent)
+            layout.setOnRefreshListener {
+                onPull?.invoke()
+                // The load's own progress bar shows from here.
+                layout.isRefreshing = false
+            }
         },
         // Out of the keyboard's focus order while covered. Only moving focus skips it: the page
         // can still be handed focus directly, as the address field does after Go.

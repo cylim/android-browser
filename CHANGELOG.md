@@ -131,6 +131,12 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - The page menu starts with a row of icons (Forward on narrow phones, Bookmark, Share, Reload), then Page (Copy link, Print), Profile (Move, Open in Profile) and Browser sections.
 - Print opens Android's print dialog, which can also save the page as a PDF.
 
+### Page tools (not merged yet)
+
+- Find in page, from the page menu: it counts the matches and moves between them. On a phone it takes the address bar's place; on a tablet it runs across the top of the page.
+- Desktop site, a switch in the page menu, asks a site for its desktop version and lays the page out at desktop width. Each Profile remembers it for the site, and it shows in Site settings. A Private Tab keeps it until it closes.
+- Settings → Pages: text size for every page (50% to 200%), "Darken pages without a dark theme" while Okapi's theme is dark, and pull to refresh, which is on by default.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.R
 import app.jrny.browser.settings.SearchEngine
+import kotlin.math.roundToInt
 import app.jrny.browser.settings.Settings
 import app.jrny.browser.settings.ThemeChoice
 
@@ -129,6 +131,21 @@ fun SettingsPanel(
                 }
             }
 
+            Section(R.string.pages)
+            TextSize(settings.textZoom) { zoom -> ui.update { it.copy(textZoom = zoom) } }
+            Toggle(
+                title = R.string.darken_pages,
+                explanation = stringResource(R.string.darken_pages_explanation),
+                checked = settings.darkenPages,
+                tag = "setting-darken-pages",
+            ) { on -> ui.update { it.copy(darkenPages = on) } }
+            Toggle(
+                title = R.string.pull_to_refresh,
+                explanation = stringResource(R.string.pull_to_refresh_explanation),
+                checked = settings.pullToRefresh,
+                tag = "setting-pull-to-refresh",
+            ) { on -> ui.update { it.copy(pullToRefresh = on) } }
+
             Section(R.string.tab_list)
             Toggle(
                 title = R.string.compact_tabs,
@@ -212,6 +229,33 @@ private fun Link(title: Int, explanation: String, value: String, tag: String, on
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
+/**
+ * Text size for every page (SPEC, "Text size"): a slider in steps of 10%, from 50% to 200%, with
+ * a sample line in that size.
+ */
+@Composable
+private fun TextSize(zoom: Int, onChange: (Int) -> Unit) {
+    val steps = (Settings.MAX_TEXT_ZOOM - Settings.MIN_TEXT_ZOOM) / Settings.TEXT_ZOOM_STEP
+    Column(Modifier.fillMaxWidth().padding(horizontal = PANEL_TEXT_INSET, vertical = 8.dp).testTag("setting-text-size")) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.text_size), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.percent, zoom), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Slider(
+            value = zoom.toFloat(),
+            onValueChange = { onChange((it / Settings.TEXT_ZOOM_STEP).roundToInt() * Settings.TEXT_ZOOM_STEP) },
+            valueRange = Settings.MIN_TEXT_ZOOM.toFloat()..Settings.MAX_TEXT_ZOOM.toFloat(),
+            steps = steps - 1,
+            modifier = Modifier.testTag("text-size-slider"),
+        )
+        Text(
+            stringResource(R.string.text_size_sample),
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = MaterialTheme.typography.bodyMedium.fontSize * (zoom / 100f)),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

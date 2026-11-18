@@ -17,6 +17,7 @@ import app.jrny.browser.profile.WebProfile
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -286,6 +287,48 @@ class TabTest {
             assertEquals(listOf(server.url("/app"), server.url("/app/next")), visits.toList())
             assertTrue(seen.toList().toString(), seen.contains(server.url("/app/next") to "App"))
         }
+    }
+
+    @Test
+    fun aDesktopSiteGetsTheDesktopAgentAndAMobileOneTheTabsOwn() {
+        TestServer(mapOf("/agent" to "echo-agent")).use { server ->
+            val url = server.url("/agent")
+            val site = app.jrny.browser.site.SiteOrigin.of(url)!!
+            val tab = onMain {
+                Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-desktop")), desktopFor = { it == site })
+                    .also { tabs += it }
+            }
+            onMain { tab.load(url) }
+            await("desktop agent") { !tab.isLoading && tab.title.startsWith("agent: ") }
+            val desktop = onMain { tab.title }
+            assertTrue(desktop, "X11; Linux x86_64" in desktop && "Android" !in desktop)
+            assertTrue(onMain { tab.desktopSite })
+
+            // Turned off for the site: the page loads again with the Tab's own agent.
+            onMain { tab.setDesktopSite(site, false) }
+            await("mobile agent") { !tab.isLoading && "Android" in tab.title }
+            assertFalse(onMain { tab.desktopSite })
+        }
+    }
+
+    @Test
+    fun textSizeReachesTheOpenPage() {
+        val tab = newTab("test-zoom")
+        onMain { tab.textZoom = 150 }
+        assertEquals(150, onMain { tab.webView.settings.textZoom })
+    }
+
+    @Test
+    fun darkPagesGiveTheTabANewWebViewThatShowsThePageAgain() {
+        val tab = newTab("test-dark")
+        val start = page("<title>dark</title><p>text</p>")
+        onMain { tab.load(start) }
+        awaitPage(tab, start, "dark")
+        val before = onMain { tab.webView }
+        onMain { tab.darkPages = true }
+        assertNotSame(before, onMain { tab.webView })
+        awaitPage(tab, start, "dark")
+        assertTrue(onMain { tab.webView.context.theme.obtainStyledAttributes(intArrayOf(android.R.attr.isLightTheme)).use { !it.getBoolean(0, true) } })
     }
 
     private fun newTab(profileId: String): Tab = onMain {

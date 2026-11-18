@@ -23,8 +23,9 @@ import app.jrny.browser.address.AddressInput
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.settings.Settings
-import app.jrny.browser.settings.Suggestion
+import app.jrny.browser.settings.ThemeChoice
 import app.jrny.browser.profile.ProfileId
+import app.jrny.browser.settings.Suggestion
 import app.jrny.browser.profile.ProfileLook
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.rules.SitePattern
@@ -203,12 +204,71 @@ class BrowserState(
 
     private class LiveTab(val tab: Tab, val saving: Job?, val saved: SavedTab)
 
+    /** Every Profile's desktop sites, kept here so a Tab can ask before each page loads. */
+    private var desktopSites: Map<ProfileId, Set<SiteOrigin>> = emptyMap()
+
+    /** True while the device is in dark mode; the app's theme "the device's" follows it. */
+    private var deviceDark: Boolean = isDeviceDark()
+
+    private fun isDeviceDark(): Boolean =
+        context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    /** Whether pages are shown dark now: "Darken pages" is on and the app's theme is dark (SPEC, "Dark pages"). */
+    private fun pagesDark(current: Settings = settings.value): Boolean =
+        current.darkenPages && when (current.theme) {
+            ThemeChoice.Dark -> true
+            ThemeChoice.Light -> false
+            ThemeChoice.System -> deviceDark
+        }
+
+    /** The device switched between light and dark: with the app's theme following it, so do dark pages. */
+    fun deviceThemeChanged() {
+        deviceDark = isDeviceDark()
+        val dark = pagesDark()
+        live.values.forEach { it.tab.darkPages = dark }
+    }
+
     init {
         // Turning Safe Browsing on or off reaches the pages that are already open.
         scope.launch {
             settings.map { it.safeBrowsing }.distinctUntilChanged().drop(1).collect { on ->
                 live.values.forEach { it.tab.safeBrowsing = on }
             }
+        }
+        // So do text size and dark pages.
+        scope.launch {
+            settings.map { it.textZoom }.distinctUntilChanged().drop(1).collect { zoom ->
+                live.values.forEach { it.tab.textZoom = zoom }
+            }
+        }
+        scope.launch {
+            settings.map { pagesDark(it) }.distinctUntilChanged().drop(1).collect { dark ->
+                live.values.forEach { it.tab.darkPages = dark }
+            }
+        }
+        // Every change reaches the open pages, the first one too: at start, a page can be restored
+        // before the Profile's desktop sites have been read.
+        scope.launch {
+            siteSettingsRepository.desktopSites().collect { sites ->
+                desktopSites = sites
+                live.values.filter { !it.saved.isPrivate }.forEach { it.tab.desktopChoicesChanged() }
+            }
+        }
+    }
+
+    /**
+     * Desktop site on or off for the site [tab] shows (SPEC, "Desktop site"). A Profile remembers
+     * it for the site; a Private Tab only until it closes. The page loads again.
+     */
+    fun setDesktopSite(tab: SavedTab, live: Tab, on: Boolean) {
+        val origin = SiteOrigin.of(live.url) ?: return
+        if (tab.isPrivate) return live.setDesktopSite(origin, on)
+        // Known at once, so the page loads again with it before the database has written it.
+        val sites = desktopSites[tab.profileId].orEmpty()
+        desktopSites = desktopSites + (tab.profileId to if (on) sites + origin else sites - origin)
+        this.live.values.filter { it.saved.profileId == tab.profileId && !it.saved.isPrivate }.forEach { it.tab.desktopChoicesChanged() }
+        scope.launch {
+            if (on) siteSettingsRepository.set(tab.profileId, origin, SiteSetting.DesktopSite, true) else siteSettingsRepository.reset(tab.profileId, origin, SiteSetting.DesktopSite)
         }
     }
 
@@ -292,6 +352,9 @@ class BrowserState(
             onIcon = { url, icon -> scope.launch { siteIcons.save(saved.profileId, url, icon) } },
             onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
             onHandoff = { tab, link, tapped -> handOff(saved, tab, link, tapped) },
+            desktopFor = { origin -> origin in desktopSites[saved.profileId].orEmpty() },
+            textZoom = settings.value.textZoom,
+            darkPages = pagesDark(),
         )
         val saving = scope.launch {
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
@@ -314,6 +377,10 @@ class BrowserState(
             onPageChanged = { privateTabs.savePage(saved.profileId, saved.id, it.url, it.title) },
             onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
             onHandoff = { tab, link, tapped -> handOff(saved, tab, link, tapped) },
+            // A Private Tab starts with its Profile's desktop sites, and keeps its own choices to itself.
+            desktopFor = { origin -> origin in desktopSites[saved.profileId].orEmpty() },
+            textZoom = settings.value.textZoom,
+            darkPages = pagesDark(),
         )
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
         live[saved.id] = LiveTab(tab, saving = null, saved)

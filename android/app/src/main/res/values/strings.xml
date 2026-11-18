@@ -276,4 +276,19 @@
     <!-- Files a page makes (SPEC, "Browsing features") -->
     <string name="page_file_saved">Saved %1$s to Downloads</string>
     <string name="page_file_failed">%1$s couldn\'t be saved</string>
+
+    <!-- Page tools (SPEC, "Find in page", "Desktop site", "Text size", "Dark pages", "Pull to refresh") -->
+    <string name="find_in_page">Find in page</string>
+    <string name="find_count">%1$d of %2$d</string>
+    <string name="find_previous">Previous match</string>
+    <string name="find_next">Next match</string>
+    <string name="close_find">Close Find in page</string>
+    <string name="pages">Pages</string>
+    <string name="text_size">Text size</string>
+    <string name="percent">%1$d%%</string>
+    <string name="text_size_sample">Text on pages will be this size.</string>
+    <string name="darken_pages">Darken pages without a dark theme</string>
+    <string name="darken_pages_explanation">While Okapi\'s theme is dark, pages show their dark theme, and pages without one are darkened. Open pages load again.</string>
+    <string name="pull_to_refresh">Pull to refresh</string>
+    <string name="pull_to_refresh_explanation">Pull down on a page at its top to load it again. Turn it off for sites with their own pull gesture.</string>
 </resources>

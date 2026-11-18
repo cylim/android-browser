@@ -58,6 +58,11 @@ class WindowSlots(
      * color runs under them.
      */
     val startPage: (@Composable (contentPadding: PaddingValues, contentInsets: WindowInsets) -> Unit)? = null,
+    /**
+     * Find in page while it is open, or null (SPEC, "Find in page"). The Bottom Bar shows it in
+     * the address bar's place; the Sidebar layout across the top of the page.
+     */
+    val findBar: (@Composable (Modifier, Shape) -> Unit)? = null,
 )
 
 /**
@@ -151,6 +156,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         dismissOpenedBehind = browser::dismissOpenedBehind,
         pageFileSaved = browser.pageFileSaved,
         dismissPageFileSaved = browser::dismissPageFileSaved,
+        setDesktopSite = { on -> browser.setDesktopSite(current.selected, browser.tabFor(current.selected), on) },
     )
 
     val sitesOfProfile by browser.siteSettings.collectAsState()
@@ -245,6 +251,8 @@ fun BrowserWindow(
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
         if (tab.popup != null) tab.closePopup() else tab.goBack()
     }
+    // Find in page closes before anything else on the page.
+    BackHandler(enabled = tab.find != null) { tab.closeFind() }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
     // The Profile picker for Move or Open in Profile, opened from the page menu or the Incoming
     // Link prompt. It belongs to the Tab it was opened for: if another Tab is shown meanwhile
@@ -309,7 +317,10 @@ fun BrowserWindow(
     SecureWindow(private)
 
     // One line a row or two, as the settings say, for every Tab list in the window.
-    CompositionLocalProvider(LocalCompactTabs provides settings.settings.compactTabs) {
+    CompositionLocalProvider(
+        LocalCompactTabs provides settings.settings.compactTabs,
+        LocalPullToRefresh provides settings.settings.pullToRefresh,
+    ) {
     Surface(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val layout = BrowserLayout.forWindowWidth(maxWidth.value)
@@ -339,7 +350,17 @@ fun BrowserWindow(
                             panel = it
                         },
                         onSetDefaultBrowser = onSetDefaultBrowser,
+                        onFind = {
+                            draft.value = null
+                            tab.openFind()
+                        },
+                        onDesktopSite = links.setDesktopSite,
                     )
+                },
+                findBar = if (tab.find != null) {
+                    { modifier, shape -> FindBar(tab, shape, modifier) }
+                } else {
+                    null
                 },
                 pagePrompt = {
                     val started = downloading

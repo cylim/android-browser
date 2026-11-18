@@ -3,6 +3,9 @@ package app.jrny.browser.ui
 import android.text.format.Formatter
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.scale
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -80,6 +83,9 @@ fun PageMenu(
     onPick: (ProfilePick) -> Unit,
     onPanel: (Panel) -> Unit,
     onSetDefaultBrowser: (() -> Unit)?,
+    onFind: () -> Unit = {},
+    /** Desktop site on or off for the page's site, or null where it can't be set. */
+    onDesktopSite: ((Boolean) -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -154,6 +160,19 @@ fun PageMenu(
             Item(R.string.copy_link, JrnyIcons.ContentCopy, "menu-copy-link", enabled = url != null) {
                 Sharing.copy(context, linkLabel, url!!, private)
             }
+            Item(R.string.find_in_page, Icons.Filled.Search, "menu-find", enabled = url != null, onClick = onFind)
+            // A switch: it shows whether the site gets its desktop version, and changes it.
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.site_setting_desktop)) },
+                leadingIcon = { Icon(JrnyIcons.Desktop, contentDescription = null) },
+                trailingIcon = { Switch(checked = tab.desktopSite, onCheckedChange = null, modifier = Modifier.scale(0.8f)) },
+                enabled = url != null && onDesktopSite != null,
+                onClick = {
+                    open = false
+                    onDesktopSite?.invoke(!tab.desktopSite)
+                },
+                modifier = Modifier.testTag("menu-desktop-site"),
+            )
             Item(R.string.print, JrnyIcons.Print, "menu-print", enabled = url != null) {
                 Sharing.print(context, tab.webView, tab.pageTitle ?: tab.displayHost)
             }

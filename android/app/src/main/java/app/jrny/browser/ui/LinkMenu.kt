@@ -55,6 +55,8 @@ class LinksUi(
     /** The name of a file the page made and whether it was saved, once Okapi tried, or null. */
     val pageFileSaved: Pair<String, Boolean>? = null,
     val dismissPageFileSaved: () -> Unit = {},
+    /** Desktop site on or off for the shown page's site, or null where it can't be set. */
+    val setDesktopSite: ((Boolean) -> Unit)? = null,
 )
 
 /**

@@ -33,7 +33,19 @@ data class Settings(
     val theme: ThemeChoice = ThemeChoice.System,
     /** Whether a row of the Tab list takes one line, so that more Tabs fit. */
     val compactTabs: Boolean = false,
-)
+    /** How large the text of every page is, in percent (SPEC, "Text size"). */
+    val textZoom: Int = 100,
+    /** Whether WebView darkens pages that have no dark theme, while the app's theme is dark (SPEC, "Dark pages"). */
+    val darkenPages: Boolean = false,
+    /** Whether pulling down on a page scrolled to its top reloads it (SPEC, "Pull to refresh"). */
+    val pullToRefresh: Boolean = true,
+) {
+    companion object {
+        const val MIN_TEXT_ZOOM = 50
+        const val MAX_TEXT_ZOOM = 200
+        const val TEXT_ZOOM_STEP = 10
+    }
+}
 
 /**
  * Keeps the [Settings] in the app's own preferences file, which never leaves the device (backups
@@ -53,6 +65,9 @@ class SettingsRepository(private val preferences: SharedPreferences) {
             putBoolean(SAFE_BROWSING, changed.safeBrowsing)
             putString(THEME, changed.theme.name)
             putBoolean(COMPACT_TABS, changed.compactTabs)
+            putInt(TEXT_ZOOM, changed.textZoom)
+            putBoolean(DARKEN_PAGES, changed.darkenPages)
+            putBoolean(PULL_TO_REFRESH, changed.pullToRefresh)
         }
     }
 
@@ -64,6 +79,9 @@ class SettingsRepository(private val preferences: SharedPreferences) {
             safeBrowsing = preferences.getBoolean(SAFE_BROWSING, defaults.safeBrowsing),
             theme = ThemeChoice.entries.firstOrNull { it.name == preferences.getString(THEME, null) } ?: defaults.theme,
             compactTabs = preferences.getBoolean(COMPACT_TABS, defaults.compactTabs),
+            textZoom = preferences.getInt(TEXT_ZOOM, defaults.textZoom).coerceIn(Settings.MIN_TEXT_ZOOM, Settings.MAX_TEXT_ZOOM),
+            darkenPages = preferences.getBoolean(DARKEN_PAGES, defaults.darkenPages),
+            pullToRefresh = preferences.getBoolean(PULL_TO_REFRESH, defaults.pullToRefresh),
         )
     }
 
@@ -73,5 +91,8 @@ class SettingsRepository(private val preferences: SharedPreferences) {
         const val SAFE_BROWSING = "safe_browsing"
         const val THEME = "theme"
         const val COMPACT_TABS = "compact_tabs"
+        const val TEXT_ZOOM = "text_zoom"
+        const val DARKEN_PAGES = "darken_pages"
+        const val PULL_TO_REFRESH = "pull_to_refresh"
     }
 }
