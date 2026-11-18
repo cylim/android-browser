@@ -1,6 +1,6 @@
 # Okapi privacy policy
 
-Effective date: 17 November 2026
+Effective date: 18 November 2026
 
 <!--
 This is the canonical text. website/public/privacy.html publishes the same policy. Change both
@@ -36,6 +36,7 @@ Each Profile keeps its own:
 - history, up to its latest 5,000 visits
 - bookmarks, which are its Pinned Tabs, and its Folders
 - list of downloads
+- photos and videos you take with "Take photo" or "Record video" for a page's file field, kept in the app's cache until the app next starts, so the page can read them. This is the same in a Private Tab.
 - site icons: the icon of each site the Profile has shown, as the site sent it while its page loaded
 - name, color and avatar
 
@@ -143,7 +144,7 @@ We hold no data about you, so there is nothing for us to give you or delete. You
 - It has no analytics and no crash reporting of its own, and it tells WebView not to send usage statistics.
 - It contains no Google Play Services or Firebase libraries.
 - It sends none of your data to us, and we don't sell data.
-- It asks Android for one permission: internet access. It doesn't ask for your location, camera, microphone or contacts, so it can't give them to sites.
+- It asks Android for internet access. It asks for the camera, the microphone or your location only when a site you allowed wants them, and passes them to that site alone. It also asks for the camera when you choose "Take photo" or "Record video" for a page's file field, because Android lets it start the camera app only then. Okapi never uses or keeps them itself, and doesn't ask for your contacts.
 
 <!--
 TODO(owner): the merged release manifest registers androidx.emoji2's EmojiCompatInitializer (Compose brings it in).

@@ -136,7 +136,7 @@ These are changes for a pull request. This checklist describes them and doesn't 
   - Android refuses to downgrade. Under options A and C, a Play update can replace a GitHub install only if its `versionCode` is higher.
   - F-Droid builds from source and reads the version from the Gradle file, so a number computed in CI would be invisible to it.
 - [ ] Keep `android/app/build/outputs/mapping/release/mapping.txt` for every release. Users paste stack traces into GitHub issues (ADR 0002), and a stack trace from an R8 build needs this file to read. AGP also puts it in the bundle's metadata for Play Console's crash reports. Confirm in Play Console under Android vitals that crashes are deobfuscated.
-- [ ] Check the merged release manifest for permissions: `android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml`. A local build on 2026-11-17 had `INTERNET` and androidx's `app.jrny.browser.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, and no `com.google.android.gms.permission.AD_ID`. Re-check on the build you upload, because a dependency update can add permissions.
+- [ ] Check the merged release manifest for permissions: `android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml`. A local build on 2026-11-17 had `INTERNET` and androidx's `app.jrny.browser.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, and no `com.google.android.gms.permission.AD_ID`. The web capabilities change adds `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION`, which are expected. Re-check on the build you upload, because a dependency update can add permissions.
 - [ ] Check 16 KB page alignment in the final AAB, for example with Android Studio's APK Analyzer or bundletool. Okapi has no native code of its own, but an AndroidX dependency ships `libandroidx.graphics.path.so`. A local release build showed 16 KB alignment for the arm64-v8a and x86_64 copies. From 1 February 2027, Play rejects updates that don't support 16 KB pages.
 
 ## 6. Test the R8 release build on a device
@@ -223,7 +223,7 @@ Every item here lives in Play Console under Grow users → Store presence, or un
   - Search suggestions. Either declare App activity → In-app search history as collected and shared, optional, for app functionality and encrypted in transit, or rely on the user-initiated exemption. All four suggestion endpoints in `android/app/src/main/java/app/jrny/browser/settings/Settings.kt` use HTTPS.
   - Safe Browsing lookups, and WebView crash reports when the device shares usage and diagnostics. The system component sends both to Google.
   - Write your reasoning down, and confirm both answers in Play Console's help at the time you fill in the form.
-- [ ] Permissions: no declaration form applies. Okapi requests only `INTERNET`.
+- [ ] Permissions: no declaration form applies before 27 January 2027. After it, fill in the `ACCESS_FINE_LOCATION` declaration: a browser passes a precise location to a site the person allowed (see app-content.md, "Sensitive permissions").
 
 ## 11. Release to internal testing
 

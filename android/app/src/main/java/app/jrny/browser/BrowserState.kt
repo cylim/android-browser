@@ -18,10 +18,15 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.settings.Settings
 import app.jrny.browser.settings.Suggestion
+import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.ProfileLook
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.rules.SiteRule
+import app.jrny.browser.site.SiteOrigin
+import app.jrny.browser.site.SiteSetting
+import app.jrny.browser.site.SiteSettingsEntry
+import app.jrny.browser.tab.PermissionAsk
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.PrivateSession
 import app.jrny.browser.tab.Tab
@@ -102,6 +107,7 @@ class BrowserState(
     private val bookmarkRepository = repositories.bookmarks
     private val downloadRepository = repositories.downloads
     private val siteRuleRepository = repositories.siteRules
+    private val siteSettingsRepository = repositories.siteSettings
 
     /** The icons of the sites each Profile has shown, for the Tab list. */
     val siteIcons = services.siteIcons
@@ -172,6 +178,14 @@ class BrowserState(
 
     /** The Site Rules, oldest first. They belong to the app, not to one Profile. */
     val siteRules: StateFlow<List<SiteRule>> = siteRuleRepository.rules.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** The Active Profile's Site settings: its sites with a permission or a Desktop site choice. */
+    val siteSettings: StateFlow<Pair<ProfileId, List<SiteSettingsEntry>>?> = profileRepository.activeProfile
+        .filterNotNull()
+        // Tagged with the Profile they belong to: right after a switch the last list is still
+        // the previous Profile's, and must not be shown or changed as the new one's.
+        .flatMapLatest { profile -> siteSettingsRepository.sites(profile.id).map { profile.id to it } }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     /** The app's settings, shared by all Profiles. */
     val settings: StateFlow<Settings> = settingsRepository.settings
@@ -270,6 +284,7 @@ class BrowserState(
             },
             // Kept with the Profile the page was shown in. A Private Tab's are never kept.
             onIcon = { url, icon -> scope.launch { siteIcons.save(saved.profileId, url, icon) } },
+            onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
         )
         val saving = scope.launch {
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
@@ -290,10 +305,62 @@ class BrowserState(
             WebProfile.privateOf(saved.profileId, session.session),
             safeBrowsing = settings.value.safeBrowsing,
             onPageChanged = { privateTabs.savePage(saved.profileId, saved.id, it.url, it.title) },
+            onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
         )
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
         live[saved.id] = LiveTab(tab, saving = null, saved)
         return tab
+    }
+
+    /**
+     * Answers a site's ask for the camera, the microphone or location from what [saved]'s Profile
+     * remembers, or shows it for the person to answer (SPEC, "Site permissions and Site
+     * settings"). A Tab that isn't on screen is refused, and so is a site the Profile blocked. A
+     * Private Tab remembers nothing, so only a grant for once counts there.
+     */
+    private fun answerPermissionAsk(saved: SavedTab, tab: Tab, ask: PermissionAsk) {
+        if (saved.id != shownId) {
+            ask.deny()
+            return tab.closePermissionAsk()
+        }
+        fun allowed(kept: Map<SiteSetting, Boolean?>) = ask.wanted.all { tab.isAllowedOnce(ask.origin, it) || kept[it] == true }
+        if (saved.isPrivate) return tab.showPermissionAsk(if (allowed(emptyMap())) ask.asDecided() else ask)
+        scope.launch {
+            val kept = ask.wanted.associateWith { siteSettingsRepository.get(saved.profileId, ask.origin, it) }
+            when {
+                // The person may have shown another Tab while the Profile's answer was read.
+                saved.id != shownId || kept.values.any { it == false } -> {
+                    ask.deny()
+                    tab.closePermissionAsk()
+                }
+                allowed(kept) -> tab.showPermissionAsk(ask.asDecided())
+                else -> tab.showPermissionAsk(ask)
+            }
+        }
+    }
+
+    /**
+     * Keeps the person's answer to a site's ask in [tab]'s Profile: "Always allow" or "Block".
+     * Nothing is kept for a Private Tab.
+     */
+    fun rememberPermission(tab: SavedTab, origin: SiteOrigin, settings: Set<SiteSetting>, allowed: Boolean) {
+        if (tab.isPrivate) return
+        scope.launch { settings.forEach { siteSettingsRepository.set(tab.profileId, origin, it, allowed) } }
+    }
+
+    /** Changes [profile]'s [setting] for [origin], in Site settings. */
+    fun setSiteSetting(profile: Profile, origin: SiteOrigin, setting: SiteSetting, enabled: Boolean) {
+        scope.launch { siteSettingsRepository.set(profile.id, origin, setting, enabled) }
+    }
+
+    /** Unsets [profile]'s [setting] for [origin]: the site asks again. */
+    fun resetSiteSetting(profile: Profile, origin: SiteOrigin, setting: SiteSetting) {
+        scope.launch { siteSettingsRepository.reset(profile.id, origin, setting) }
+    }
+
+    /** Unsets every Site setting of [profile]. */
+    fun resetAllSiteSettings(profile: Profile) {
+        scope.launch { siteSettingsRepository.resetAll(profile.id) }
     }
 
     /** [id] is on screen: it becomes the most recently shown, and Tabs past the limit unload. */

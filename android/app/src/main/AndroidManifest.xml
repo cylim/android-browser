@@ -3,6 +3,23 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+        Passed on to sites only, after the person allowed the site (SPEC, "Site permissions and
+        Site settings"). The app never uses them itself. MODIFY_AUDIO_SETTINGS lets a video call
+        route its sound.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- A device without a camera, microphone or location can still install the browser. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+
     <!-- Session cookies must never leave the device (SPEC, "Data protection"). -->
     <application
         android:name=".JrnyApplication"
@@ -51,5 +68,20 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+
+        <!--
+            Hands the camera app a file in the app's cache to write a photo or video into, for a
+            page's file field (SPEC, "File upload"). Not exported: only apps given a single file's
+            address, for that one request, can reach it.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

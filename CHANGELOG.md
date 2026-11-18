@@ -114,6 +114,15 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - While you type, text with a colon before its first `/`, `?` or `#`, such as `admin:hunter2`, is no longer sent to the search engine for suggestions, because an `@` typed next would make it credentials. Before, a pause before the `@` could send the password.
 - A search with an early colon, such as `python: list comprehension`, now gets only bookmark and history suggestions while you type. Go still searches for it.
 
+### Web capabilities (not merged yet)
+
+- A site can ask for the camera, the microphone or your location. Okapi names the site and offers "Allow once", "Always allow" or "Block". Each Profile keeps its own answers, so allowing a site in one Profile doesn't allow it in another. A Private Tab only offers "Allow" and "Block", and forgets them.
+- Android is asked for its own permission only when a site you allowed needs it and Okapi doesn't have it yet, never before. If Android refuses, Okapi says so and opens Android's settings for it.
+- Settings → Site settings lists the Active Profile's sites with what each may use, where you can allow, block or reset each one, or reset them all.
+- File fields work: Android's file picker opens with the kinds of file the page accepts, and a field that takes photos or videos also offers "Take photo" or "Record video".
+- A video's fullscreen button fills the screen, hides the system bars and turns the screen to match the video. Back leaves fullscreen.
+- A site that asks for a username and password before its page (HTTP sign-in) gets a dialog that a password manager can fill. Okapi keeps nothing typed there.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.

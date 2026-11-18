@@ -135,6 +135,16 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     val rules by browser.siteRules.collectAsState()
     val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
 
+    val sitesOfProfile by browser.siteSettings.collectAsState()
+    val siteSettings = SiteSettingsUi(
+        // Only the Active Profile's own list; none while it is still being read.
+        sites = sitesOfProfile?.takeIf { it.first == profile.id }?.second.orEmpty(),
+        set = { origin, setting, enabled -> browser.setSiteSetting(profile, origin, setting, enabled) },
+        reset = { origin, setting -> browser.resetSiteSetting(profile, origin, setting) },
+        resetAll = { browser.resetAllSiteSettings(profile) },
+        rememberPermission = { origin, settings, allowed -> browser.rememberPermission(current.selected, origin, settings, allowed) },
+    )
+
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
@@ -149,7 +159,18 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     // The browser wears the Active Profile's color: its accents here, its tint in the layouts.
     CompositionLocalProvider(LocalSiteIcons provides siteIcons) {
     ProfileTheme(profile.color.color) {
-        BrowserWindow(tab, tabs, profiles, library, onSetDefaultBrowser, settings, suggest = { browser.suggest(current.selected, it) }, siteRules = siteRules, startPagePages = startPagePages)
+        BrowserWindow(
+            tab,
+            tabs,
+            profiles,
+            library,
+            onSetDefaultBrowser,
+            settings,
+            suggest = { browser.suggest(current.selected, it) },
+            siteRules = siteRules,
+            startPagePages = startPagePages,
+            siteSettings = siteSettings,
+        )
 
         editing?.let { target ->
             val existing = target.profile
@@ -198,6 +219,7 @@ fun BrowserWindow(
      * until they have loaded. The Start Page shows them only once they are the Active Profile's.
      */
     startPagePages: ProfilePages? = ProfilePages(profiles.active.id, tabs.pins.items, library.visits),
+    siteSettings: SiteSettingsUi = SiteSettingsUi(),
 ) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
@@ -212,11 +234,11 @@ fun BrowserWindow(
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
     // The file whose download just started, named over the page with a way to the Downloads list.
     var downloading by remember(tab) { mutableStateOf<String?>(null) }
-    // The Site Rules are reached from the settings, and Back leads there again.
-    BackHandler(enabled = panel != null) { panel = if (panel == Panel.SiteRules) Panel.Settings else null }
+    // The Site Rules and Site settings are reached from the settings, and Back leads there again.
+    BackHandler(enabled = panel != null) { panel = if (panel == Panel.SiteRules || panel == Panel.SiteSettings) Panel.Settings else null }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
     LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
-    HideStatusBar()
+    HideStatusBar(fullscreen = tab.fullscreen != null)
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.
     val draft = remember(tab) { AddressDraft() }
@@ -370,6 +392,17 @@ fun BrowserWindow(
                                 contentPadding = padding,
                                 siteRules = siteRules.rules.size,
                                 onSiteRules = { panel = Panel.SiteRules },
+                                profileName = profiles.active.name,
+                                sites = siteSettings.sites.size,
+                                onSiteSettings = { panel = Panel.SiteSettings },
+                            )
+                        } else if (open == Panel.SiteSettings) {
+                            SiteSettingsPanel(
+                                siteSettings,
+                                profileName = profiles.active.name,
+                                onBack = { panel = Panel.Settings },
+                                onClose = { panel = null },
+                                contentPadding = padding,
                             )
                         } else if (open == Panel.SiteRules) {
                             SiteRulesPanel(
@@ -406,9 +439,14 @@ fun BrowserWindow(
                 BrowserLayout.BottomBar ->
                     BottomBarLayout(tab, tabs, profiles, slots, showForward = forwardInBar, editingAddress = draft.value != null)
             }
+            // Over everything, while the page's video is fullscreen.
+            FullscreenVideoHost(tab)
         }
     }
     }
+
+    // What the page asks for: permissions, files and a sign-in.
+    PageAsks(tab, profiles.active.name, private, onRemember = siteSettings.rememberPermission)
 
     // A page can only offer a file. It downloads once the person agrees.
     tab.download?.let { request ->

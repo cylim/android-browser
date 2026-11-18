@@ -1,6 +1,7 @@
 package app.jrny.browser.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
@@ -53,8 +54,30 @@ object JrnyIcons {
         "M20,6h-8l-2,-2H4c-1.11,0 -1.99,0.89 -1.99,2L2,18c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2V8c0,-1.11 -0.89,-2 -2,-2zM19,14h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z",
     )
 
-    private fun icon(name: String, path: String): ImageVector =
+    /** A camera: take a photo. */
+    val PhotoCamera: ImageVector = icon(
+        "PhotoCamera",
+        "M12,8.8a3.2,3.2 0,1 1,0 6.4a3.2,3.2 0,1 1,0 -6.4z" +
+            "M9,2L7.17,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2h-3.17L15,2H9z" +
+            "M12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5z",
+        PathFillType.EvenOdd,
+    )
+
+    /** A video camera: record a video. */
+    val Videocam: ImageVector = icon(
+        "Videocam",
+        "M17,10.5V7c0,-0.55 -0.45,-1 -1,-1H4c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1v-3.5l4,4v-11l-4,4z",
+    )
+
+    /** A paper clip: choose a file. */
+    val AttachFile: ImageVector = icon(
+        "AttachFile",
+        "M16.5,6v11.5c0,2.21 -1.79,4 -4,4s-4,-1.79 -4,-4V5c0,-1.38 1.12,-2.5 2.5,-2.5s2.5,1.12 2.5,2.5v10.5c0,0.55 -0.45,1 -1,1s-1,-0.45 -1,-1V6H10v9.5" +
+            "c0,1.38 1.12,2.5 2.5,2.5s2.5,-1.12 2.5,-2.5V5c0,-2.21 -1.79,-4 -4,-4S7,2.79 7,5v12.5c0,3.04 2.46,5.5 5.5,5.5s5.5,-2.46 5.5,-5.5V6h-1.5z",
+    )
+
+    private fun icon(name: String, path: String, fillType: PathFillType = PathFillType.NonZero): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
-            .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))
+            .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black), pathFillType = fillType)
             .build()
 }

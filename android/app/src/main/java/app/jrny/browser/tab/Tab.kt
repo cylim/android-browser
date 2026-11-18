@@ -3,11 +3,17 @@ package app.jrny.browser.tab
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Message
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
+import android.webkit.GeolocationPermissions
+import android.webkit.HttpAuthHandler
+import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -23,6 +29,8 @@ import androidx.webkit.WebViewFeature
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.site.SiteOrigin
+import app.jrny.browser.site.SiteSetting
 
 /**
  * A single open page, owned by exactly one Profile. It owns a WebView bound to the Profile's
@@ -49,6 +57,11 @@ class Tab(
     safeBrowsing: Boolean = true,
     /** The page at [url] has shown its site's icon. */
     private val onIcon: (url: String, icon: Bitmap) -> Unit = { _, _ -> },
+    /**
+     * The page asks for the camera, the microphone or location. The owner answers it, or shows
+     * it with [showPermissionAsk]. Without an owner every ask is refused.
+     */
+    private val onPermissionAsk: (Tab, PermissionAsk) -> Unit = { _, ask -> ask.deny() },
 ) {
     /**
      * Whether WebView checks pages against Safe Browsing and warns before a dangerous one
@@ -95,6 +108,103 @@ class Tab(
      */
     var download: DownloadRequest? by mutableStateOf(null)
         private set
+
+    /**
+     * What a site asked for and the person must answer, or, when [PermissionAsk.decided], only
+     * Android's permission is left to check. Shown by the owner with [showPermissionAsk].
+     */
+    var permissionAsk: PermissionAsk? by mutableStateOf(null)
+        private set
+
+    /** The page's file field waits for files, until [answerFileChooser]. */
+    var fileChooser: FileChooserAsk? by mutableStateOf(null)
+        private set
+
+    /** A site asks for a username and password before it sends the page, until [closeHttpAuth]. */
+    var httpAuth: HttpAuthAsk? by mutableStateOf(null)
+        private set
+
+    /** The page's video, shown fullscreen until [exitFullscreen] or the page ends it. */
+    var fullscreen: FullscreenVideo? by mutableStateOf(null)
+        private set
+
+    /** What WebView asked with, so the page can withdraw [permissionAsk]: a request, or a location origin. */
+    private var permissionSource: Any? = null
+
+    /**
+     * What sites were allowed once, for this Tab only (SPEC, "Site permissions and Site
+     * settings"). It goes when the page leaves the site, and with the Tab.
+     */
+    private val allowedOnce = mutableMapOf<SiteOrigin, MutableSet<SiteSetting>>()
+
+    /** The site of the last page that started, for [allowedOnce]. */
+    private var pageOrigin: SiteOrigin? = null
+
+    /** Lets [origin] use [settings] until the page leaves the site or the Tab closes. */
+    fun allowOnce(origin: SiteOrigin, settings: Set<SiteSetting>) {
+        allowedOnce.getOrPut(origin) { mutableSetOf() } += settings
+    }
+
+    fun isAllowedOnce(origin: SiteOrigin, setting: SiteSetting): Boolean = allowedOnce[origin]?.contains(setting) == true
+
+    /** Shows [ask] for the person to answer, unless the page withdrew it meanwhile. */
+    fun showPermissionAsk(ask: PermissionAsk) {
+        if (ask.open) permissionAsk = ask
+    }
+
+    /** The shown [permissionAsk] has been answered. */
+    fun closePermissionAsk() {
+        permissionAsk = null
+        permissionSource = null
+        pendingAsk = null
+    }
+
+    /**
+     * The ask the owner is deciding, from when the page made it until it is answered or shown. It
+     * holds the Tab's one place for an ask while the owner reads the Profile's Site settings, so a
+     * second ask meanwhile is refused, and a withdrawal reaches it.
+     */
+    private var pendingAsk: PermissionAsk? = null
+
+    /** Hands [files] to the page's file field, or none when the person cancelled. */
+    fun answerFileChooser(files: List<Uri>?) {
+        val ask = fileChooser ?: return
+        fileChooser = null
+        ask.answer(files)
+    }
+
+    /** The [httpAuth] ask has been answered. */
+    fun closeHttpAuth() {
+        httpAuth = null
+    }
+
+    /** Ends [fullscreen]: the video goes back into its page. */
+    fun exitFullscreen() {
+        val video = fullscreen ?: return
+        fullscreen = null
+        video.end()
+    }
+
+    /**
+     * Measures the video that is fullscreen: its width and height, or null when it can't be told,
+     * as when it plays inside a frame of another site.
+     */
+    fun measureFullscreenVideo(result: (Pair<Int, Int>?) -> Unit) {
+        webView.evaluateJavascript(MEASURE_FULLSCREEN_VIDEO) { value ->
+            val numbers = value?.trim('[', ']', '"')?.split(',')?.mapNotNull { it.trim().toIntOrNull() }
+            result(numbers?.takeIf { it.size == 2 && it[0] > 0 && it[1] > 0 }?.let { it[0] to it[1] })
+        }
+    }
+
+    /** Refuses or drops whatever the page is waiting on, when the page or the Tab goes away. */
+    private fun endAsks() {
+        permissionAsk?.deny()
+        closePermissionAsk()
+        answerFileChooser(null)
+        httpAuth?.cancel()
+        closeHttpAuth()
+        exitFullscreen()
+    }
 
     /** The page's address, or null before anything has loaded. Set as soon as a load starts. */
     var url: String? by mutableStateOf(null)
@@ -232,6 +342,8 @@ class Tab(
 
     /** Frees the WebViews. The Tab can't be used afterwards. */
     fun destroy() {
+        endAsks()
+        allowedOnce.clear()
         closePopup()
         // WebView must leave the view hierarchy before destroy().
         (webView.parent as? ViewGroup)?.removeView(webView)
@@ -335,6 +447,7 @@ class Tab(
     private fun replaceDeadWebView(dead: WebView) {
         if (dead != webView) return
         restoreScrollY = scrollY
+        endAsks()
         closePopup()
         (dead.parent as? ViewGroup)?.removeView(dead)
         dead.destroy()
@@ -364,8 +477,16 @@ class Tab(
                 restoreDone = false
             }
             this@Tab.url = url
+            // A grant for once ends when the page leaves its site.
+            val origin = SiteOrigin.of(url)
+            if (origin != pageOrigin) allowedOnce.clear()
+            pageOrigin = origin
             updateHistory()
             onPageChanged(this@Tab)
+        }
+
+        override fun onReceivedHttpAuthRequest(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
+            askForSignIn(view, handler, host, realm)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -421,6 +542,32 @@ class Tab(
         }
     }
 
+    /** Asks the person to sign in to [host], for the page or its popup. An earlier ask is cancelled. */
+    private fun askForSignIn(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
+        if (view != webView && view != popup) return handler.cancel()
+        httpAuth?.cancel()
+        httpAuth = HttpAuthAsk(host, realm.orEmpty(), handler)
+    }
+
+    /**
+     * Passes a site's ask to the owner. A page that asks again while its ask is still shown is
+     * refused: one question at a time.
+     */
+    private fun raise(ask: PermissionAsk, source: Any) {
+        if (permissionAsk != null || pendingAsk?.open == true) return ask.deny()
+        permissionSource = source
+        pendingAsk = ask
+        onPermissionAsk(this, ask)
+    }
+
+    /** The page withdrew the ask that [source] made. */
+    private fun withdraw(source: Any?) {
+        if (source == null || source != permissionSource) return
+        pendingAsk?.withdraw()
+        permissionAsk?.withdraw()
+        closePermissionAsk()
+    }
+
     /** Page callbacks shared by the page and its popup. */
     private open inner class QuietChromeClient : WebChromeClient() {
         /**
@@ -429,6 +576,13 @@ class Tab(
          * console through chrome://inspect.
          */
         override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean = true
+
+        override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+            // One at a time. False tells WebView nothing was shown, and it answers the page itself.
+            if (fileChooser != null || (view != webView && view != popup)) return false
+            fileChooser = FileChooserAsk(callback, params)
+            return true
+        }
     }
 
     /** Progress, title and popups for the Tab's page. */
@@ -450,6 +604,41 @@ class Tab(
             this@Tab.title = title.orEmpty()
             onPageChanged(this@Tab)
             if (!title.isNullOrBlank()) loadedUrl?.let { onPageSeen(it, title) }
+        }
+
+        override fun onPermissionRequest(request: PermissionRequest) {
+            val known = request.resources.filter { it in MEDIA_RESOURCES }
+            val origin = SiteOrigin.of(request.origin?.toString())
+            // Only the camera and microphone are passed on. Anything else is refused, as WebView
+            // would without this.
+            if (known.isEmpty() || origin == null) return request.deny()
+            val wanted = known.map { if (it == PermissionRequest.RESOURCE_VIDEO_CAPTURE) SiteSetting.Camera else SiteSetting.Microphone }.toSet()
+            raise(PermissionAsk(origin, wanted, onGrant = { request.grant(known.toTypedArray()) }, onDeny = request::deny), request)
+        }
+
+        override fun onPermissionRequestCanceled(request: PermissionRequest) = withdraw(request)
+
+        override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
+            val site = SiteOrigin.of(origin) ?: return callback.invoke(origin, false, false)
+            // WebView never remembers the answer (retain = false): Site settings do.
+            val ask = PermissionAsk(
+                site,
+                setOf(SiteSetting.Location),
+                onGrant = { callback.invoke(origin, true, false) },
+                onDeny = { callback.invoke(origin, false, false) },
+            )
+            raise(ask, origin)
+        }
+
+        override fun onGeolocationPermissionsHidePrompt() = withdraw(permissionSource as? String)
+
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+            if (fullscreen != null) return callback.onCustomViewHidden()
+            fullscreen = FullscreenVideo(view, callback)
+        }
+
+        override fun onHideCustomView() {
+            fullscreen = null
         }
 
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
@@ -475,6 +664,10 @@ class Tab(
             if (view == popup) popupUrl = url
         }
 
+        override fun onReceivedHttpAuthRequest(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
+            askForSignIn(view, handler, host, realm)
+        }
+
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             // Also catches redirects and same-document navigations inside the popup.
             if (view == popup) popupUrl = url
@@ -491,5 +684,17 @@ class Tab(
         override fun onCloseWindow(window: WebView) {
             if (window == popup) closePopup()
         }
+    }
+
+    private companion object {
+        val MEDIA_RESOURCES = setOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE, PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+
+        /**
+         * The size of the video in the fullscreen element, or of the first video inside it, as
+         * `[width,height]`, or null. A video in another site's frame can't be seen from here.
+         */
+        const val MEASURE_FULLSCREEN_VIDEO =
+            "(function(){var e=document.fullscreenElement||document.webkitFullscreenElement;if(!e)return null;" +
+                "var v=e.tagName==='VIDEO'?e:e.querySelector('video');return v?[v.videoWidth,v.videoHeight]:null})()"
     }
 }

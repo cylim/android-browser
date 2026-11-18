@@ -191,4 +191,59 @@
     <string name="show_full_address">Show the full address</string>
     <string name="page_crashed">This page stopped working.</string>
     <string name="unsupported_webview">Okapi needs a newer Android System WebView with multi-profile support. Update Android System WebView from your app store, then reopen Okapi.</string>
+
+    <!-- Site permissions and Site settings (SPEC, "Site permissions and Site settings") -->
+    <string name="permission_ask_camera">Let %1$s use your camera?</string>
+    <string name="permission_ask_microphone">Let %1$s use your microphone?</string>
+    <string name="permission_ask_camera_microphone">Let %1$s use your camera and microphone?</string>
+    <string name="permission_ask_location">Let %1$s know your location?</string>
+    <string name="permission_ask_profile">Your choice counts in %1$s only. Other Profiles ask on their own.</string>
+    <string name="permission_ask_private">This Private Tab forgets your choice when it leaves the site or closes.</string>
+    <string name="allow_once">Allow once</string>
+    <string name="always_allow">Always allow</string>
+    <string name="allow">Allow</string>
+    <string name="block">Block</string>
+    <string name="android_refused_camera">Okapi can\'t use the camera</string>
+    <string name="android_refused_microphone">Okapi can\'t use the microphone</string>
+    <string name="android_refused_camera_microphone">Okapi can\'t use the camera and microphone</string>
+    <string name="android_refused_location">Okapi can\'t use your location</string>
+    <string name="android_refused_body">Android doesn\'t allow Okapi this, so the site can\'t have it either. You can allow it in Android\'s settings for Okapi, under Permissions.</string>
+    <string name="open_android_settings">Open settings</string>
+    <string name="sites">Sites</string>
+    <string name="site_settings">Site settings</string>
+    <string name="site_settings_explanation">Camera, microphone and location for each site in %1$s</string>
+    <string name="site_settings_none">None yet</string>
+    <plurals name="site_count">
+        <item quantity="one">%d site</item>
+        <item quantity="other">%d sites</item>
+    </plurals>
+    <string name="site_settings_empty">Sites you allow or block in %1$s show here.</string>
+    <string name="site_setting_camera">Camera</string>
+    <string name="site_setting_microphone">Microphone</string>
+    <string name="site_setting_location">Location</string>
+    <string name="site_setting_desktop">Desktop site</string>
+    <string name="site_setting_allowed">Allowed</string>
+    <string name="site_setting_blocked">Blocked</string>
+    <string name="site_setting_on">On</string>
+    <string name="site_setting_off">Off</string>
+    <string name="reset">Reset</string>
+    <string name="reset_all">Reset all</string>
+    <string name="reset_all_sites_title">Reset every site in %1$s?</string>
+    <string name="reset_all_sites_body">Each site asks again before it uses the camera, the microphone or your location, and gets its mobile version.</string>
+    <string name="change_site_setting">Change %1$s for %2$s</string>
+
+    <!-- File upload (SPEC, "File upload") -->
+    <string name="file_source_title">Add a file</string>
+    <string name="choose_file">Choose a file</string>
+    <string name="choose_files">Choose files</string>
+    <string name="take_photo">Take photo</string>
+    <string name="record_video">Record video</string>
+
+    <!-- HTTP sign-in (SPEC, "HTTP sign-in") -->
+    <string name="http_auth_title">Sign in to %1$s</string>
+    <string name="http_auth_realm">The site says: “%1$s”</string>
+    <string name="http_auth_not_kept">Okapi doesn\'t keep what you type here. A password manager can fill it in.</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="sign_in">Sign in</string>
 </resources>

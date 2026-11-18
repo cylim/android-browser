@@ -27,20 +27,26 @@ import androidx.core.view.WindowInsetsControllerCompat
  *
  * It stays visible when a camera cutout sits along the top edge (phones in portrait): the page
  * has to stay clear of the cutout anyway, so hiding the status bar would only lose the clock.
+ *
+ * With [fullscreen], a video fills the screen, and the navigation bar hides too (SPEC,
+ * "Fullscreen video").
  */
 @Composable
-fun HideStatusBar() {
+fun HideStatusBar(fullscreen: Boolean = false) {
     val window = LocalActivity.current?.window ?: return
     val topCutout = WindowInsets.displayCutout.getTop(LocalDensity.current) > 0
-    DisposableEffect(window, topCutout) {
+    DisposableEffect(window, topCutout, fullscreen) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (topCutout) {
-            controller.show(WindowInsetsCompat.Type.statusBars())
-        } else {
-            controller.hide(WindowInsetsCompat.Type.statusBars())
+        when {
+            fullscreen -> controller.hide(WindowInsetsCompat.Type.systemBars())
+            topCutout -> controller.show(WindowInsetsCompat.Type.systemBars())
+            else -> {
+                controller.show(WindowInsetsCompat.Type.navigationBars())
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+            }
         }
-        onDispose { controller.show(WindowInsetsCompat.Type.statusBars()) }
+        onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 }
 

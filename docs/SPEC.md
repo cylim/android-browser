@@ -148,7 +148,7 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 - A site that asks for the camera, the microphone or the device's location gets a prompt naming the site and what it wants: "Allow once", "Always allow" or "Block". In a Private Tab the prompt offers only "Allow" and "Block", and says the Tab forgets the choice (see "Private Tabs").
 - Each Profile keeps its own grants, for each site (scheme, host and port). Allowing meet.google.com the camera in one Profile doesn't allow it in another.
 - "Allow once" lasts until the page leaves that site or the Tab closes. "Block" stops the site from asking again; it gets a refusal at once. In a Private Tab, "Allow" and "Block" last only as long as "Allow once" does.
-- Android asks for its own runtime permission the first time a site in any Profile needs it, never before. If the person refuses there, the site gets a refusal, and the prompt says how to allow it in Android's settings.
+- Android is asked for its own runtime permission when a site the person allowed needs it and the app doesn't have it, never before. If the person refuses there, the site gets a refusal, and the prompt says how to allow it in Android's settings.
 - For location, Okapi asks Android for precise location, and Android's dialog lets the person choose approximate instead.
 - A site can only ask from a page the person is looking at. A site in a background Tab or an unloaded Tab gets a refusal.
 - Settings → Site settings lists the Active Profile's sites that have a permission or a Desktop site choice. Each permission can be changed to Allow or Block, or reset, which makes the site ask again. "Reset all" resets every site of the Profile.
@@ -158,7 +158,7 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 
 - A page's file field opens Android's file picker. The picker shows the kinds of file the page accepts, and allows several files if the page does.
 - When the page accepts images or video, the picker also offers "Take photo" or "Record video", which open the camera app. With `capture` set, the page still gets the choice, not the camera straight away.
-- A file the camera app makes is kept in the app's cache only until it is handed to the page.
+- A photo or video the camera app makes is kept in the app's cache, where the page can read it, and removed the next time the app starts.
 
 ### Fullscreen video
 

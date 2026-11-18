@@ -1038,4 +1038,52 @@ class BrowserStateTest {
         show(browser, keep)
         assertFalse(onMain { browser.isLive(close) })
     }
+
+    /** A page on 127.0.0.1, a secure origin, that asks for the camera and puts the answer in its title. */
+    private val askForCamera =
+        "<title>asking</title><script>navigator.mediaDevices.getUserMedia({video:true})" +
+            ".then(function(s){s.getTracks().forEach(function(t){t.stop()});document.title='granted'}," +
+            "function(e){document.title='denied'})</script>"
+
+    @Test
+    fun aSiteTheProfileBlockedIsRefusedWithoutAskingAndAnAllowedOneSkipsTheQuestion() {
+        // Android's own prompt is a system dialog a test can't answer, so the app already has the camera.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.CAMERA)
+        TestServer(mapOf("/cam" to askForCamera), loopback = true).use { server ->
+            val url = server.url("/cam")
+            val origin = app.jrny.browser.site.SiteOrigin.of(url)!!
+            val browser = newBrowser()
+            val profile = active(browser).profile
+            val tab = show(browser, active(browser).selected.id)
+
+            runBlocking { repositories.siteSettings.set(profile.id, origin, app.jrny.browser.site.SiteSetting.Camera, false) }
+            load(tab, url, "denied")
+            assertEquals(null, onMain { tab.permissionAsk })
+
+            // Allowed: the window only has Android's permission left to check.
+            runBlocking { repositories.siteSettings.set(profile.id, origin, app.jrny.browser.site.SiteSetting.Camera, true) }
+            onMain { tab.load(url) }
+            await("decided ask") { tab.permissionAsk?.decided == true }
+            onMain { tab.permissionAsk!!.grant() }
+            await("granted") { tab.title == "granted" }
+        }
+    }
+
+    @Test
+    fun aTabThatIsntOnScreenCantAsk() {
+        TestServer(mapOf("/cam" to askForCamera), loopback = true).use { server ->
+            val browser = newBrowser()
+            val first = active(browser).selected
+            val hidden = show(browser, first.id)
+            // Another Tab goes on screen; the first stays live but hidden.
+            val profile = active(browser).profile
+            onMain { browser.openTab(profile) }
+            await("second tab") { browser.active.value?.selected?.id != first.id }
+            show(browser, active(browser).selected.id)
+
+            load(hidden, server.url("/cam"), "denied")
+            assertEquals(null, onMain { hidden.permissionAsk })
+        }
+    }
 }
