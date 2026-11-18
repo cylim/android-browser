@@ -7,7 +7,7 @@ ksp = "2.3.14"
 room = "2.8.5"
 # Room's MigrationTestHelper needs 1.8. Lifecycle brings 1.7.3 into the app, and the test APK
 # shares the app's process and so its version, so the app carries 1.8.1 (backward compatible).
-kotlinx-serialization = "1.8.1"
+kotlinx-serialization = "1.13.0"
 compose-bom = "2026.09.00"
 activity-compose = "1.13.0"
 core-ktx = "1.19.1"
