@@ -14,7 +14,7 @@ import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.settings.HttpSearchSuggestions
 import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.tab.PrivateTabs
-import app.jrny.browser.ui.clearCaptures
+import app.jrny.browser.ui.clearPageFiles
 import kotlinx.coroutines.runBlocking
 
 class JrnyApplication : Application() {
@@ -46,8 +46,9 @@ class JrnyApplication : Application() {
     @SuppressLint("RequiresFeature") // Checked first.
     override fun onCreate() {
         super.onCreate()
-        // Photos and videos made for pages' file fields last until the next start (SPEC, "File upload").
-        clearCaptures(this)
+        // Photos and videos made for pages' file fields, and images shared or copied, last until the
+        // next start (SPEC, "File upload" and "Link and image menu").
+        clearPageFiles(this)
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
         // Whatever Private Tabs left on disk goes before anything loads (SPEC, "Private Tabs").
         WebProfile.wipePrivateStores()

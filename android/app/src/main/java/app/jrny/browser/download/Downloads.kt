@@ -17,9 +17,20 @@ data class DownloadRequest(
     val size: Long,
     /** The page the file was linked from, which some sites check before they hand the file out. */
     val referrer: String? = null,
+    /**
+     * For a `blob:` file, the name under which the page keeps its own copy of it until the person
+     * answers (SPEC, "Browsing features"). Null for any other file.
+     */
+    val pageCopy: String? = null,
 ) {
-    /** Android's download service fetches only web addresses, so `blob:` and `data:` files can't be saved yet. */
-    val supported: Boolean get() = WebAddress.isWebAddress(url)
+    /** A web address goes to Android's download service. */
+    val fromWeb: Boolean get() = WebAddress.isWebAddress(url)
+
+    /** A file the page made itself, which Okapi saves: a `data:` address, or a `blob:` the page kept a copy of. */
+    val fromPage: Boolean get() = url.startsWith("data:", ignoreCase = true) || (url.startsWith("blob:", ignoreCase = true) && pageCopy != null)
+
+    /** True when the file can be saved at all. */
+    val supported: Boolean get() = fromWeb || fromPage
 
     companion object {
         private const val MAX_NAME_LENGTH = 120
@@ -65,8 +76,19 @@ data class DownloadRequest(
     }
 }
 
-/** A download in a Profile's list. [downloadId] names it for the [Downloader]. */
-data class Download(val id: Long, val downloadId: Long, val url: String, val fileName: String, val mimeType: String, val startedAt: Long)
+/**
+ * A download in a Profile's list. [downloadId] names it for the [Downloader]. A file Okapi saved
+ * itself, one the page made, has [fileUri] instead, its address in the Downloads folder.
+ */
+data class Download(
+    val id: Long,
+    val downloadId: Long,
+    val url: String,
+    val fileName: String,
+    val mimeType: String,
+    val startedAt: Long,
+    val fileUri: String? = null,
+)
 
 /** Where a download stands. */
 sealed interface DownloadStatus {
@@ -100,6 +122,15 @@ interface Downloader {
     fun cancel(downloadId: Long)
 
     /**
+     * Saves [bytes], a file a page made itself, as a finished file named [fileName] in the
+     * Downloads folder. Returns the file's address, or null when it couldn't be saved.
+     */
+    fun save(fileName: String, mimeType: String, bytes: ByteArray): String? = null
+
+    /** Where a file [save] made stands: done, or gone when it was removed. */
+    fun savedStatus(fileUri: String): DownloadStatus = DownloadStatus.Gone
+
+    /**
      * The address a download of [url] ends up at after its redirects. [cookiesFor] gives the
      * cookies that belong to an address, so each hop gets only its own (see [DownloadRedirects]).
      */
@@ -111,7 +142,7 @@ class DownloadRepository(private val dao: DownloadDao, private val now: () -> Lo
 
     /** [profile]'s downloads, newest first. */
     fun downloads(profile: ProfileId): Flow<List<Download>> = dao.observe(profile.toLong()).map { rows ->
-        rows.map { Download(it.id, it.downloadId, it.url, it.fileName, it.mimeType, it.startedAt) }
+        rows.map { Download(it.id, it.downloadId, it.url, it.fileName, it.mimeType, it.startedAt, it.fileUri) }
     }
 
     /** Lists a started download in [profile]. Returns false when the Profile is gone. */
@@ -123,6 +154,23 @@ class DownloadRepository(private val dao: DownloadDao, private val now: () -> Lo
             fileName = request.fileName,
             mimeType = request.mimeType,
             startedAt = now(),
+        ),
+    )
+
+    /**
+     * Lists a file Okapi saved itself in [profile], at [fileUri]. Its address on the list is the
+     * page's, not the file's: a `data:` address can be as long as the file. Returns false when
+     * the Profile is gone.
+     */
+    suspend fun addSaved(profile: ProfileId, fileUri: String, request: DownloadRequest, page: String?): Boolean = dao.add(
+        DownloadEntity(
+            profileId = profile.toLong(),
+            downloadId = 0,
+            url = page.orEmpty(),
+            fileName = request.fileName,
+            mimeType = request.mimeType,
+            startedAt = now(),
+            fileUri = fileUri,
         ),
     )
 

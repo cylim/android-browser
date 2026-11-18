@@ -41,14 +41,18 @@ class PrivateTabs {
     /** The open Private Tab with [id], in whichever Profile it is. */
     fun find(id: TabId): SavedTab? = sessions.value.values.firstNotNullOfOrNull { session -> session.tabs.firstOrNull { it.id == id } }
 
-    /** Opens a Private Tab in [profile], showing [url] or nothing, and selects it. The first one starts a session. */
+    /**
+     * Opens a Private Tab in [profile], showing [url] or nothing, and selects it, unless [select]
+     * is false. The first one starts a session.
+     */
     @Synchronized
-    fun open(profile: ProfileId, url: String? = null): TabId {
+    fun open(profile: ProfileId, url: String? = null, select: Boolean = true): TabId {
         val id = TabId(nextId--)
-        val tab = SavedTab(id, profile, url, title = "", scrollY = 0, selected = true, isPrivate = true)
+        val tab = SavedTab(id, profile, url, title = "", scrollY = 0, selected = select, isPrivate = true)
         sessions.update { all ->
             val session = all[profile] ?: PrivateSession(profile, nextSession++, emptyList())
-            all + (profile to session.copy(tabs = session.tabs.map { it.copy(selected = false) } + tab))
+            val others = if (select) session.tabs.map { it.copy(selected = false) } else session.tabs
+            all + (profile to session.copy(tabs = others + tab))
         }
         return id
     }

@@ -1086,4 +1086,87 @@ class BrowserStateTest {
             assertEquals(null, onMain { hidden.permissionAsk })
         }
     }
+
+
+    @Test
+    fun aLinkForAnotherAppThatNobodyTappedWaitsForOpen() {
+        val browser = newBrowser()
+        val tab = show(browser, active(browser).selected.id)
+        val start = TestPages.page("<title>start</title><script>setTimeout(function(){location.href='tel:+15550100'},0)</script>")
+        onMain { tab.load(start) }
+        await("handoff offered") { tab.handoff != null }
+        assertEquals("tel", onMain { tab.handoff!!.scheme })
+        // The page stays where it was.
+        assertEquals(start, onMain { tab.url })
+    }
+
+    @Test
+    fun anIntentLinkForAWebPageLoadsInTheTab() {
+        TestServer(mapOf("/target" to "<title>target</title>")).use { server ->
+            val browser = newBrowser()
+            val tab = show(browser, active(browser).selected.id)
+            val target = server.url("/target")
+            val hostAndPath = target.removePrefix("http://")
+            val start = TestPages.page("<title>start</title><script>setTimeout(function(){location.href='intent://$hostAndPath#Intent;scheme=http;end'},0)</script>")
+            onMain { tab.load(start) }
+            await("target loaded") { tab.title == "target" }
+            assertEquals(null, onMain { tab.handoff })
+        }
+    }
+
+    @Test
+    fun openInNewTabKeepsTheShownTabShown() {
+        val browser = newBrowser()
+        val first = active(browser).selected
+        show(browser, first.id)
+        onMain { browser.openInNewTab(first, "https://example.com/next") }
+        await("opened behind") { browser.active.value?.tabs?.any { it.url == "https://example.com/next" } == true }
+        assertEquals(first.id, active(browser).selected.id)
+        assertEquals("https://example.com/next", onMain { browser.openedBehind?.url })
+    }
+
+    @Test
+    fun aDataFileIsSavedByOkapiAndListedInItsProfile() {
+        val browser = newBrowser()
+        val shown = active(browser).selected
+        val tab = show(browser, shown.id)
+        val request = DownloadRequest("data:text/csv;base64,YSxiCjEsMgo=", "", "table.csv", "text/csv", -1)
+        onMain { browser.savePageFile(shown, tab, request) }
+        await("saved") { browser.pageFileSaved == ("table.csv" to true) }
+        assertEquals("a,b\n1,2\n", String(downloader.saved.values.single().second))
+        await("listed") { browser.downloads.value.size == 1 }
+        val listed = onMain { browser.downloads.value.single() }
+        assertEquals("table.csv", listed.fileName)
+        assertTrue(listed.fileUri != null)
+    }
+
+    @Test
+    fun aBlobFileIsReadOutOfThePageOnlyOnceThePersonAgrees() {
+        // The page makes a file, offers it, and drops its own address for it a moment later, as
+        // file-saving scripts do.
+        val maker = "<title>maker</title><a id=a download='notes.txt'>save</a><script>" +
+            "var u=URL.createObjectURL(new Blob(['hello from the page'],{type:'text/plain'}));" +
+            "var a=document.getElementById('a');a.href=u;a.click();setTimeout(function(){URL.revokeObjectURL(u)},1000)</script>"
+        TestServer(mapOf("/maker" to maker)).use { server ->
+            val browser = newBrowser()
+            val shown = active(browser).selected
+            val tab = show(browser, shown.id)
+            onMain { tab.load(server.url("/maker")) }
+            await("offered") { tab.download != null }
+            // The link names the file.
+            await("named") { tab.download?.fileName == "notes.txt" }
+            val request = onMain { tab.download!! }
+            assertTrue(request.fromPage)
+            // Long after the page dropped its address, the person agrees.
+            Thread.sleep(2000)
+            assertTrue(downloader.saved.isEmpty())
+            onMain {
+                browser.savePageFile(shown, tab, request)
+                tab.dismissDownload(kept = true)
+            }
+            await("saved") { browser.pageFileSaved != null }
+            assertEquals(true, onMain { browser.pageFileSaved?.second })
+            assertEquals("hello from the page", String(downloader.saved.values.single().second))
+        }
+    }
 }

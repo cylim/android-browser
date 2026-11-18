@@ -7,7 +7,13 @@ import androidx.compose.runtime.setValue
 import app.jrny.browser.data.RecordedVisit
 import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
+import app.jrny.browser.download.DataAddress
 import app.jrny.browser.download.DownloadStatus
+import app.jrny.browser.download.FetchedImage
+import app.jrny.browser.download.ImageFetch
+import app.jrny.browser.download.PageFiles
+import app.jrny.browser.handoff.AppLink
+import app.jrny.browser.handoff.HandoffRules
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Folder
 import app.jrny.browser.library.PinnedItem
@@ -282,6 +288,7 @@ class BrowserState(
             // Kept with the Profile the page was shown in. A Private Tab's are never kept.
             onIcon = { url, icon -> scope.launch { siteIcons.save(saved.profileId, url, icon) } },
             onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
+            onHandoff = { tab, link, tapped -> handOff(saved, tab, link, tapped) },
         )
         val saving = scope.launch {
             page.drop(1).collect { (url, title) -> tabRepository.savePage(saved.id, url, title) }
@@ -303,6 +310,7 @@ class BrowserState(
             safeBrowsing = settings.value.safeBrowsing,
             onPageChanged = { privateTabs.savePage(saved.profileId, saved.id, it.url, it.title) },
             onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
+            onHandoff = { tab, link, tapped -> handOff(saved, tab, link, tapped) },
         )
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
         live[saved.id] = LiveTab(tab, saving = null, saved)
@@ -332,6 +340,121 @@ class BrowserState(
                 allowed(kept) -> tab.showPermissionAsk(ask.asDecided())
                 else -> tab.showPermissionAsk(ask)
             }
+        }
+    }
+
+    /**
+     * Hands a link the page opened to its app, or offers it (SPEC, "Links to other apps"). A
+     * tapped phone, mail, message or map link in a normal Tab on screen goes at once; anything
+     * else waits for "Open". An `intent:` link for a web page loads in the Tab, and one no app can
+     * open loads its fallback page when it names one.
+     */
+    private fun handOff(saved: SavedTab, tab: Tab, link: AppLink, tapped: Boolean) {
+        // Loaded after WebView has finished asking about this navigation. Not through the
+        // WebView's own queue, which waits until it is on screen.
+        fun loadInstead(address: String) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { tab.load(address) }
+        }
+        link.webAddress?.let { return loadInstead(it) }
+        if (link.fallback != null && !link.canOpen(context)) return loadInstead(link.fallback)
+        val onScreen = saved.id == shownId
+        if (onScreen && HandoffRules.goesAtOnce(link.scheme, tapped, saved.isPrivate) && link.open(context)) return
+        tab.offerHandoff(link)
+    }
+
+    /** The Tab an "Open in new Tab" just opened behind the shown one, for the window to offer "Show", or null. */
+    var openedBehind: SavedTab? by mutableStateOf(null)
+        private set
+
+    fun dismissOpenedBehind() {
+        openedBehind = null
+    }
+
+    /**
+     * Opens [url] as a new Tab in [from]'s Profile, at the end of its list, and keeps [from]
+     * shown (SPEC, "Link and image menu"). From a Private Tab it is a Private Tab.
+     */
+    fun openInNewTab(from: SavedTab, url: String) {
+        if (from.isPrivate) {
+            val id = privateTabs.open(from.profileId, url, select = false)
+            openedBehind = privateTabs.find(id)
+            return
+        }
+        scope.launch {
+            val id = tabRepository.openBehind(from.profileId, url) ?: return@launch
+            openedBehind = SavedTab(id, from.profileId, url, "", 0, selected = false)
+        }
+    }
+
+    /** Opens [url] in a new Private Tab of [profile] and shows it. */
+    fun openInPrivateTab(profile: Profile, url: String) {
+        tabChoices++
+        privateTabs.open(profile.id, url)
+    }
+
+    /** Opens [url] as a new Tab in [profile], which becomes the Active Profile: Open in Profile for a link. */
+    fun openLinkInProfile(profile: Profile, url: String) {
+        scope.launch {
+            if (tabRepository.openIn(profile.id, url) != null) {
+                privateTabs.select(profile.id, null)
+                history.record(profile.id, url)
+            }
+        }
+    }
+
+    /**
+     * The image at [url] that the person held in [tab], for "Copy image" and "Share image": fetched
+     * with the cookies of the Tab's own store, decoded from a `data:` address, or read out of the
+     * page for a `blob:` one. Null when it can't be had.
+     */
+    suspend fun fetchImage(tab: SavedTab, live: Tab, url: String): FetchedImage? {
+        if (url.startsWith("data:", ignoreCase = true)) {
+            return DataAddress.decode(url)?.takeIf { it.mimeType.startsWith("image/") }?.let { FetchedImage(it.bytes, it.mimeType) }
+        }
+        if (url.startsWith("blob:", ignoreCase = true)) {
+            val name = PageFiles.newCopyName()
+            live.evaluate(PageFiles.keep(url, name))
+            return PageFiles.read(name, live::evaluate)?.let { FetchedImage(it, "image/png") }
+        }
+        if (!WebAddress.isWebAddress(url)) return null
+        val cookies = cookieManagerFor(tab) ?: return null
+        val userAgent = live.webView.settings.userAgentString.orEmpty()
+        val referrer = live.url?.takeIf(WebAddress::isWebAddress)?.substringBefore('#')
+        return withContext(Dispatchers.IO) { ImageFetch.fetch(url, userAgent, referrer, cookies::getCookie) }
+    }
+
+    /** The cookies of [tab]'s own store: its Profile's, or its private session's. */
+    private fun cookieManagerFor(tab: SavedTab) = if (tab.isPrivate) {
+        privateTabs.current(tab.profileId)?.let { WebProfile.privateOf(tab.profileId, it.session).cookieManager }
+    } else {
+        WebProfile.of(tab.profileId).cookieManager
+    }
+
+    /** What happened to a file a page made, once Okapi tried to save it: its name, and whether it was saved. */
+    var pageFileSaved: Pair<String, Boolean>? by mutableStateOf(null)
+        private set
+
+    fun dismissPageFileSaved() {
+        pageFileSaved = null
+    }
+
+    /**
+     * Saves a file the page in [live] made itself, which the person agreed to keep (SPEC,
+     * "Browsing features"): a `data:` address is decoded, a `blob:` one read out of the page's
+     * copy. It goes to the Downloads folder, and on the Profile's list unless [tab] is private.
+     */
+    fun savePageFile(tab: SavedTab, live: Tab, request: DownloadRequest) {
+        val page = live.url?.takeIf(WebAddress::isWebAddress)?.substringBefore('#')
+        scope.launch {
+            val data = if (request.url.startsWith("data:", ignoreCase = true)) {
+                DataAddress.decode(request.url)?.bytes
+            } else {
+                request.pageCopy?.let { PageFiles.read(it, live::evaluate) }
+            }
+            val mimeType = request.mimeType.ifBlank { DataAddress.decode(request.url)?.mimeType.orEmpty() }
+            val file = data?.let { withContext(Dispatchers.IO) { downloader.save(request.fileName, mimeType, it) } }
+            if (file != null && !tab.isPrivate) downloadRepository.addSaved(tab.profileId, file, request.copy(mimeType = mimeType), page)
+            pageFileSaved = request.fileName to (file != null)
         }
     }
 
@@ -701,7 +824,7 @@ class BrowserState(
      * file behind its sign-in arrives as the page would get it, and on that Profile's list.
      */
     fun startDownload(profile: Profile, request: DownloadRequest) {
-        if (!request.supported) return
+        if (!request.fromWeb) return
         val cookieManager = WebProfile.of(profile.id).cookieManager
         scope.launch {
             val id = withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) }
@@ -726,16 +849,19 @@ class BrowserState(
      * nothing behind in the app.
      */
     fun startPrivateDownload(tab: SavedTab, request: DownloadRequest) {
-        if (!request.supported) return
+        if (!request.fromWeb) return
         val session = privateTabs.current(tab.profileId) ?: return
         val cookieManager = WebProfile.privateOf(tab.profileId, session.session).cookieManager
         scope.launch { withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) } }
     }
 
     /** Where each of [downloads] stands, by its list id. */
-    suspend fun downloadStatuses(downloads: List<Download>): Map<Long, DownloadStatus> {
-        val byDownloadId = withContext(Dispatchers.IO) { downloader.statuses(downloads.map { it.downloadId }) }
-        return downloads.associate { it.id to (byDownloadId[it.downloadId] ?: DownloadStatus.Gone) }
+    suspend fun downloadStatuses(downloads: List<Download>): Map<Long, DownloadStatus> = withContext(Dispatchers.IO) {
+        val byDownloadId = downloader.statuses(downloads.filter { it.fileUri == null }.map { it.downloadId })
+        downloads.associate { download ->
+            val saved = download.fileUri
+            download.id to (if (saved != null) downloader.savedStatus(saved) else byDownloadId[download.downloadId] ?: DownloadStatus.Gone)
+        }
     }
 
     /** Opens a finished download. False when no app can show it, or the file is gone. */
@@ -748,9 +874,12 @@ class BrowserState(
      */
     fun removeDownload(download: Download) {
         scope.launch {
-            withContext(Dispatchers.IO) {
-                val status = downloader.statuses(listOf(download.downloadId))[download.downloadId]
-                if (status is DownloadStatus.Running) downloader.cancel(download.downloadId)
+            // A file Okapi saved itself is already done: there is nothing to stop.
+            if (download.fileUri == null) {
+                withContext(Dispatchers.IO) {
+                    val status = downloader.statuses(listOf(download.downloadId))[download.downloadId]
+                    if (status is DownloadStatus.Running) downloader.cancel(download.downloadId)
+                }
             }
             downloadRepository.remove(download)
         }

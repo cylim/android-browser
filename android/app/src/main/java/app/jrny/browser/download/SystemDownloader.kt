@@ -2,9 +2,11 @@ package app.jrny.browser.download
 
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.os.Environment
+import android.provider.MediaStore
 import androidx.core.net.toUri
 
 /**
@@ -52,10 +54,36 @@ class SystemDownloader(private val context: Context) : Downloader {
         return ids.associateWith { found[it] ?: DownloadStatus.Gone }
     }
 
+    /** Saves into the shared Downloads folder through MediaStore, which needs no permission for the app's own files. */
+    override fun save(fileName: String, mimeType: String, bytes: ByteArray): String? {
+        val resolver = context.contentResolver
+        val details = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            if (mimeType.isNotBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val file = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) ?: return null
+        return try {
+            resolver.openOutputStream(file)?.use { it.write(bytes) } ?: error("No stream")
+            resolver.update(file, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+            file.toString()
+        } catch (_: Exception) {
+            resolver.delete(file, null, null)
+            null
+        }
+    }
+
+    override fun savedStatus(fileUri: String): DownloadStatus =
+        context.contentResolver.query(fileUri.toUri(), arrayOf(MediaStore.Downloads.SIZE), null, null, null)?.use { rows ->
+            if (rows.moveToFirst()) DownloadStatus.Done(rows.getLong(0)) else null
+        } ?: DownloadStatus.Gone
+
     override fun open(download: Download): Boolean {
-        val file = manager.getUriForDownloadedFile(download.downloadId) ?: return false
+        val saved = download.fileUri
+        val file = saved?.toUri() ?: manager.getUriForDownloadedFile(download.downloadId) ?: return false
         val view = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(file, download.mimeType.ifBlank { manager.getMimeTypeForDownloadedFile(download.downloadId) })
+            .setDataAndType(file, download.mimeType.ifBlank { if (saved != null) context.contentResolver.getType(file) else manager.getMimeTypeForDownloadedFile(download.downloadId) })
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             context.startActivity(view)

@@ -14,11 +14,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
@@ -122,7 +124,12 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         downloads = downloads,
         startDownload = {
             val shown = current.selected
-            if (shown.isPrivate) browser.startPrivateDownload(shown, it) else browser.startDownload(profile, it)
+            when {
+                // A file the page made itself is saved by Okapi, from the page.
+                it.fromPage -> browser.savePageFile(shown, browser.tabFor(shown), it)
+                shown.isPrivate -> browser.startPrivateDownload(shown, it)
+                else -> browser.startDownload(profile, it)
+            }
         },
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
@@ -134,6 +141,17 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
 
     val rules by browser.siteRules.collectAsState()
     val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
+
+    val links = LinksUi(
+        openInNewTab = { browser.openInNewTab(current.selected, it) },
+        openInPrivateTab = { browser.openInPrivateTab(profile, it) },
+        openInProfile = browser::openLinkInProfile,
+        fetchImage = { browser.fetchImage(current.selected, browser.tabFor(current.selected), it) },
+        openedBehind = browser.openedBehind?.takeIf { it.profileId == profile.id },
+        dismissOpenedBehind = browser::dismissOpenedBehind,
+        pageFileSaved = browser.pageFileSaved,
+        dismissPageFileSaved = browser::dismissPageFileSaved,
+    )
 
     val sites by browser.siteSettings.collectAsState()
     val siteSettings = SiteSettingsUi(
@@ -169,6 +187,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
             siteRules = siteRules,
             startPagePages = startPagePages,
             siteSettings = siteSettings,
+            links = links,
         )
 
         editing?.let { target ->
@@ -219,6 +238,7 @@ fun BrowserWindow(
      */
     startPagePages: ProfilePages? = ProfilePages(profiles.active.id, tabs.pins.items, library.visits),
     siteSettings: SiteSettingsUi = SiteSettingsUi(),
+    links: LinksUi = LinksUi(),
 ) {
     // Back closes an open popup first, then goes back in the page's history.
     BackHandler(enabled = tab.popup != null || tab.canGoBack) {
@@ -229,6 +249,11 @@ fun BrowserWindow(
     // Link prompt. It belongs to the Tab it was opened for: if another Tab is shown meanwhile
     // (an Incoming Link, say), it closes, so a choice never moves a Tab the person didn't mean.
     var pick by remember(tabs.selected.id) { mutableStateOf<ProfilePick?>(null) }
+    // A link from the link menu, while the person chooses a Profile to open it in.
+    var linkToPick by remember(tabs.selected.id) { mutableStateOf<String?>(null) }
+    // Fetching an image for Copy or Share outlives the menu it was chosen in.
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     // The history or bookmarks, shown in the page's place. Back closes it before anything else.
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
     // The file whose download just started, named over the page with a way to the Downloads list.
@@ -317,6 +342,9 @@ fun BrowserWindow(
                 },
                 pagePrompt = {
                     val started = downloading
+                    val savedFile = links.pageFileSaved
+                    val behind = links.openedBehind
+                    val handoff = tab.handoff
                     if (started != null) {
                         DownloadStartedPrompt(
                             started,
@@ -325,6 +353,39 @@ fun BrowserWindow(
                                 downloading = null
                             },
                             onDismiss = { downloading = null },
+                        )
+                    } else if (savedFile != null) {
+                        PageFileSavedPrompt(
+                            savedFile.first,
+                            savedFile.second,
+                            // A Private Tab's files aren't on the list.
+                            onShow = if (private) null else ({
+                                panel = Panel.Downloads
+                                links.dismissPageFileSaved()
+                            }),
+                            onDismiss = links.dismissPageFileSaved,
+                        )
+                    } else if (handoff != null) {
+                        HandoffPrompt(
+                            appName = remember(handoff) { handoff.appName(context) },
+                            canOpen = handoff.openable,
+                            onOpen = {
+                                if (handoff.open(context)) tab.dismissHandoff() else tab.offerHandoff(handoff.unopenable())
+                            },
+                            onDismiss = tab::dismissHandoff,
+                        )
+                    } else if (behind != null) {
+                        // A note, not a question: it goes by itself.
+                        LaunchedEffect(behind) {
+                            delay(OPENED_BEHIND_MS)
+                            links.dismissOpenedBehind()
+                        }
+                        OpenedBehindPrompt(
+                            onShow = {
+                                tabs.select(behind.id)
+                                links.dismissOpenedBehind()
+                            },
+                            onDismiss = links.dismissOpenedBehind,
                         )
                     } else when (val offer = tabs.linkOffer) {
                         // With one Profile there's nowhere to move the page to, so nothing to offer.
@@ -454,10 +515,37 @@ fun BrowserWindow(
             onDownload = {
                 library.startDownload(request)
                 // A Private Tab's download isn't on the list, so there is nothing to show there.
-                if (!private) downloading = request.fileName
-                tab.dismissDownload()
+                // A file the page made says once it is saved.
+                if (!private && request.fromWeb) downloading = request.fileName
+                // The page keeps its copy of a file it made until Okapi has read it.
+                tab.dismissDownload(kept = request.fromPage)
             },
             onDismiss = tab::dismissDownload,
+        )
+    }
+
+    tab.pressed?.let { item ->
+        LinkMenu(
+            item,
+            private = private,
+            canUseOtherProfile = profiles.all.size > 1,
+            links = links,
+            onSaveImage = { tab.offerFile(it) },
+            onPickProfile = { linkToPick = it },
+            onDismiss = tab::dismissPressed,
+            scope = scope,
+        )
+    }
+
+    linkToPick?.let { url ->
+        ProfilePickerDialog(
+            pick = ProfilePick.OpenIn,
+            others = profiles.all.filter { it.id != profiles.active.id },
+            onChoose = { target ->
+                links.openInProfile(target, url)
+                linkToPick = null
+            },
+            onDismiss = { linkToPick = null },
         )
     }
 
@@ -473,6 +561,9 @@ fun BrowserWindow(
         )
     }
 }
+
+/** How long "Opened in a new Tab" stays before it goes by itself. */
+private const val OPENED_BEHIND_MS = 4_000L
 
 /** How long typing has to pause before suggestions are asked for. */
 private const val SUGGESTION_DELAY_MS = 150L

@@ -399,9 +399,13 @@ private fun captureFile(context: Context, kind: Capture): File {
     return File(folder, name)
 }
 
-/** Removes the photos and videos the camera app made for pages before this start. */
-fun clearCaptures(context: Context) {
+/**
+ * Removes the files made for pages and other apps before this start: photos and videos the camera
+ * app took for file fields, and images handed to other apps by Copy image and Share image.
+ */
+fun clearPageFiles(context: Context) {
     File(context.cacheDir, CAPTURE_FOLDER).deleteRecursively()
+    File(context.cacheDir, Sharing.SHARED_FOLDER).deleteRecursively()
 }
 
 private const val CAPTURE_FOLDER = "captures"

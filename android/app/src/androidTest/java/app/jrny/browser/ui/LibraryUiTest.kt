@@ -120,13 +120,13 @@ class LibraryUiTest {
         load("/mail", "Mail")
         show(PHONE_PORTRAIT)
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithText("Bookmark this page").assertExists()
+        compose.onNodeWithContentDescription("Bookmark this page").assertExists()
         compose.onNodeWithTag("menu-bookmark").assertIsEnabled().performClick()
         assertEquals(listOf(server.url("/mail") to "Mail"), toggled)
 
         bookmarks = bookmarks + Bookmark(6, server.url("/mail"), "Mail")
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithText("Remove bookmark").assertExists()
+        compose.onNodeWithContentDescription("Remove bookmark").assertExists()
     }
 
     @Test

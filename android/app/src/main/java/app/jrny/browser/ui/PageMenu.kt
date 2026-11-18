@@ -2,6 +2,10 @@ package app.jrny.browser.ui
 
 import android.text.format.Formatter
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,10 +65,10 @@ import app.jrny.browser.tab.Tab
 enum class ProfilePick { Move, OpenIn }
 
 /**
- * The page menu behind the "More" button, for the shown Tab: a new Tab, bookmarking the page, the
- * Active Profile's bookmarks and history, Move, Open in Profile, and making Okapi the
- * default browser while it isn't. [showForward] adds Forward, for the narrow Bottom Bar, which has
- * no room for its button.
+ * The page menu behind the "More" button, for the shown Tab (SPEC, "Page menu"): a row of icons
+ * (Forward, Bookmark this page, Share, Reload), then what can be done with the page, with its
+ * Profile, and in the browser. [showForward] puts Forward in the row, for a Bottom Bar too narrow
+ * for its own button.
  */
 @Composable
 fun PageMenu(
@@ -78,9 +82,14 @@ fun PageMenu(
     onSetDefaultBrowser: (() -> Unit)?,
 ) {
     var open by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val private = tabs.selected.isPrivate
     // Move and Open in Profile need an address to carry and another Profile to carry it to. A
     // Private Tab stays private, so it offers neither.
-    val canUseOtherProfile = tab.url != null && profiles.all.size > 1 && !tabs.selected.isPrivate
+    val canUseOtherProfile = tab.url != null && profiles.all.size > 1 && !private
+    // Only a web page can be shared, copied, printed or bookmarked.
+    val url = tab.url?.takeIf(WebAddress::isWebAddress)
+    val linkLabel = stringResource(R.string.link)
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.testTag("page-menu")) {
             Icon(Icons.Filled.MoreVert, stringResource(R.string.more))
@@ -99,32 +108,70 @@ fun PageMenu(
                     modifier = Modifier.testTag(tag),
                 )
             }
-            if (showForward) {
-                Item(R.string.forward, Icons.AutoMirrored.Filled.ArrowForward, "menu-forward", enabled = tab.canGoForward, onClick = tab::goForward)
+
+            @Composable
+            fun RowIcon(label: String, icon: ImageVector, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
+                IconButton(
+                    onClick = {
+                        open = false
+                        onClick()
+                    },
+                    enabled = enabled,
+                    modifier = Modifier.testTag(tag),
+                ) { Icon(icon, label) }
             }
-            Item(R.string.new_tab, Icons.Filled.Add, "menu-new-tab", onClick = tabs.open)
-            Item(R.string.new_private_tab, Icons.Filled.Lock, "menu-new-private-tab", onClick = tabs.openPrivate)
-            HorizontalDivider()
-            // Only web pages can be bookmarked.
-            val url = tab.url
-            val bookmarked = library.isBookmarked(url)
-            Item(
-                if (bookmarked) R.string.remove_bookmark else R.string.bookmark_page,
-                if (bookmarked) Icons.Filled.Star else JrnyIcons.StarBorder,
-                "menu-bookmark",
-                enabled = WebAddress.isWebAddress(url),
-            ) { library.toggleBookmark(url!!, tab.pageTitle.orEmpty()) }
-            Item(R.string.bookmarks, Icons.Filled.Star, "menu-bookmarks") { onPanel(Panel.Bookmarks) }
-            Item(R.string.history, JrnyIcons.History, "menu-history") { onPanel(Panel.History) }
-            Item(R.string.downloads, JrnyIcons.Download, "menu-downloads") { onPanel(Panel.Downloads) }
-            HorizontalDivider()
+
+            @Composable
+            fun Section(label: Int) {
+                HorizontalDivider()
+                Text(
+                    stringResource(label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
+                )
+            }
+
+            // The icons' centers sit 24dp in, on the same line as the items' icons below.
+            Row {
+                if (showForward) {
+                    RowIcon(stringResource(R.string.forward), Icons.AutoMirrored.Filled.ArrowForward, "menu-forward", enabled = tab.canGoForward, onClick = tab::goForward)
+                }
+                val bookmarked = library.isBookmarked(tab.url)
+                RowIcon(
+                    stringResource(if (bookmarked) R.string.remove_bookmark else R.string.bookmark_page),
+                    if (bookmarked) Icons.Filled.Star else JrnyIcons.StarBorder,
+                    "menu-bookmark",
+                    enabled = url != null,
+                ) { library.toggleBookmark(url!!, tab.pageTitle.orEmpty()) }
+                RowIcon(stringResource(R.string.share), Icons.Filled.Share, "menu-share", enabled = url != null) {
+                    Sharing.shareAddress(context, url!!, tab.pageTitle)
+                }
+                RowIcon(stringResource(R.string.reload), Icons.Filled.Refresh, "menu-reload", onClick = tab::reload)
+            }
+
+            Section(R.string.menu_page)
+            Item(R.string.copy_link, JrnyIcons.ContentCopy, "menu-copy-link", enabled = url != null) {
+                Sharing.copy(context, linkLabel, url!!, private)
+            }
+            Item(R.string.print, JrnyIcons.Print, "menu-print", enabled = url != null) {
+                Sharing.print(context, tab.webView, tab.pageTitle ?: tab.displayHost)
+            }
+
+            Section(R.string.menu_profile)
             Item(R.string.move_to_profile, Icons.AutoMirrored.Filled.ExitToApp, "menu-move", enabled = canUseOtherProfile) {
                 onPick(ProfilePick.Move)
             }
             Item(R.string.open_in_profile, Icons.Filled.AccountCircle, "menu-open-in", enabled = canUseOtherProfile) {
                 onPick(ProfilePick.OpenIn)
             }
-            HorizontalDivider()
+
+            Section(R.string.menu_browser)
+            Item(R.string.new_tab, Icons.Filled.Add, "menu-new-tab", onClick = tabs.open)
+            Item(R.string.new_private_tab, Icons.Filled.Lock, "menu-new-private-tab", onClick = tabs.openPrivate)
+            Item(R.string.bookmarks, Icons.Filled.Star, "menu-bookmarks") { onPanel(Panel.Bookmarks) }
+            Item(R.string.history, JrnyIcons.History, "menu-history") { onPanel(Panel.History) }
+            Item(R.string.downloads, JrnyIcons.Download, "menu-downloads") { onPanel(Panel.Downloads) }
             Item(R.string.settings, Icons.Filled.Settings, "menu-settings") { onPanel(Panel.Settings) }
             if (onSetDefaultBrowser != null) {
                 Item(R.string.set_default_browser, Icons.Filled.CheckCircle, "menu-default-browser", onClick = onSetDefaultBrowser)
@@ -249,11 +296,58 @@ fun DownloadStartedPrompt(fileName: String, onShow: () -> Unit, onDismiss: () ->
 }
 
 /**
+ * Shown under a page that opened a link for another app (SPEC, "Links to other apps"): the app it
+ * would open, when Android names it, and "Open". Nothing leaves the browser before "Open". When
+ * no app can open it, it says so instead.
+ */
+@Composable
+fun HandoffPrompt(appName: String?, canOpen: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = when {
+            !canOpen -> stringResource(R.string.handoff_none)
+            appName != null -> stringResource(R.string.handoff_offer_named, appName)
+            else -> stringResource(R.string.handoff_offer)
+        },
+        action = if (canOpen) stringResource(R.string.open_app) else null,
+        onAction = onOpen,
+        onDismiss = onDismiss,
+        tag = "handoff",
+        modifier = modifier,
+    )
+}
+
+/** Shown once "Open in new Tab" opened a link behind the shown Tab, with a way to it. */
+@Composable
+fun OpenedBehindPrompt(onShow: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = stringResource(R.string.opened_in_new_tab),
+        action = stringResource(R.string.show),
+        onAction = onShow,
+        onDismiss = onDismiss,
+        tag = "opened-behind",
+        modifier = modifier,
+    )
+}
+
+/** Shown once a file the page made was saved to the Downloads folder, or couldn't be. */
+@Composable
+fun PageFileSavedPrompt(fileName: String, saved: Boolean, onShow: (() -> Unit)?, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    PagePrompt(
+        text = stringResource(if (saved) R.string.page_file_saved else R.string.page_file_failed, fileName),
+        action = if (saved && onShow != null) stringResource(R.string.show) else null,
+        onAction = { onShow?.invoke() },
+        onDismiss = onDismiss,
+        tag = "page-file",
+        modifier = modifier,
+    )
+}
+
+/**
  * A short message floating over the page with one action and a close button. Text starts 16dp
  * in and takes a second line when it needs one; the close icon ends 16dp in.
  */
 @Composable
-private fun PagePrompt(text: String, action: String, onAction: () -> Unit, onDismiss: () -> Unit, tag: String, modifier: Modifier = Modifier) {
+private fun PagePrompt(text: String, action: String?, onAction: () -> Unit, onDismiss: () -> Unit, tag: String, modifier: Modifier = Modifier) {
     Surface(
         color = MaterialTheme.colorScheme.inverseSurface,
         shape = RoundedCornerShape(12.dp),
@@ -268,8 +362,10 @@ private fun PagePrompt(text: String, action: String, onAction: () -> Unit, onDis
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false).padding(vertical = 8.dp),
             )
-            TextButton(onClick = onAction, modifier = Modifier.padding(start = 8.dp).testTag("$tag-action")) {
-                Text(action, color = MaterialTheme.colorScheme.inversePrimary, maxLines = 1)
+            if (action != null) {
+                TextButton(onClick = onAction, modifier = Modifier.padding(start = 8.dp).testTag("$tag-action")) {
+                    Text(action, color = MaterialTheme.colorScheme.inversePrimary, maxLines = 1)
+                }
             }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
@@ -285,7 +381,12 @@ private fun PagePrompt(text: String, action: String, onAction: () -> Unit, onDis
 @Composable
 fun DownloadDialog(request: DownloadRequest, onDownload: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val site = WebAddress.hostOf(request.url).ifEmpty { request.url.substringBefore(':') }
+    // A file the page made comes from the page's site: a blob: address carries it, and a data:
+    // one was offered by the page it was linked from.
+    val site = WebAddress.hostOf(request.url)
+        .ifEmpty { WebAddress.hostOf(request.url.removePrefix("blob:")) }
+        .ifEmpty { WebAddress.hostOf(request.referrer) }
+        .ifEmpty { request.url.substringBefore(':') }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("download-dialog"),

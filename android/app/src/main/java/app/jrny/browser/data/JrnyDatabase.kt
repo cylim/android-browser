@@ -248,6 +248,15 @@ abstract class TabDao {
     @Transaction
     open suspend fun select(id: Long) = setLastUsed(id, maxLastUsed() + 1)
 
+    /**
+     * Opens [url] as a new Tab at the end of [profileId]'s list without selecting it: the shown
+     * Tab stays (SPEC, "Link and image menu"). It counts as the least recently used. Returns its
+     * id, or null when the Profile is gone.
+     */
+    @Transaction
+    open suspend fun openBehind(profileId: Long, url: String): Long? =
+        if (profileIsLive(profileId)) insertRow(TabEntity(profileId = profileId, url = url, lastUsed = 0)) else null
+
     /** Opens an empty Tab in [profileId] if it has none, so every Profile always has one. */
     @Transaction
     open suspend fun ensureOne(profileId: Long) {
@@ -618,6 +627,9 @@ data class DownloadEntity(
     val fileName: String,
     val mimeType: String,
     val startedAt: Long,
+    /** A file Okapi saved itself, a page's own, at this address in the Downloads folder; [downloadId] is then 0. */
+    @ColumnInfo(defaultValue = "NULL")
+    val fileUri: String? = null,
 )
 
 @Dao
@@ -752,7 +764,7 @@ abstract class SiteSettingDao {
         ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class,
         SiteRuleEntity::class, FolderEntity::class, SiteSettingEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -762,6 +774,7 @@ abstract class SiteSettingDao {
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
         AutoMigration(from = 7, to = 8),
+        AutoMigration(from = 8, to = 9),
     ],
 )
 abstract class JrnyDatabase : RoomDatabase() {

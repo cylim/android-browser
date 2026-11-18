@@ -123,11 +123,19 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - A video's fullscreen button fills the screen, hides the system bars and turns the screen to match the video. Back leaves fullscreen.
 - A site that asks for a username and password before its page (HTTP sign-in) gets a dialog that a password manager can fill. Okapi keeps nothing typed there.
 
+### Links and files (not merged yet)
+
+- A tapped phone, mail, message or map link opens its app. Any other link for an app, such as `intent:` or `market:`, shows a bar under the page with "Open", and nothing leaves the browser before you tap it. In a Private Tab every such link waits for "Open". Only the link goes to the app.
+- Files a page makes itself (`blob:` and `data:` addresses), such as an exported CSV or PDF, are saved to the Downloads folder and listed with the Profile's downloads.
+- Hold a link or an image for its menu: Open in new Tab, Open in Private Tab, Open in Profile…, Copy link and Share link; for an image, Open image in new Tab, Save image, Copy image and Share image. A Private Tab opens links only in Private Tabs.
+- The page menu starts with a row of icons (Forward on narrow phones, Bookmark, Share, Reload), then Page (Copy link, Print), Profile (Move, Open in Profile) and Browser sections.
+- Print opens Android's print dialog, which can also save the page as a PDF.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
 - There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.
-- Files a page makes itself (`blob:` and `data:` addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.
+- A site that only answers a real browser may refuse the download service. A page that drops a file it made in the same moment it offers it leaves nothing to save.
 - Back/forward history isn't restored after Android kills the app.
 - A Move loses unsaved form input and pages reached by submitting a form.
 - A deleted Profile's web data stays on the device until the next cold start.
