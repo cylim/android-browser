@@ -87,8 +87,11 @@ def main():
 
     if args.out:
         out = args.out.resolve()
+        # The output folder is emptied first, so it must not hold the sources, or be among them.
         if out == PUBLIC or PUBLIC in out.parents:
             parser.error("--out can't be inside public/")
+        if out in PUBLIC.parents:
+            parser.error(f"--out can't be a folder that holds the website's sources: {out}")
         shutil.rmtree(out, ignore_errors=True)
         shutil.copytree(PUBLIC, out)
         for path in out.rglob("*"):
