@@ -24,6 +24,7 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.settings.Settings
 import app.jrny.browser.settings.Suggestion
+import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.ProfileLook
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.rules.SitePattern
@@ -185,10 +186,12 @@ class BrowserState(
     val siteRules: StateFlow<List<SiteRule>> = siteRuleRepository.rules.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** The Active Profile's Site settings: its sites with a permission or a Desktop site choice. */
-    val siteSettings: StateFlow<List<SiteSettingsEntry>> = profileRepository.activeProfile
+    val siteSettings: StateFlow<Pair<ProfileId, List<SiteSettingsEntry>>?> = profileRepository.activeProfile
         .filterNotNull()
-        .flatMapLatest { siteSettingsRepository.sites(it.id) }
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+        // Tagged with the Profile they belong to: right after a switch the last list is still
+        // the previous Profile's, and must not be shown or changed as the new one's.
+        .flatMapLatest { profile -> siteSettingsRepository.sites(profile.id).map { profile.id to it } }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     /** The app's settings, shared by all Profiles. */
     val settings: StateFlow<Settings> = settingsRepository.settings

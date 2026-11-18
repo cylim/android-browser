@@ -239,7 +239,15 @@ class Tab(
     fun closePermissionAsk() {
         permissionAsk = null
         permissionSource = null
+        pendingAsk = null
     }
+
+    /**
+     * The ask the owner is deciding, from when the page made it until it is answered or shown. It
+     * holds the Tab's one place for an ask while the owner reads the Profile's Site settings, so a
+     * second ask meanwhile is refused, and a withdrawal reaches it.
+     */
+    private var pendingAsk: PermissionAsk? = null
 
     /** Hands [files] to the page's file field, or none when the person cancelled. */
     fun answerFileChooser(files: List<Uri>?) {
@@ -681,14 +689,16 @@ class Tab(
      * refused: one question at a time.
      */
     private fun raise(ask: PermissionAsk, source: Any) {
-        if (permissionAsk != null) return ask.deny()
+        if (permissionAsk != null || pendingAsk?.open == true) return ask.deny()
         permissionSource = source
+        pendingAsk = ask
         onPermissionAsk(this, ask)
     }
 
     /** The page withdrew the ask that [source] made. */
     private fun withdraw(source: Any?) {
         if (source == null || source != permissionSource) return
+        pendingAsk?.withdraw()
         permissionAsk?.withdraw()
         closePermissionAsk()
     }
