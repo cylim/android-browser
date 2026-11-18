@@ -231,7 +231,7 @@ Holding a link or an image opens a menu:
 - Settings → "Clear browsing data" clears data of the Active Profile only. It names the Profile.
 - It offers checkboxes for: history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs, and site icons. History and cached files are checked at first.
 - It clears everything stored, from all time. WebView can't clear a Profile's cookies for a time range, so the dialog offers no range.
-- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out.
+- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out. It clears everything sites stored in the Profile's store: cookies, site storage, service workers and Cache Storage. An Android System WebView too old for this clears only cookies and site storage.
 - Site icons of the Profile's bookmarks and open Tabs are kept, as when history is cleared.
 - Bookmarks, downloaded files and Site Rules are never cleared here.
 

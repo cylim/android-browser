@@ -1265,4 +1265,35 @@ class BrowserStateTest {
         assertEquals("b=2", onMain { WebProfile.of(work.id).cookieManager.getCookie(site) })
     }
 
+
+    @Test
+    fun clearingSiteDataEmptiesTheProfilesCacheStorageAndLeavesOthersAlone() {
+        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA))
+        // Cache Storage needs a secure origin: a server on 127.0.0.1 is one.
+        val page = "<title>cache</title><script>" +
+            "function count(){caches.keys().then(function(k){document.title='caches '+k.length})}" +
+            "caches.open('okapi-test').then(function(c){return c.put('/x',new Response('a'))}).then(count)</script>"
+        TestServer(mapOf("/cache" to page), loopback = true).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            val mine = show(browser, active(browser).selected.id)
+            val theirs = onMain { Tab(context, WebProfile.of(work.id)) }
+            try {
+                load(mine, server.url("/cache"), "caches 1")
+                load(theirs, server.url("/cache"), "caches 1")
+
+                onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies)) }
+                Thread.sleep(1_000)
+                val count = "caches.keys().then(function(k){document.title='left '+k.length})"
+                onMain { mine.webView.evaluateJavascript(count, null) }
+                await("personal emptied") { mine.title == "left 0" }
+                onMain { theirs.webView.evaluateJavascript(count, null) }
+                await("work kept") { theirs.title == "left 1" }
+            } finally {
+                onMain { theirs.destroy() }
+            }
+        }
+    }
+
 }

@@ -149,6 +149,7 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.
 - A site that only answers a real browser may refuse the download service. A page that drops a file it made in the same moment it offers it leaves nothing to save.
 - Back/forward history isn't restored after Android kills the app.
+- On an Android System WebView too old to delete all of a store's browsing data, "cookies and site data" in Clear browsing data clears cookies and site storage but can leave service workers and Cache Storage behind. Updating Android System WebView fixes this.
 - A Move loses unsaved form input and pages reached by submitting a form.
 - A deleted Profile's web data stays on the device until the next cold start.
 - Sign-in with two Accounts at once is confirmed for Google. Microsoft, GitHub and Apple are untested.
