@@ -38,10 +38,6 @@ class AppLink private constructor(
     /** The same link, known now to open in no app: the bar says so. */
     fun unopenable(): AppLink = AppLink(url, scheme, null, fallback = null, webAddress = null)
 
-    /** True when Android finds an app that can open it. An app Android keeps out of sight counts as none. */
-    fun canOpen(context: Context): Boolean =
-        intent?.let { context.packageManager.resolveActivity(it, PackageManager.MATCH_DEFAULT_ONLY) } != null
-
     /** Hands the link to its app. False when no app can open it. */
     fun open(context: Context): Boolean {
         val target = intent ?: return false

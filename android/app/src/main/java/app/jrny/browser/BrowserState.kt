@@ -347,8 +347,9 @@ class BrowserState(
     /**
      * Hands a link the page opened to its app, or offers it (SPEC, "Links to other apps"). A
      * tapped phone, mail, message or map link in a normal Tab on screen goes at once; anything
-     * else waits for "Open". An `intent:` link for a web page loads in the Tab, and one no app can
-     * open loads its fallback page when it names one.
+     * else waits for "Open". An `intent:` link for a web page loads in the Tab. Whether an app can
+     * open the rest can't be known beforehand: Android hides most apps from other apps. So an
+     * `intent:` link's fallback page loads only once "Open" found no app.
      */
     private fun handOff(saved: SavedTab, tab: Tab, link: AppLink, tapped: Boolean) {
         // Loaded after WebView has finished asking about this navigation. Not through the
@@ -357,7 +358,6 @@ class BrowserState(
             android.os.Handler(android.os.Looper.getMainLooper()).post { tab.load(address) }
         }
         link.webAddress?.let { return loadInstead(it) }
-        if (link.fallback != null && !link.canOpen(context)) return loadInstead(link.fallback)
         val onScreen = saved.id == shownId
         if (onScreen && HandoffRules.goesAtOnce(link.scheme, tapped, saved.isPrivate) && link.open(context)) return
         tab.offerHandoff(link)
@@ -415,7 +415,8 @@ class BrowserState(
         if (url.startsWith("blob:", ignoreCase = true)) {
             val name = PageFiles.newCopyName()
             live.evaluate(PageFiles.keep(url, name))
-            return PageFiles.read(name, live::evaluate)?.let { FetchedImage(it, "image/png") }
+            val image = java.io.ByteArrayOutputStream()
+            return if (PageFiles.read(name, live::evaluate, image)) FetchedImage(image.toByteArray(), "image/png") else null
         }
         if (!WebAddress.isWebAddress(url)) return null
         val cookies = cookieManagerFor(tab) ?: return null
@@ -447,13 +448,26 @@ class BrowserState(
     fun savePageFile(tab: SavedTab, live: Tab, request: DownloadRequest) {
         val page = live.url?.takeIf(WebAddress::isWebAddress)?.substringBefore('#')
         scope.launch {
-            val data = if (request.url.startsWith("data:", ignoreCase = true)) {
-                DataAddress.decode(request.url)?.bytes
-            } else {
-                request.pageCopy?.let { PageFiles.read(it, live::evaluate) }
+            // Written to the app's cache first, piece by piece, then moved into Downloads: a
+            // large file never sits whole in memory.
+            val staged = withContext(Dispatchers.IO) { java.io.File.createTempFile("page-file", null, context.cacheDir) }
+            val dataFile = if (request.url.startsWith("data:", ignoreCase = true)) DataAddress.decode(request.url) else null
+            val read = try {
+                if (dataFile != null) {
+                    withContext(Dispatchers.IO) { staged.writeBytes(dataFile.bytes) }
+                    true
+                } else {
+                    val copy = request.pageCopy
+                    copy != null && withContext(Dispatchers.IO) { staged.outputStream() }.use { out ->
+                        PageFiles.read(copy, live::evaluate, out) { step -> withContext(Dispatchers.IO) { step() } }
+                    }
+                }
+            } catch (_: java.io.IOException) {
+                false
             }
-            val mimeType = request.mimeType.ifBlank { DataAddress.decode(request.url)?.mimeType.orEmpty() }
-            val file = data?.let { withContext(Dispatchers.IO) { downloader.save(request.fileName, mimeType, it) } }
+            val mimeType = request.mimeType.ifBlank { dataFile?.mimeType.orEmpty() }
+            val file = if (read) withContext(Dispatchers.IO) { downloader.save(request.fileName, mimeType, staged) } else null
+            withContext(Dispatchers.IO) { staged.delete() }
             if (file != null && !tab.isPrivate) downloadRepository.addSaved(tab.profileId, file, request.copy(mimeType = mimeType), page)
             pageFileSaved = request.fileName to (file != null)
         }

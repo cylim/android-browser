@@ -55,7 +55,7 @@ class SystemDownloader(private val context: Context) : Downloader {
     }
 
     /** Saves into the shared Downloads folder through MediaStore, which needs no permission for the app's own files. */
-    override fun save(fileName: String, mimeType: String, bytes: ByteArray): String? {
+    override fun save(fileName: String, mimeType: String, file: java.io.File): String? {
         val resolver = context.contentResolver
         val details = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)
@@ -63,13 +63,13 @@ class SystemDownloader(private val context: Context) : Downloader {
             put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
-        val file = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) ?: return null
+        val saved = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) ?: return null
         return try {
-            resolver.openOutputStream(file)?.use { it.write(bytes) } ?: error("No stream")
-            resolver.update(file, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-            file.toString()
+            resolver.openOutputStream(saved)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: error("No stream")
+            resolver.update(saved, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+            saved.toString()
         } catch (_: Exception) {
-            resolver.delete(file, null, null)
+            resolver.delete(saved, null, null)
             null
         }
     }

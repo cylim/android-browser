@@ -180,7 +180,7 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 - Any other scheme, `intent:` and `market:` links included, shows a bar under the page with an "Open" button. It names the app that would open the link when Android tells Okapi which one: Android hides most apps from other apps, so for many links the bar only says that the page wants to open another app. Nothing leaves the browser until "Open" is tapped. The bar goes when the page moves on.
 - A link for another app that a page opens without a tap, such as a redirect to `tel:`, also waits for "Open", whatever its scheme. A web address opened without a tap still loads in the Tab.
 - In a Private Tab, every link to another app waits for "Open".
-- An `intent:` link may only open an app that accepts browsable links. Its component, selector, extras and flags are dropped. An `intent:` link for a web page that names no app loads in the Tab. If no app can open it and it names a web fallback address, the Tab loads that address. If "Open" finds no app, the bar says so.
+- An `intent:` link may only open an app that accepts browsable links. Its component, selector, extras and flags are dropped. An `intent:` link for a web page that names no app loads in the Tab. Android hides most apps from other apps, so whether an app can open a link is known only once "Open" tries: if no app takes it and it names a web fallback address, the Tab loads that address, and otherwise the bar says that no app can open it.
 - Only the link goes to the other app. The Profile, its cookies and the page's address do not.
 
 ### Link and image menu
