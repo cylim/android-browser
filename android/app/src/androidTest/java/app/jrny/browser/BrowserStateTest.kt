@@ -1284,10 +1284,12 @@ class BrowserStateTest {
                 load(theirs, server.url("/cache"), "caches 1")
 
                 onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies)) }
-                Thread.sleep(1_000)
+                // The clear runs in the background: each look asks the page again.
                 val count = "caches.keys().then(function(k){document.title='left '+k.length})"
-                onMain { mine.webView.evaluateJavascript(count, null) }
-                await("personal emptied") { mine.title == "left 0" }
+                await("personal emptied") {
+                    mine.webView.evaluateJavascript(count, null)
+                    mine.title == "left 0"
+                }
                 onMain { theirs.webView.evaluateJavascript(count, null) }
                 await("work kept") { theirs.title == "left 1" }
             } finally {
