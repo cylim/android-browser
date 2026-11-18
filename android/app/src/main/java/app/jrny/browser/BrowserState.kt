@@ -333,7 +333,8 @@ class BrowserState(
         scope.launch {
             val kept = ask.wanted.associateWith { siteSettingsRepository.get(saved.profileId, ask.origin, it) }
             when {
-                kept.values.any { it == false } -> {
+                // The person may have shown another Tab while the Profile's answer was read.
+                saved.id != shownId || kept.values.any { it == false } -> {
                     ask.deny()
                     tab.closePermissionAsk()
                 }

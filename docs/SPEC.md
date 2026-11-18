@@ -145,9 +145,9 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 
 ### Site permissions and Site settings
 
-- A site that asks for the camera, the microphone or the device's location gets a prompt naming the site and what it wants: "Allow once", "Always allow" or "Block".
+- A site that asks for the camera, the microphone or the device's location gets a prompt naming the site and what it wants: "Allow once", "Always allow" or "Block". In a Private Tab the prompt offers only "Allow" and "Block", and says the Tab forgets the choice (see "Private Tabs").
 - Each Profile keeps its own grants, for each site (scheme, host and port). Allowing meet.google.com the camera in one Profile doesn't allow it in another.
-- "Allow once" lasts until the page leaves that site or the Tab closes. "Block" stops the site from asking again; it gets a refusal at once.
+- "Allow once" lasts until the page leaves that site or the Tab closes. "Block" stops the site from asking again; it gets a refusal at once. In a Private Tab, "Allow" and "Block" last only as long as "Allow once" does.
 - Android asks for its own runtime permission the first time a site in any Profile needs it, never before. If the person refuses there, the site gets a refusal, and the prompt says how to allow it in Android's settings.
 - For location, Okapi asks Android for precise location, and Android's dialog lets the person choose approximate instead.
 - A site can only ask from a page the person is looking at. A site in a background Tab or an unloaded Tab gets a refusal.
@@ -163,7 +163,8 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 ### Fullscreen video
 
 - A video's fullscreen button fills the whole screen with it and hides Android's status and navigation bars.
-- The screen turns to match the video: a wide video shows in landscape, and a tall one in portrait, even with auto-rotate off. The orientation goes back to normal afterwards.
+- On a phone the screen turns to match the video: a wide video shows in landscape, and a tall one in portrait, even with auto-rotate off. The orientation goes back to normal afterwards.
+- On a large screen (600dp and wider, such as a tablet or an unfolded foldable) Android 17 ignores an app's orientation, so the video fills the screen the way the screen is held.
 - Back, or the video's own button, leaves fullscreen.
 
 ### HTTP sign-in
@@ -177,7 +178,7 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 - A web address (`http` or `https`) always stays in the Tab.
 - `tel:`, `mailto:`, `sms:`, `smsto:` and `geo:` links that the person taps go to the app that handles them at once.
 - Any other scheme, `intent:` and `market:` links included, shows a bar under the page with an "Open" button. It names the app that would open the link when Android tells Okapi which one: Android hides most apps from other apps, so for many links the bar only says that the page wants to open another app. Nothing leaves the browser until "Open" is tapped. The bar goes when the page moves on.
-- A link that a page opens without a tap, such as a redirect, also waits for "Open", whatever its scheme.
+- A link for another app that a page opens without a tap, such as a redirect to `tel:`, also waits for "Open", whatever its scheme. A web address opened without a tap still loads in the Tab.
 - In a Private Tab, every link to another app waits for "Open".
 - An `intent:` link may only open an app that accepts browsable links. Its component, selector, extras and flags are dropped. An `intent:` link for a web page that names no app loads in the Tab. If no app can open it and it names a web fallback address, the Tab loads that address. If "Open" finds no app, the bar says so.
 - Only the link goes to the other app. The Profile, its cookies and the page's address do not.

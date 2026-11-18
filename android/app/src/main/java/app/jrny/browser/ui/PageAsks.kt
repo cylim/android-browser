@@ -104,12 +104,13 @@ fun PageAsks(tab: Tab, profileName: String, private: Boolean, onRemember: (SiteO
 @Composable
 private fun PermissionAskHost(tab: Tab, profileName: String, private: Boolean, onRemember: (SiteOrigin, Set<SiteSetting>, Boolean) -> Unit) {
     val context = LocalContext.current
-    // The ask waiting for Android's answer.
-    var waiting by remember(tab) { mutableStateOf<PermissionAsk?>(null) }
+    // The ask waiting for Android's answer, with the Tab it came from: the person may show
+    // another Tab while Android asks, and the answer still belongs to this one.
+    var waiting by remember { mutableStateOf<Pair<Tab, PermissionAsk>?>(null) }
     // What Android refused, for the dialog that says so.
-    var refused by remember(tab) { mutableStateOf<Set<SiteSetting>?>(null) }
+    var refused by remember { mutableStateOf<Set<SiteSetting>?>(null) }
     val androidAsk = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        val ask = waiting ?: return@rememberLauncherForActivityResult
+        val (owner, ask) = waiting ?: return@rememberLauncherForActivityResult
         waiting = null
         if (hasAndroidPermission(context, ask.wanted)) {
             ask.grant()
@@ -117,14 +118,14 @@ private fun PermissionAskHost(tab: Tab, profileName: String, private: Boolean, o
             ask.deny()
             refused = ask.wanted
         }
-        tab.closePermissionAsk()
+        owner.closePermissionAsk()
     }
     val proceed: (PermissionAsk) -> Unit = { ask ->
         if (hasAndroidPermission(context, ask.wanted)) {
             ask.grant()
             tab.closePermissionAsk()
         } else {
-            waiting = ask
+            waiting = tab to ask
             androidAsk.launch(androidPermissions(ask.wanted).toTypedArray())
         }
     }
@@ -132,7 +133,7 @@ private fun PermissionAskHost(tab: Tab, profileName: String, private: Boolean, o
     LaunchedEffect(ask) {
         if (ask != null && ask.decided) proceed(ask)
     }
-    if (ask != null && !ask.decided && waiting != ask) {
+    if (ask != null && !ask.decided && waiting?.second != ask) {
         PermissionDialog(
             ask,
             profileName,
@@ -268,21 +269,24 @@ private enum class Capture { Photo, Video }
 private fun FileChooserHost(tab: Tab) {
     val context = LocalContext.current
     val ask = tab.fileChooser
-    // The ask the picker or the camera is open for, so the choice isn't offered again meanwhile.
-    var started by remember(tab) { mutableStateOf<FileChooserAsk?>(null) }
-    var capture by remember(tab) { mutableStateOf<Pair<Capture, Uri>?>(null) }
+    // The ask the picker or the camera is open for, with the Tab it came from, so the choice
+    // isn't offered again meanwhile, and the files go to that Tab even if another one is shown
+    // by the time they come back.
+    var started by remember { mutableStateOf<Pair<Tab, FileChooserAsk>?>(null) }
+    var capture by remember { mutableStateOf<Uri?>(null) }
+    val answer: (List<Uri>?) -> Unit = { files -> started?.first?.answerFileChooser(files) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        tab.answerFileChooser(if (result.resultCode == Activity.RESULT_OK) pickedFiles(result.data) else null)
+        answer(if (result.resultCode == Activity.RESULT_OK) pickedFiles(result.data) else null)
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val made = capture?.second
+        val made = capture
         capture = null
-        tab.answerFileChooser(if (result.resultCode == Activity.RESULT_OK && made != null) listOf(made) else null)
+        answer(if (result.resultCode == Activity.RESULT_OK && made != null) listOf(made) else null)
     }
     val startCamera: (Capture) -> Unit = { kind ->
         val file = captureFile(context, kind)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        capture = kind to uri
+        capture = uri
         val intent = Intent(if (kind == Capture.Photo) MediaStore.ACTION_IMAGE_CAPTURE else MediaStore.ACTION_VIDEO_CAPTURE)
             .putExtra(MediaStore.EXTRA_OUTPUT, uri)
             .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -290,25 +294,25 @@ private fun FileChooserHost(tab: Tab) {
             camera.launch(intent)
         } catch (_: ActivityNotFoundException) {
             capture = null
-            tab.answerFileChooser(null)
+            answer(null)
         }
     }
     // The app holds the camera permission for sites, so Android lets the camera app take a photo
     // for it only once that permission is granted.
-    var cameraWanted by remember(tab) { mutableStateOf<Capture?>(null) }
+    var cameraWanted by remember { mutableStateOf<Capture?>(null) }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val kind = cameraWanted
         cameraWanted = null
-        if (granted && kind != null) startCamera(kind) else tab.answerFileChooser(null)
+        if (granted && kind != null) startCamera(kind) else answer(null)
     }
     val choose: (Capture?) -> Unit = choose@{ kind ->
         val current = ask ?: return@choose
-        started = current
+        started = tab to current
         when {
             kind == null -> try {
                 picker.launch(pickerIntent(current))
             } catch (_: ActivityNotFoundException) {
-                tab.answerFileChooser(null)
+                answer(null)
             }
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> startCamera(kind)
             else -> {
@@ -317,7 +321,7 @@ private fun FileChooserHost(tab: Tab) {
             }
         }
     }
-    if (ask == null || started == ask) return
+    if (ask == null || started?.second == ask) return
     val types = remember(ask) { fileTypes(ask) }
     if (!types.takesImages && !types.takesVideos) {
         LaunchedEffect(ask) { choose(null) }
