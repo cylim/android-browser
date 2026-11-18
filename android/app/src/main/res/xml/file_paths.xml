@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the photos and videos the camera app makes for a page's file field (SPEC, "File upload"). -->
+<paths>
+    <cache-path name="captures" path="captures/" />
+</paths>

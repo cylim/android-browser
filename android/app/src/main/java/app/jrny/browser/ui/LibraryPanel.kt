@@ -60,7 +60,7 @@ import kotlinx.coroutines.delay
  * What takes the page's place: the Active Profile's history, bookmarks or downloads, the app's
  * settings, or the Site Rules, which are reached from the settings.
  */
-enum class Panel { History, Bookmarks, Downloads, Settings, SiteRules }
+enum class Panel { History, Bookmarks, Downloads, Settings, SiteRules, SiteSettings }
 
 /** The Active Profile's history, bookmarks and downloads, and what can be done with them. */
 class LibraryUi(
@@ -115,6 +115,7 @@ fun LibraryPanel(
         Panel.Downloads -> R.string.downloads
         Panel.Settings -> R.string.settings
         Panel.SiteRules -> R.string.site_rules
+        Panel.SiteSettings -> R.string.site_settings
     }
     PanelFrame(
         tag = "panel-${panel.name}",
@@ -184,7 +185,7 @@ fun LibraryPanel(
                     }
                     Panel.Downloads -> DownloadList(library, contentPadding)
                     // These have their own panels (SettingsPanel, SiteRulesPanel).
-                    Panel.Settings, Panel.SiteRules -> Unit
+                    Panel.Settings, Panel.SiteRules, Panel.SiteSettings -> Unit
                 }
     }
 

@@ -15,6 +15,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -91,6 +92,9 @@ abstract class ProfileDao {
     @Query("DELETE FROM folders WHERE profileId = :id")
     protected abstract suspend fun deleteFolders(id: Long)
 
+    @Query("DELETE FROM site_settings WHERE profileId = :id")
+    protected abstract suspend fun deleteSiteSettings(id: Long)
+
     @Query("DELETE FROM profiles WHERE id = :id AND pendingDeletion = 1")
     abstract suspend fun purge(id: Long)
 
@@ -106,7 +110,7 @@ abstract class ProfileDao {
      * Marks [id] for deletion unless it's the last live Profile, and removes its Tabs, history,
      * bookmarks, Folders and list of downloads at once, so no address from it outlives it on disk. The
      * downloaded files are the person's own and stay. The Site Rules that sent links to it go
-     * too: those links open in the Active Profile again. Returns whether it did.
+     * too: those links open in the Active Profile again, and so do its Site settings. Returns whether it did.
      */
     @Transaction
     open suspend fun markPendingUnlessLast(id: Long): Boolean {
@@ -118,6 +122,7 @@ abstract class ProfileDao {
         deleteFolders(id)
         deleteDownloads(id)
         deleteSiteRules(id)
+        deleteSiteSettings(id)
         return true
     }
 }
@@ -695,12 +700,59 @@ abstract class SiteRuleDao {
     }
 }
 
+/**
+ * One row per thing a Profile remembers about a site (SPEC, "Site permissions and Site
+ * settings"): [setting] is a `SiteSetting` key, and [enabled] says allowed (or desktop version
+ * on) or blocked. A setting without a row is unset.
+ */
+@Entity(
+    tableName = "site_settings",
+    primaryKeys = ["profileId", "origin", "setting"],
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+)
+data class SiteSettingEntity(
+    val profileId: Long,
+    val origin: String,
+    val setting: String,
+    val enabled: Boolean,
+)
+
+@Dao
+abstract class SiteSettingDao {
+    /** A Profile's settings, by site in alphabetical order. */
+    @Query("SELECT * FROM site_settings WHERE profileId = :profileId ORDER BY origin, setting")
+    abstract fun observe(profileId: Long): Flow<List<SiteSettingEntity>>
+
+    @Query("SELECT enabled FROM site_settings WHERE profileId = :profileId AND origin = :origin AND setting = :setting")
+    abstract suspend fun get(profileId: Long, origin: String, setting: String): Boolean?
+
+    @Upsert
+    protected abstract suspend fun upsertRow(row: SiteSettingEntity)
+
+    @Query("DELETE FROM site_settings WHERE profileId = :profileId AND origin = :origin AND setting = :setting")
+    abstract suspend fun delete(profileId: Long, origin: String, setting: String)
+
+    @Query("DELETE FROM site_settings WHERE profileId = :profileId")
+    abstract suspend fun deleteAll(profileId: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
+    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
+
+    /** Keeps [row], replacing what the site had for that setting. Nothing is kept for a deleted Profile. */
+    @Transaction
+    open suspend fun set(row: SiteSettingEntity) {
+        if (profileIsLive(row.profileId)) upsertRow(row)
+    }
+}
+
 @Database(
     entities = [
         ProfileEntity::class, TabEntity::class, HistoryEntity::class, BookmarkEntity::class, DownloadEntity::class,
-        SiteRuleEntity::class, FolderEntity::class,
+        SiteRuleEntity::class, FolderEntity::class, SiteSettingEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -709,6 +761,7 @@ abstract class SiteRuleDao {
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8),
     ],
 )
 abstract class JrnyDatabase : RoomDatabase() {
@@ -718,6 +771,7 @@ abstract class JrnyDatabase : RoomDatabase() {
     abstract fun bookmarks(): BookmarkDao
     abstract fun downloads(): DownloadDao
     abstract fun siteRules(): SiteRuleDao
+    abstract fun siteSettings(): SiteSettingDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

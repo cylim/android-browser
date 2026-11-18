@@ -44,7 +44,7 @@ Source: <https://support.google.com/googleplay/android-developer/answer/10144311
 
 ### 5. Check the final build's merged manifest
 
-A local release build on 2026-11-17 (`android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml`) has two permissions: `android.permission.INTERNET` and the `app.jrny.browser.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` that AndroidX adds. It has no `com.google.android.gms.permission.AD_ID`. Check the merged manifest of the bundle you upload again, because a new dependency can add permissions.
+A local release build on 2026-11-17 (`android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml`) has two permissions: `android.permission.INTERNET` and the `app.jrny.browser.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` that AndroidX adds. Since the web capabilities change, the manifest also asks for `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION`, which pages get only after the person allows them (SPEC, "Site permissions and Site settings"). It has no `com.google.android.gms.permission.AD_ID`. Check the merged manifest of the bundle you upload again, because a new dependency can add permissions.
 
 ## Decisions for the owner
 
@@ -112,12 +112,12 @@ Answer **No**, or leave it unanswered. Okapi has had no independent security rev
 
 | Data type | Declare | Why | Evidence |
 | --- | --- | --- | --- |
-| Location: approximate, precise | No | The app requests no location permission, so pages can't get a location through it | `AndroidManifest.xml` (only `INTERNET`) |
+| Location: approximate, precise | No | Okapi holds the location permissions only to pass a location to a site the person allowed, while they browse it: open-web browsing, under the open-web exemption. Okapi never reads, keeps or sends a location itself. | `tab/Tab.kt` (`onGeolocationPermissionsShowPrompt`), `ui/PageAsks.kt` |
 | Personal info: name, email, user IDs, address, phone, race, political or religious beliefs, sexual orientation, other | No | No account and no forms of its own. What people type into sites is open-web browsing. Profile names stay on the device. | `profile/ProfileRepository.kt` (Room, on device) |
 | Financial info | No | No purchases or payments | No billing library in `android/app/build.gradle.kts` |
 | Health and fitness | No | None handled | |
 | Messages: emails, SMS, other in-app messages | No | None handled | |
-| Photos and videos, Audio | No | No media or storage permission, and no file chooser for uploads | `AndroidManifest.xml`. No `onShowFileChooser` in `tab/Tab.kt`. |
+| Photos and videos, Audio | No | The camera and microphone reach only a site the person allowed, and a file only the site whose file field the person chose it for: open-web browsing. A photo or video the camera app takes for a file field stays in the app's cache until the next start. Nothing goes to us. No media or storage permission. | `tab/Tab.kt` (`onPermissionRequest`, `onShowFileChooser`), `ui/PageAsks.kt` |
 | Files and docs | No | Downloads are files the person asked a site for. Android's download service fetches them from that site to the device's Downloads folder. Nothing goes to us or to a third party. | `download/SystemDownloader.kt:19-31`, `download/DownloadRedirects.kt` |
 | Calendar, Contacts | No | No permission, none handled | `AndroidManifest.xml` |
 | App activity: App interactions | No | No analytics, and WebView's usage statistics, which include feature use, are turned off ([Blocker 1](#1-turn-off-webview-usage-statistics)). | [ADR 0002](../adr/0002-no-proprietary-dependencies-or-telemetry.md) |

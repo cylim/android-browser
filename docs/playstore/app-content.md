@@ -31,7 +31,7 @@ Two answers below, and the store listing, depend on these fixes. Both are in the
 | COVID-19 contact tracing and status apps | Not a COVID-19 contact tracing or status app | Confirm in Play Console |
 | Data deletion and accounts | No account creation. No deletion URL | Verified |
 | Advertising ID | Doesn't use the advertising ID | Verified |
-| Sensitive permissions | No declaration. The only requested system permission is `INTERNET` | Verified |
+| Sensitive permissions | No declaration today. Besides `INTERNET`, Okapi requests `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` for sites the person allows. `ACCESS_FINE_LOCATION` needs a declaration for API 37 apps from 27 January 2027 | Check before release |
 | Foreground services | No declaration. No foreground service | Verified |
 | Default browser role | No declaration exists for it | Verified |
 
@@ -75,7 +75,7 @@ Google's help page doesn't print the questions, and IARC can reword them. The ta
 | Gambling, simulated or real | No | Okapi has no games and no betting. |
 | Hate speech or discriminatory content | No | Same. |
 | Users interact or exchange content with each other in the app | No | Okapi has no chat, comments, accounts or server. Nothing one person does in Okapi reaches another Okapi user. |
-| The app shares the user's location with other users | No | Okapi doesn't request a location permission. |
+| The app shares the user's location with other users | No | Okapi passes a location only to a site the person allowed. No other Okapi user ever gets it. |
 | Digital purchases | No | Okapi sells nothing. Purchases on websites happen on the open web. |
 | Unrestricted internet access, for example a web browser | **Yes** | Okapi is a general-purpose browser. It opens any `http` or `https` address and has no content filter. |
 
@@ -197,18 +197,18 @@ If the output names `AD_ID`, find the dependency that adds it before you answer.
 
 ## Sensitive permissions
 
-**Answer:** No permission declaration applies. Play Console shows these forms only for restricted permissions, and Okapi requests none.
+**Answer:** No permission declaration applies today. Play Console shows these forms only for restricted permissions, and Okapi requests none. From 27 January 2027, `ACCESS_FINE_LOCATION` needs one (see below).
 
-**Why:** Play's declaration forms cover SMS and Call Log, `QUERY_ALL_PACKAGES`, background location, `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO`, `MANAGE_EXTERNAL_STORAGE`, Accessibility services, `REQUEST_INSTALL_PACKAGES`, `USE_EXACT_ALARM`, `USE_FULL_SCREEN_INTENT` and Health Connect. Okapi requests only `INTERNET`, which is a normal permission and isn't on the list. The AndroidX permission above is Okapi's own signature permission and isn't on it either.
+**Why:** Play's declaration forms cover SMS and Call Log, `QUERY_ALL_PACKAGES`, background location, `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO`, `MANAGE_EXTERNAL_STORAGE`, Accessibility services, `REQUEST_INSTALL_PACKAGES`, `USE_EXACT_ALARM`, `USE_FULL_SCREEN_INTENT` and Health Connect. Okapi requests `INTERNET` and `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION`. None of them is on the list: the location permissions are foreground only, with no `ACCESS_BACKGROUND_LOCATION`. The AndroidX permission above is Okapi's own signature permission and isn't on it either.
 
-Okapi doesn't request location, camera, microphone, storage or notification permissions. Web pages can't get location, camera or microphone access through Okapi, because the app doesn't hold those permissions. Downloads don't need a storage permission, because Android's DownloadManager saves them to the Downloads folder.
+Okapi holds the camera, microphone and location permissions only for sites. A site gets them only after the person allows that site in that Profile, and Android asks for its own permission the first time a site needs it, never before (SPEC, "Site permissions and Site settings"). Okapi doesn't request storage or notification permissions. Downloads don't need a storage permission, because Android's DownloadManager saves them to the Downloads folder.
 
 **Coming for apps that target API 37:** Okapi targets API 37, and Play's permissions policy announces two declarations for such apps:
 
 - `ACCESS_FINE_LOCATION` needs a declaration from 27 January 2027.
 - The Local Network permission needs a declaration from 25 August 2027, and only for core functionality where device pickers aren't enough.
 
-Okapi requests neither today. `android/app/src/main/res/xml/network_security_config.xml` allows `http` pages so people can reach a router, a NAS or an intranet site. If Android 17 requires the Local Network permission for those pages, adding it brings in the declaration. The policy page doesn't name the permission constant or say whether browsers get an exception. Check again before release.
+Okapi requests `ACCESS_FINE_LOCATION`, so its declaration applies: sites such as maps ask for a precise location, and the person can choose approximate in Android's dialog. Okapi doesn't request the Local Network permission today. `android/app/src/main/res/xml/network_security_config.xml` allows `http` pages so people can reach a router, a NAS or an intranet site. If Android 17 requires the Local Network permission for those pages, adding it brings in the declaration. The policy page doesn't name the permission constant or say whether browsers get an exception. Check again before release.
 
 **Label:** Verified for today's manifest. The API 37 items are announcements.
 

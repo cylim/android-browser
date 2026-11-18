@@ -59,6 +59,11 @@ fun SettingsPanel(
     /** How many Site Rules there are, shown on the row that leads to them. */
     siteRules: Int = 0,
     onSiteRules: () -> Unit = {},
+    /** The Active Profile, whose Site settings the row that leads to them names. */
+    profileName: String = "",
+    /** How many sites the Active Profile has Site settings for. */
+    sites: Int = 0,
+    onSiteSettings: () -> Unit = {},
 ) {
     val settings = ui.settings
     PanelFrame(
@@ -91,6 +96,15 @@ fun SettingsPanel(
                 value = if (siteRules == 0) stringResource(R.string.site_rules_none) else pluralStringResource(R.plurals.site_rule_count, siteRules, siteRules),
                 tag = "setting-site-rules",
                 onClick = onSiteRules,
+            )
+
+            Section(R.string.sites)
+            Link(
+                title = R.string.site_settings,
+                explanation = stringResource(R.string.site_settings_explanation, profileName),
+                value = if (sites == 0) stringResource(R.string.site_settings_none) else pluralStringResource(R.plurals.site_count, sites, sites),
+                tag = "setting-site-settings",
+                onClick = onSiteSettings,
             )
 
             Section(R.string.safety)

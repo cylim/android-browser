@@ -158,7 +158,7 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 
 - A page's file field opens Android's file picker. The picker shows the kinds of file the page accepts, and allows several files if the page does.
 - When the page accepts images or video, the picker also offers "Take photo" or "Record video", which open the camera app. With `capture` set, the page still gets the choice, not the camera straight away.
-- A file the camera app makes is kept in the app's cache only until it is handed to the page.
+- A photo or video the camera app makes is kept in the app's cache, where the page can read it, and removed the next time the app starts.
 
 ### Fullscreen video
 

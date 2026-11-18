@@ -148,6 +148,23 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun version8AddsSiteSettingsAndKeepsProfiles() {
+        helper.createDatabase(DB, 7).use { db ->
+            db.execSQL("INSERT INTO profiles (id, name, color, icon, activation, pendingDeletion, tint) VALUES (1, 'Personal', 'Blue', 'Person', 1, 0, 'Medium')")
+        }
+        helper.runMigrationsAndValidate(DB, 8, true).use { db ->
+            db.query("SELECT name FROM profiles").use { rows ->
+                rows.moveToFirst()
+                assertEquals("Personal", rows.getString(0))
+            }
+            db.query("SELECT COUNT(*) FROM site_settings").use { rows ->
+                rows.moveToFirst()
+                assertEquals(0, rows.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }
