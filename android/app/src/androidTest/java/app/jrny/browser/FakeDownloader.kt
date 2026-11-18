@@ -40,9 +40,9 @@ class FakeDownloader : Downloader {
     /** Files saved as a page's own, by their address. */
     val saved = java.util.concurrent.ConcurrentHashMap<String, Pair<String, ByteArray>>()
 
-    override fun save(fileName: String, mimeType: String, bytes: ByteArray): String {
+    override fun save(fileName: String, mimeType: String, file: java.io.File): String {
         val address = "content://test/${saved.size + 1}/$fileName"
-        saved[address] = mimeType to bytes
+        saved[address] = mimeType to file.readBytes()
         return address
     }
 

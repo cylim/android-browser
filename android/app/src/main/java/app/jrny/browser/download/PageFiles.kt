@@ -2,6 +2,7 @@ package app.jrny.browser.download
 
 import kotlinx.coroutines.delay
 import org.json.JSONArray
+import java.io.OutputStream
 import java.util.Base64
 import java.util.UUID
 
@@ -41,10 +42,17 @@ object PageFiles {
 
     /**
      * Reads the page's copy under [name] out of the page with [evaluate], which runs a script in
-     * the page and gives its result as JSON. Returns the file, or null when the copy is gone (the
-     * page left, or never could read its file) or took too long.
+     * the page and gives its result as JSON, and writes it to [into] piece by piece, so a large
+     * file never sits whole in the app's memory. [write] runs each write, off the main thread.
+     * Returns false when the copy is gone (the page left, or never could read its file) or took
+     * too long.
      */
-    suspend fun read(name: String, evaluate: suspend (String) -> String?): ByteArray? {
+    suspend fun read(
+        name: String,
+        evaluate: suspend (String) -> String?,
+        into: OutputStream,
+        write: suspend (() -> Unit) -> Unit = { it() },
+    ): Boolean {
         try {
             var waited = 0L
             var length: Int
@@ -56,28 +64,29 @@ object PageFiles {
                         "if(b&&s===undefined){window[k+'_b']=null;var r=new FileReader();" +
                         "r.onload=function(){var t=r.result;window[k+'_b']=t.substring(t.indexOf(',')+1)};" +
                         "r.onerror=function(){window[k+'_b']=false};r.readAsDataURL(b)}return -2})('$name')",
-                )?.trim()?.toIntOrNull() ?: return null
-                if (state == -1) return null
+                )?.trim()?.toIntOrNull() ?: return false
+                if (state == -1) return false
                 if (state >= 0) {
                     length = state
                     break
                 }
-                if (waited >= MAX_WAIT_MS) return null
+                if (waited >= MAX_WAIT_MS) return false
                 delay(POLL_MS)
                 waited += POLL_MS
             }
-            val text = StringBuilder(length)
             var at = 0
             while (at < length) {
-                val piece = evaluate("window['${name}_b'].substr($at,$PIECE)") ?: return null
-                val decoded = JSONArray("[$piece]").getString(0)
-                if (decoded.isEmpty()) return null
-                text.append(decoded)
-                at += decoded.length
+                // A piece is a whole number of base64 groups, so it decodes on its own.
+                val piece = evaluate("window['${name}_b'].substr($at,$PIECE)") ?: return false
+                val text = JSONArray("[$piece]").getString(0)
+                if (text.isEmpty()) return false
+                val bytes = Base64.getDecoder().decode(text)
+                write { into.write(bytes) }
+                at += text.length
             }
-            return Base64.getDecoder().decode(text.toString())
+            return true
         } catch (_: Exception) {
-            return null
+            return false
         } finally {
             evaluate(drop(name))
         }

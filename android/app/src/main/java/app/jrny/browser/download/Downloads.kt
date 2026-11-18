@@ -122,10 +122,10 @@ interface Downloader {
     fun cancel(downloadId: Long)
 
     /**
-     * Saves [bytes], a file a page made itself, as a finished file named [fileName] in the
-     * Downloads folder. Returns the file's address, or null when it couldn't be saved.
+     * Saves [file], a file a page made itself, as a finished file named [fileName] in the
+     * Downloads folder. Returns the saved file's address, or null when it couldn't be saved.
      */
-    fun save(fileName: String, mimeType: String, bytes: ByteArray): String? = null
+    fun save(fileName: String, mimeType: String, file: java.io.File): String? = null
 
     /** Where a file [save] made stands: done, or gone when it was removed. */
     fun savedStatus(fileUri: String): DownloadStatus = DownloadStatus.Gone

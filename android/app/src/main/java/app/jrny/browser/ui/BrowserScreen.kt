@@ -391,7 +391,16 @@ fun BrowserWindow(
                             appName = remember(handoff) { handoff.appName(context) },
                             canOpen = handoff.openable,
                             onOpen = {
-                                if (handoff.open(context)) tab.dismissHandoff() else tab.offerHandoff(handoff.unopenable())
+                                val fallback = handoff.fallback
+                                when {
+                                    handoff.open(context) -> tab.dismissHandoff()
+                                    // No app took it: the link's own web page instead, when it names one.
+                                    fallback != null -> {
+                                        tab.dismissHandoff()
+                                        tab.load(fallback)
+                                    }
+                                    else -> tab.offerHandoff(handoff.unopenable())
+                                }
                             },
                             onDismiss = tab::dismissHandoff,
                         )
