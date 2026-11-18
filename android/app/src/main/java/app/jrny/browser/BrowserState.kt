@@ -221,8 +221,11 @@ class BrowserState(
     private fun reopen(closed: ClosedTab, atEnd: Boolean) {
         val choice = ++tabChoices
         scope.launch {
+            // The Tab is written first: if the app is killed in between, the worst left behind is
+            // a Recently closed row for a Tab that is open again, never a Tab lost from both.
+            tabRepository.reopen(closed, atEnd) ?: return@launch
             closedTabRepository.remove(closed)
-            if (tabRepository.reopen(closed, atEnd) != null && choice == tabChoices) privateTabs.select(closed.profileId, null)
+            if (choice == tabChoices) privateTabs.select(closed.profileId, null)
         }
     }
 
