@@ -295,7 +295,14 @@ class BrowserState(
                 live.values.forEach { it.tab.darkPages = dark }
             }
         }
-        scope.launch { siteSettingsRepository.desktopSites().collect { desktopSites = it } }
+        // Every change reaches the open pages, the first one too: at start, a page can be restored
+        // before the Profile's desktop sites have been read.
+        scope.launch {
+            siteSettingsRepository.desktopSites().collect { sites ->
+                desktopSites = sites
+                live.values.filter { !it.saved.isPrivate }.forEach { it.tab.desktopChoicesChanged() }
+            }
+        }
     }
 
     /**
@@ -304,8 +311,11 @@ class BrowserState(
      */
     fun setDesktopSite(tab: SavedTab, live: Tab, on: Boolean) {
         val origin = SiteOrigin.of(live.url) ?: return
-        live.setDesktopSite(origin, on)
-        if (tab.isPrivate) return
+        if (tab.isPrivate) return live.setDesktopSite(origin, on)
+        // Known at once, so the page loads again with it before the database has written it.
+        val sites = desktopSites[tab.profileId].orEmpty()
+        desktopSites = desktopSites + (tab.profileId to if (on) sites + origin else sites - origin)
+        this.live.values.filter { it.saved.profileId == tab.profileId && !it.saved.isPrivate }.forEach { it.tab.desktopChoicesChanged() }
         scope.launch {
             if (on) siteSettingsRepository.set(tab.profileId, origin, SiteSetting.DesktopSite, true) else siteSettingsRepository.reset(tab.profileId, origin, SiteSetting.DesktopSite)
         }

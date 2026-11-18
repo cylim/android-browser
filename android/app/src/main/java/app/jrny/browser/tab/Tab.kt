@@ -105,7 +105,7 @@ class Tab(
             rebuildWebView()
         }
 
-    /** The Desktop site choices made in this Tab: a Private Tab keeps them only here. */
+    /** The Desktop site choices a Private Tab made: it keeps them only here. A normal Tab follows its Profile's. */
     private val desktopHere = mutableMapOf<SiteOrigin, Boolean>()
 
     /** True while the Tab asks the shown page's site for its desktop version. */
@@ -113,15 +113,25 @@ class Tab(
         private set
 
     /**
-     * Asks [origin] for its desktop version, or its mobile one, from now on in this Tab, and
-     * loads the page again if it is on that site. The owner keeps the choice for the Profile.
+     * Asks [origin] for its desktop version, or its mobile one, from now on in this Tab only: a
+     * Private Tab's choice (SPEC, "Desktop site"). A normal Tab follows its Profile's choices,
+     * which the owner keeps, and hears of them through [desktopChoicesChanged].
      */
     fun setDesktopSite(origin: SiteOrigin, on: Boolean) {
         desktopHere[origin] = on
+        desktopChoicesChanged()
+    }
+
+    /**
+     * The site's choice may have changed (it was set, reset, or has just been read at start): the
+     * page loads again with the agent its site wants now, if that isn't the one it was loaded with.
+     */
+    fun desktopChoicesChanged() {
         val shown = url ?: return
-        if (SiteOrigin.of(shown) != origin) return
-        applyUserAgent(webView, on)
-        webView.reload()
+        val desktop = wantsDesktop(SiteOrigin.of(shown))
+        if (desktop == desktopSite && UserAgents.isDesktop(webView.settings.userAgentString) == desktop) return
+        applyUserAgent(webView, desktop)
+        if (!crashed) webView.reload()
     }
 
     private fun wantsDesktop(origin: SiteOrigin?): Boolean = origin != null && (desktopHere[origin] ?: desktopFor(origin))
