@@ -1185,12 +1185,36 @@ class BrowserStateTest {
 
             onMain { browser.closeTab(first.id) }
             await("undo offered") { browser.justClosed?.tabId == first.id }
-            await("listed") { browser.recentlyClosed.value.size == 1 }
+            await("listed") { browser.recentlyClosed.value?.second.orEmpty().size == 1 }
             onMain { browser.undoClose() }
             await("back in its place") { browser.active.value?.tabs?.firstOrNull()?.id == first.id }
             assertEquals(first.id, active(browser).selected.id)
             assertEquals(server.url("/first"), active(browser).selected.url)
-            await("off the list") { browser.recentlyClosed.value.isEmpty() }
+            await("off the list") { browser.recentlyClosed.value?.second.orEmpty().isEmpty() }
+        }
+    }
+
+    @Test
+    fun aClosedTabReopenedFromTheListCantBeReopenedAgainWithUndo() {
+        TestServer(mapOf("/page" to "<title>page</title>")).use { server ->
+            val browser = newBrowser()
+            val profile = active(browser).profile
+            val first = active(browser).selected
+            load(show(browser, first.id), server.url("/page"), "page")
+            onMain { browser.openTab(profile) }
+            await("second tab") { browser.active.value?.tabs?.size == 2 }
+            show(browser, active(browser).selected.id)
+            awaitSaved(browser, first.id, server.url("/page"), "page")
+
+            onMain { browser.closeTab(first.id) }
+            await("listed") { browser.recentlyClosed.value?.second.orEmpty().size == 1 }
+            val closed = onMain { browser.recentlyClosed.value!!.second.single() }
+            onMain { browser.reopenClosed(closed) }
+            await("reopened") { browser.active.value?.tabs?.count { it.url == server.url("/page") } == 1 }
+            await("no undo left") { browser.justClosed == null }
+            onMain { browser.undoClose() }
+            Thread.sleep(500)
+            assertEquals(1, onMain { browser.active.value!!.tabs.count { it.url == server.url("/page") } })
         }
     }
 
@@ -1207,7 +1231,7 @@ class BrowserStateTest {
         onMain { browser.closeTab(privateId) }
         Thread.sleep(500)
         assertEquals(null, onMain { browser.justClosed })
-        assertTrue(onMain { browser.recentlyClosed.value.isEmpty() })
+        assertTrue(onMain { browser.recentlyClosed.value?.second.orEmpty().isEmpty() })
     }
 
     @Test

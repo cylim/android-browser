@@ -33,6 +33,9 @@ class ShortcutRepository(private val dao: ShortcutDao, private val now: () -> Lo
     suspend fun find(id: String): HomeShortcut? =
         dao.get(id)?.let { HomeShortcut(it.id, ProfileId(it.profileId.toString()), it.url, it.title) }
 
+    /** Forgets [shortcut], whose pin request never reached the launcher. */
+    suspend fun remove(shortcut: HomeShortcut) = dao.delete(shortcut.id)
+
     /** The ids of [profile]'s shortcuts, to disable when it is deleted. */
     suspend fun idsOf(profile: ProfileId): List<String> = dao.idsOf(profile.value.toLong())
 }
@@ -61,7 +64,12 @@ object HomeShortcuts {
             .setIcon(IconCompat.createWithAdaptiveBitmap(icon(siteIcon, siteLetter, siteColor, profileColor, profileMark)))
             .setIntent(intent)
             .build()
-        return ShortcutManagerCompat.requestPinShortcut(context, info, null)
+        // Android refuses (throws) when the app has just left the foreground.
+        return try {
+            ShortcutManagerCompat.requestPinShortcut(context, info, null)
+        } catch (_: IllegalStateException) {
+            false
+        }
     }
 
     /** Stops [ids] from opening anything, after their Profile was deleted: the launcher says [message] instead. */

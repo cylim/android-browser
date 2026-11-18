@@ -76,9 +76,11 @@ fun SettingsPanel(
     /** How many sites the Active Profile has Site settings for. */
     sites: Int = 0,
     onSiteSettings: () -> Unit = {},
+    /** The Active Profile's id: Clear browsing data's dialog belongs to it, and closes if it changes. */
+    profileId: String = "",
 ) {
     val settings = ui.settings
-    var clearing by remember { mutableStateOf(false) }
+    var clearing by remember(profileId) { mutableStateOf(false) }
     if (clearing) {
         ClearBrowsingDataDialog(
             profileName,

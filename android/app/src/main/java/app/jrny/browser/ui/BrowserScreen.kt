@@ -140,7 +140,8 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
         removeDownload = browser::removeDownload,
-        recentlyClosed = browser.recentlyClosed.collectAsState().value,
+        // Only the Active Profile's own list; none while it is still being read.
+        recentlyClosed = browser.recentlyClosed.collectAsState().value?.takeIf { it.first == profile.id }?.second.orEmpty(),
         reopenClosed = browser::reopenClosed,
     )
 
@@ -419,11 +420,7 @@ fun BrowserWindow(
                             onDismiss = tab::dismissHandoff,
                         )
                     } else if (closed != null) {
-                        // A note with an action: it goes by itself after a while.
-                        LaunchedEffect(closed) {
-                            delay(JUST_CLOSED_MS)
-                            links.dismissJustClosed()
-                        }
+                        // It goes by itself after a while (BrowserState).
                         JustClosedPrompt(closed.title, onUndo = links.undoClose, onDismiss = links.dismissJustClosed)
                     } else if (behind != null) {
                         // A note, not a question: it goes by itself.
@@ -499,6 +496,7 @@ fun BrowserWindow(
                         if (open == Panel.Settings) {
                             SettingsPanel(
                                 settings,
+                                profileId = profiles.active.id.value,
                                 onClose = { panel = null },
                                 contentPadding = padding,
                                 siteRules = siteRules.rules.size,
@@ -612,9 +610,6 @@ fun BrowserWindow(
         )
     }
 }
-
-/** How long "Undo" for a closed Tab stays before it goes by itself. */
-private const val JUST_CLOSED_MS = 6_000L
 
 /** How long "Opened in a new Tab" stays before it goes by itself. */
 private const val OPENED_BEHIND_MS = 4_000L

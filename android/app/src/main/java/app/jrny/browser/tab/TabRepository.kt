@@ -26,13 +26,20 @@ class TabRepository(private val dao: TabDao) {
     /** Opens [url] as a new Tab in [profile] and selects it. Returns null, and opens nothing, when the Profile is gone. */
     suspend fun openUrl(profile: ProfileId, url: String): TabId? = dao.openInLive(profile.toLong(), url)?.let(::TabId)
 
-    /** Opens [closed] again in its old place, or at the end with [atEnd], and selects it. Null when its Profile is gone. */
-    suspend fun reopen(closed: ClosedTab, atEnd: Boolean): TabId? {
-        val profile = closed.profileId.value.toLong()
-        val id = if (atEnd) dao.openInLive(profile, closed.url) else dao.reopen(profile, closed.tabId.value, closed.url, closed.title)
-        if (atEnd && id != null) dao.savePage(id, closed.url, closed.title)
-        return id?.let(::TabId)
-    }
+    /**
+     * Closes [id] and puts it on its Profile's Recently closed list, showing [url] titled [title],
+     * in one step. Returns it as closed, or null when the Tab or its Profile is gone.
+     */
+    suspend fun closeRemembering(id: TabId, url: String, title: String, now: Long = System.currentTimeMillis()): ClosedTab? =
+        dao.closeRemembering(id.value, url, title, now)?.let {
+            ClosedTab(it.id, ProfileId(it.profileId.toString()), TabId(it.tabId), it.url, it.title)
+        }
+
+    /**
+     * Opens [closed] again, in its old place or at the end with [atEnd], selects it, and takes it
+     * off the list, in one step. Null when it was already reopened or cleared, or its Profile is gone.
+     */
+    suspend fun reopen(closed: ClosedTab, atEnd: Boolean): TabId? = dao.reopenClosed(closed.id, atEnd)?.let(::TabId)
 
     /** Opens [url] as a new Tab at the end of [profile]'s list, leaving the shown Tab shown. Null when the Profile is gone. */
     suspend fun openBehind(profile: ProfileId, url: String): TabId? = dao.openBehind(profile.toLong(), url)?.let(::TabId)

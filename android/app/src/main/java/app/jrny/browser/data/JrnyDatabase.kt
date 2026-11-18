@@ -251,16 +251,51 @@ abstract class TabDao {
     @Query("SELECT EXISTS(SELECT 1 FROM tabs WHERE id = :id)")
     protected abstract suspend fun exists(id: Long): Boolean
 
+    @Insert
+    protected abstract suspend fun insertClosed(row: ClosedTabEntity): Long
+
+    @Query("SELECT * FROM closed_tabs WHERE id = :id")
+    protected abstract suspend fun closedRow(id: Long): ClosedTabEntity?
+
+    @Query("DELETE FROM closed_tabs WHERE id = :id")
+    protected abstract suspend fun deleteClosed(id: Long)
+
+    /** Keeps only [profileId]'s latest [keep] closed Tabs, by the order they were added. */
+    @Query(
+        "DELETE FROM closed_tabs WHERE profileId = :profileId AND id NOT IN " +
+            "(SELECT id FROM closed_tabs WHERE profileId = :profileId ORDER BY id DESC LIMIT :keep)",
+    )
+    protected abstract suspend fun trimClosed(profileId: Long, keep: Int)
+
     /**
-     * Opens [url] again as the Tab [id] in [profileId] and selects it: back in its old place in
-     * the list, which is ordered by id. If that id has been taken, it opens at the end. Returns the
-     * Tab's id, or null when the Profile is gone.
+     * Closes [id] and remembers it as closed, showing [url] titled [title], in one step: after a
+     * kill the Tab is either still open or on the Recently closed list, never both or neither.
+     * Returns the closed row, or null when the Tab or its Profile is gone (it still closes).
      */
     @Transaction
-    open suspend fun reopen(profileId: Long, id: Long, url: String, title: String): Long? {
-        if (!profileIsLive(profileId)) return null
-        val row = TabEntity(profileId = profileId, url = url, title = title, lastUsed = maxLastUsed() + 1)
-        return insertRow(if (exists(id)) row else row.copy(id = id))
+    open suspend fun closeRemembering(id: Long, url: String, title: String, closedAt: Long): ClosedTabEntity? {
+        val row = get(id) ?: return null
+        close(id)
+        if (!profileIsLive(row.profileId)) return null
+        val closed = ClosedTabEntity(profileId = row.profileId, tabId = id, url = url, title = title, closedAt = closedAt)
+        val closedId = insertClosed(closed)
+        trimClosed(row.profileId, ClosedTabDao.KEEP)
+        return closed.copy(id = closedId)
+    }
+
+    /**
+     * Opens the closed Tab [closedId] again and takes it off the list, in one step: in its old
+     * place when [atEnd] is false and that id is free, else at the end. Returns the Tab's id, or
+     * null when the row is gone (already reopened or cleared) or its Profile is.
+     */
+    @Transaction
+    open suspend fun reopenClosed(closedId: Long, atEnd: Boolean): Long? {
+        val closed = closedRow(closedId) ?: return null
+        if (!profileIsLive(closed.profileId)) return null
+        val row = TabEntity(profileId = closed.profileId, url = closed.url, title = closed.title, lastUsed = maxLastUsed() + 1)
+        val id = insertRow(if (atEnd || exists(closed.tabId)) row else row.copy(id = closed.tabId))
+        deleteClosed(closedId)
+        return id
     }
 
     /** Opens a Tab at the end of [profileId]'s list, selects it, and returns its id. */
@@ -810,38 +845,14 @@ data class ClosedTabEntity(
 @Dao
 abstract class ClosedTabDao {
     /** A Profile's recently closed Tabs, newest first. */
-    @Query("SELECT * FROM closed_tabs WHERE profileId = :profileId ORDER BY closedAt DESC, id DESC")
+    @Query("SELECT * FROM closed_tabs WHERE profileId = :profileId ORDER BY id DESC")
     abstract fun observe(profileId: Long): Flow<List<ClosedTabEntity>>
-
-    @Query("SELECT * FROM closed_tabs WHERE id = :id")
-    abstract suspend fun get(id: Long): ClosedTabEntity?
-
-    @Insert
-    protected abstract suspend fun insertRow(row: ClosedTabEntity): Long
-
-    @Query(
-        "DELETE FROM closed_tabs WHERE profileId = :profileId AND id NOT IN " +
-            "(SELECT id FROM closed_tabs WHERE profileId = :profileId ORDER BY closedAt DESC, id DESC LIMIT :keep)",
-    )
-    protected abstract suspend fun trim(profileId: Long, keep: Int)
 
     @Query("DELETE FROM closed_tabs WHERE id = :id")
     abstract suspend fun delete(id: Long)
 
     @Query("DELETE FROM closed_tabs WHERE profileId = :profileId")
     abstract suspend fun clear(profileId: Long)
-
-    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId AND pendingDeletion = 0)")
-    protected abstract suspend fun profileIsLive(profileId: Long): Boolean
-
-    /** Keeps [row] at the top of its Profile's list, and drops what falls past [KEEP]. Returns its id, or null when the Profile is gone. */
-    @Transaction
-    open suspend fun add(row: ClosedTabEntity): Long? {
-        if (!profileIsLive(row.profileId)) return null
-        val id = insertRow(row)
-        trim(row.profileId, KEEP)
-        return id
-    }
 
     companion object {
         const val KEEP = 10
@@ -872,6 +883,9 @@ data class ShortcutEntity(
 abstract class ShortcutDao {
     @Query("SELECT * FROM shortcuts WHERE id = :id")
     abstract suspend fun get(id: String): ShortcutEntity?
+
+    @Query("DELETE FROM shortcuts WHERE id = :id")
+    abstract suspend fun delete(id: String)
 
     @Query("SELECT id FROM shortcuts WHERE profileId = :profileId")
     abstract suspend fun idsOf(profileId: Long): List<String>
