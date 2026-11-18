@@ -34,7 +34,17 @@ class SettingsRepositoryTest {
         val repository = SettingsRepository(preferences)
         repository.update { it.copy(searchEngine = SearchEngine.DuckDuckGo, suggestions = false) }
         repository.update { it.copy(safeBrowsing = false, theme = ThemeChoice.Dark, compactTabs = true) }
-        val changed = Settings(SearchEngine.DuckDuckGo, suggestions = false, safeBrowsing = false, theme = ThemeChoice.Dark, compactTabs = true)
+        repository.update { it.copy(textZoom = 130, darkenPages = true, pullToRefresh = false) }
+        val changed = Settings(
+            SearchEngine.DuckDuckGo,
+            suggestions = false,
+            safeBrowsing = false,
+            theme = ThemeChoice.Dark,
+            compactTabs = true,
+            textZoom = 130,
+            darkenPages = true,
+            pullToRefresh = false,
+        )
         assertEquals(changed, repository.settings.value)
         // As after the app restarts: read again from the same file.
         assertEquals(changed, SettingsRepository(preferences).settings.value)

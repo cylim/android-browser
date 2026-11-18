@@ -73,6 +73,12 @@ class MainActivity : ComponentActivity() {
         openIncomingLink(intent)
     }
 
+    /** Dark mode doesn't recreate the activity (configChanges), so the browser hears of it here. */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        browser?.deviceThemeChanged()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshDefaultBrowser()

@@ -45,6 +45,11 @@ class SiteSettingsRepository(private val dao: SiteSettingDao) {
         }
     }
 
+    /** For every Profile, its sites that get their desktop version (SPEC, "Desktop site"). */
+    fun desktopSites(): Flow<Map<ProfileId, Set<SiteOrigin>>> = dao.observeOn(SiteSetting.DesktopSite.key).map { rows ->
+        rows.groupBy { ProfileId(it.profileId.toString()) }.mapValues { (_, sites) -> sites.mapNotNull { SiteOrigin.of(it.origin) }.toSet() }
+    }
+
     /** What [profile] keeps for [setting] on [origin]: true (allowed), false (blocked), or null (unset). */
     suspend fun get(profile: ProfileId, origin: SiteOrigin, setting: SiteSetting): Boolean? =
         dao.get(profile.rowId, origin.text, setting.key)

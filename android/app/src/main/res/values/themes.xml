@@ -2,4 +2,13 @@
 <resources>
     <!-- Window theme only. Compose draws everything else with Material 3 (ui/theme/Theme.kt). -->
     <style name="Theme.Jrny" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+        The theme a Tab's WebView is made with while pages are shown dark (SPEC, "Dark pages"):
+        WebView asks pages for their dark theme, and darkens those without one, when its
+        context's theme is dark.
+    -->
+    <style name="Theme.Jrny.DarkPages" parent="android:Theme.Material.NoActionBar">
+        <item name="android:isLightTheme">false</item>
+    </style>
 </resources>

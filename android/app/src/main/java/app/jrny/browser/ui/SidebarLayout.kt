@@ -147,7 +147,14 @@ fun SidebarLayout(
                         ) { slots.pagePrompt() }
                     }
                     val startPage = slots.startPage
-                    PageView(tab, Modifier.fillMaxSize(), covered = startPage != null, overlay = if (startPage == null) prompt else ({}))
+                    Column(Modifier.fillMaxSize()) {
+                        // Find in page runs across the top of the page and pushes it down, so no
+                        // match hides under it (SPEC, "Find in page").
+                        slots.findBar?.let { findBar ->
+                            findBar(Modifier.fillMaxWidth().padding(bottom = GUTTER), FIND_BAR_SHAPE)
+                        }
+                        PageView(tab, Modifier.fillMaxWidth().weight(1f), covered = startPage != null, overlay = if (startPage == null) prompt else ({}))
+                    }
                     if (startPage != null) {
                         // In the page's place, its list ending clear of the gesture handle.
                         startPage(PaddingValues(bottom = floatingBottomSpace(GUTTER)), WindowInsets(0))
@@ -159,6 +166,9 @@ fun SidebarLayout(
         }
     }
 }
+
+/** Find in page, floating across the top of the page. */
+private val FIND_BAR_SHAPE = RoundedCornerShape(12.dp)
 
 /**
  * The space one side of the layout leaves for the system, at the top, bottom and [side]:

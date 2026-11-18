@@ -737,6 +737,10 @@ abstract class SiteSettingDao {
     @Query("SELECT * FROM site_settings WHERE profileId = :profileId ORDER BY origin, setting")
     abstract fun observe(profileId: Long): Flow<List<SiteSettingEntity>>
 
+    /** Every Profile's sites that have [setting] on, such as all desktop sites. */
+    @Query("SELECT * FROM site_settings WHERE setting = :setting AND enabled = 1")
+    abstract fun observeOn(setting: String): Flow<List<SiteSettingEntity>>
+
     @Query("SELECT enabled FROM site_settings WHERE profileId = :profileId AND origin = :origin AND setting = :setting")
     abstract suspend fun get(profileId: Long, origin: String, setting: String): Boolean?
 

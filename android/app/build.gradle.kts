@@ -39,6 +39,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.webkit)
+    implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.guava)
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)

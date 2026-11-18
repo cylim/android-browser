@@ -17,6 +17,7 @@ import kotlin.concurrent.thread
  * - `redirect:/other` answers with a 302 redirect to `/other`;
  * - `set-cookie:name=value` sets that cookie, and its title is "cookie set";
  * - `echo-cookies` has the Cookie header it received as its title, "cookies: …";
+ * - `echo-agent` has the User-Agent header it received as its title, "agent: …";
  * - `download:name:content` answers with `content` as a file to save under `name`;
  * - `auth:user:password:html` answers with `html` only to that HTTP sign-in, and asks for one
  *   (realm "Test realm") otherwise.
@@ -74,11 +75,13 @@ class TestServer(private val pages: Map<String, String>, loopback: Boolean = fal
             val path = reader.readLine()?.split(' ')?.getOrNull(1) ?: return@use
             var cookies = ""
             var authorization = ""
+            var agent = ""
             while (true) {
                 val header = reader.readLine()
                 if (header.isNullOrEmpty()) break
                 if (header.startsWith("Cookie:", ignoreCase = true)) cookies = header.substringAfter(':').trim()
                 if (header.startsWith("Authorization:", ignoreCase = true)) authorization = header.substringAfter(':').trim()
+                if (header.startsWith("User-Agent:", ignoreCase = true)) agent = header.substringAfter(':').trim()
             }
             requests += path to cookies
             val page = pages[path]
@@ -100,6 +103,7 @@ class TestServer(private val pages: Map<String, String>, loopback: Boolean = fal
                 redirect != null -> ""
                 setCookie != null -> "<title>cookie set</title>"
                 page == "echo-cookies" -> "<title>cookies: $cookies</title>"
+                page == "echo-agent" -> "<title>agent: $agent</title>"
                 auth != null -> if (signedIn) auth[2] else "<title>unauthorized</title>"
                 download != null -> download.substringAfter(':')
                 else -> page.orEmpty()

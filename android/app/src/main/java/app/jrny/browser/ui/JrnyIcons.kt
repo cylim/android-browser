@@ -94,6 +94,12 @@ object JrnyIcons {
         "M19,19H5V5h7V3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2v-7h-2v7zM14,3v2h3.59l-9.83,9.83 1.41,1.41L19,6.41V10h2V3h-7z",
     )
 
+    /** A monitor: a site's desktop version. */
+    val Desktop: ImageVector = icon(
+        "Desktop",
+        "M21,2H3c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h7l-2,3v1h8v-1l-2,-3h7c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zM21,14H3V4h18v10z",
+    )
+
     private fun icon(name: String, path: String, fillType: PathFillType = PathFillType.NonZero): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
             .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black), pathFillType = fillType)

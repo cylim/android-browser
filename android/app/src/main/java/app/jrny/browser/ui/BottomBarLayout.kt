@@ -188,13 +188,19 @@ private fun BarAndPage(
                         )
                         .testTag("bottom-bar"),
                 ) {
-                    BackButton(tab)
-                    if (showForward) ForwardButton(tab)
-                    // The Profile sheet: switch, create, edit (SPEC, "Bottom Bar").
-                    ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile), onClick = onProfiles)
-                    slots.addressField(Modifier.weight(1f), FIELD_SHAPE)
-                    TabCountButton(tabs.all.size, onClick = onTabs)
-                    slots.pageMenu()
+                    val findBar = slots.findBar
+                    if (findBar != null) {
+                        // Find in page takes the address bar's place, above the keyboard (SPEC, "Find in page").
+                        findBar(Modifier.weight(1f), FIELD_SHAPE)
+                    } else {
+                        BackButton(tab)
+                        if (showForward) ForwardButton(tab)
+                        // The Profile sheet: switch, create, edit (SPEC, "Bottom Bar").
+                        ProfileAvatar(profiles.active, onClickLabel = stringResource(R.string.switch_profile), onClick = onProfiles)
+                        slots.addressField(Modifier.weight(1f), FIELD_SHAPE)
+                        TabCountButton(tabs.all.size, onClick = onTabs)
+                        slots.pageMenu()
+                    }
                 }
             }
         }
