@@ -117,7 +117,7 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 ### Web capabilities (not merged yet)
 
 - A site can ask for the camera, the microphone or your location. Okapi names the site and offers "Allow once", "Always allow" or "Block". Each Profile keeps its own answers, so allowing a site in one Profile doesn't allow it in another. A Private Tab only offers "Allow" and "Block", and forgets them.
-- Android asks for its own permission only the first time a site you allowed needs it. If Android refuses, Okapi says so and opens Android's settings for it.
+- Android is asked for its own permission only when a site you allowed needs it and Okapi doesn't have it yet, never before. If Android refuses, Okapi says so and opens Android's settings for it.
 - Settings → Site settings lists the Active Profile's sites with what each may use, where you can allow, block or reset each one, or reset them all.
 - File fields work: Android's file picker opens with the kinds of file the page accepts, and a field that takes photos or videos also offers "Take photo" or "Record video".
 - A video's fullscreen button fills the screen, hides the system bars and turns the screen to match the video. Back leaves fullscreen.

@@ -36,8 +36,11 @@ class PermissionAsk(
         open = false
     }
 
-    /** The same ask, with the person's choice already known. */
-    fun asDecided(): PermissionAsk = PermissionAsk(origin, wanted, onGrant, onDeny, decided = true).also { open = false }
+    /** The same ask, with the person's choice already known. One the page withdrew stays withdrawn. */
+    fun asDecided(): PermissionAsk {
+        if (!open) return this
+        return PermissionAsk(origin, wanted, onGrant, onDeny, decided = true).also { open = false }
+    }
 
     private fun answer(action: () -> Unit) {
         if (!open) return
