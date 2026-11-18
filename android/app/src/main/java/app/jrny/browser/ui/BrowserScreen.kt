@@ -170,9 +170,10 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         dismissJustClosed = browser::dismissJustClosed,
     )
 
-    val sites by browser.siteSettings.collectAsState()
+    val sitesOfProfile by browser.siteSettings.collectAsState()
     val siteSettings = SiteSettingsUi(
-        sites = sites,
+        // Only the Active Profile's own list; none while it is still being read.
+        sites = sitesOfProfile?.takeIf { it.first == profile.id }?.second.orEmpty(),
         set = { origin, setting, enabled -> browser.setSiteSetting(profile, origin, setting, enabled) },
         reset = { origin, setting -> browser.resetSiteSetting(profile, origin, setting) },
         resetAll = { browser.resetAllSiteSettings(profile) },
