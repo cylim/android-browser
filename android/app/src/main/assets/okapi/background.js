@@ -1,10 +1,11 @@
 "use strict";
 // Darkens a page that has no dark theme of its own (SPEC, "Dark pages"), when its content
 // script asks. A user style sheet goes over the page's own and isn't subject to its Content
-// Security Policy. Images and video are turned back, so they keep their colors.
+// Security Policy. Images and video are turned back, so they keep their colors. A <picture>
+// shows its <img>, which is turned back itself: turning both would undo it.
 const DARKEN = `
 html { filter: invert(90%) hue-rotate(180deg) !important; background-color: #fff !important; }
-img, video, picture, canvas, iframe, embed, object, svg image, [style*="background-image"] {
+img, video, canvas, iframe, embed, object, svg image, [style*="background-image"] {
   filter: invert(100%) hue-rotate(180deg) !important;
 }`;
 

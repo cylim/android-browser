@@ -738,15 +738,33 @@ class BrowserStateTest {
         onMain { browser.saveDownload(shown, tab, offered("https://example.com/a.zip", "a.zip")) }
         await("a listed") { browser.downloads.value.size == 1 }
         onMain { browser.saveDownload(shown, tab, offered("https://example.com/b.zip", "b.zip")) }
-        await("listed") { browser.downloads.value.size == 2 }
-        val (b, a) = onMain { browser.downloads.value }
+        await("b listed") { browser.downloads.value.size == 2 }
+        onMain { browser.saveDownload(shown, tab, offered("https://example.com/c.zip", "c.zip")) }
+        await("listed") { browser.downloads.value.size == 3 }
+        val (c, b, a) = onMain { browser.downloads.value }
         downloader.status[b.fileUri!!] = DownloadStatus.Running(0.5f)
+        // Left unfinished when the app ended.
+        downloader.status[c.fileUri!!] = DownloadStatus.Failed
 
         onMain { browser.removeDownload(a) }
         onMain { browser.removeDownload(b) }
+        onMain { browser.removeDownload(c) }
         await("removed") { browser.downloads.value.isEmpty() }
-        // Only the one that was still running is stopped. The finished file stays.
-        assertEquals(listOf(b.fileUri), downloader.cancelled.toList())
+        // The one still running is stopped and the unfinished one deleted. The finished file stays.
+        assertEquals(setOf(b.fileUri, c.fileUri), downloader.cancelled.toSet())
+    }
+
+    @Test
+    fun aPrivateTabsSavedFileIsNamedOnlyInThatTab() {
+        val browser = newBrowser()
+        val shown = active(browser).selected
+        val tab = show(browser, shown.id)
+        val private = shown.copy(id = TabId(-1), isPrivate = true)
+        val request = DownloadRequest("data:text/plain;base64,aGk=", "secret.txt", "text/plain", -1, source = DownloadSource.FromPage)
+        onMain { browser.saveDownload(private, tab, request) }
+        // It names the Private Tab it came from, so the screen shows it there only.
+        await("saved") { browser.pageFileSaved == SavedFileNotice(TabId(-1), "secret.txt", saved = true) }
+        assertEquals(emptyList<Any>(), onMain { browser.downloads.value })
     }
 
     @Test
@@ -1142,7 +1160,7 @@ class BrowserStateTest {
         val tab = show(browser, shown.id)
         val request = DownloadRequest("data:text/csv;base64,YSxiCjEsMgo=", "table.csv", "text/csv", -1, source = DownloadSource.FromPage)
         onMain { browser.saveDownload(shown, tab, request) }
-        await("saved") { browser.pageFileSaved == ("table.csv" to true) }
+        await("saved") { browser.pageFileSaved == SavedFileNotice(shown.id, "table.csv", saved = true) }
         assertEquals("a,b\n1,2\n", String(downloader.saved.values.single().second))
         await("listed") { browser.downloads.value.size == 1 }
         val listed = onMain { browser.downloads.value.single() }

@@ -157,7 +157,10 @@ interface Downloader {
     /** Stops a running download of Android's download service and discards what it fetched. */
     fun cancel(downloadId: Long)
 
-    /** Stops writing the file at [fileUri], if it is still being written, and deletes it. */
+    /**
+     * Stops writing the file at [fileUri], if it is still being written, and deletes it. A file
+     * left unfinished, as when the app ended while writing it, is deleted too.
+     */
     fun cancelSaved(fileUri: String)
 
     /**

@@ -50,7 +50,7 @@ None of this is sent to us or to anyone else.
 
 ### Sites you open
 
-Okapi shows pages with GeckoView, Mozilla's web engine, which is part of the app. When you open a page, the engine requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details the engine sends, which name Firefox for Android. A site embedded in another site gets its own cookies there, so it can't follow you from site to site.
+Okapi shows pages with GeckoView, Mozilla's web engine, which is part of the app. When you open a page, the engine requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details the engine sends, which name Firefox for Android. A site embedded in another site gets its own cookies there, so it can't use its cookies to follow you from site to site. This doesn't stop other ways of recognising a device, such as fingerprinting.
 
 A site can store cookies and other data in the Profile you opened it in. What a site does with your data is up to that site and its own privacy policy.
 

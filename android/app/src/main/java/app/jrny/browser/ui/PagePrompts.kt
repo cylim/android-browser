@@ -56,6 +56,7 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
+import java.util.Locale
 
 /**
  * Shows what [tab]'s page asks through its scripts and form fields (SPEC, "Page dialogs"): an
@@ -235,8 +236,11 @@ private fun DateTimeDialog(prompt: PagePrompt.DateTime, close: () -> Unit, dismi
                     val date = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
                     when (kind) {
                         PagePrompt.DateTime.Kind.Date -> answer(date.format(DateTimeFormatter.ISO_LOCAL_DATE))
-                        PagePrompt.DateTime.Kind.Month -> answer("%04d-%02d".format(date.year, date.monthValue))
-                        PagePrompt.DateTime.Kind.Week -> answer("%04d-W%02d".format(date.get(IsoFields.WEEK_BASED_YEAR), date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)))
+                        // The form's value is in ASCII digits whatever the device's language writes.
+                        PagePrompt.DateTime.Kind.Month -> answer(String.format(Locale.ROOT, "%04d-%02d", date.year, date.monthValue))
+                        PagePrompt.DateTime.Kind.Week -> answer(
+                            String.format(Locale.ROOT, "%04d-W%02d", date.get(IsoFields.WEEK_BASED_YEAR), date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)),
+                        )
                         else -> pickedDate = date
                     }
                 }) { Text(stringResource(if (kind == PagePrompt.DateTime.Kind.DateTimeLocal) R.string.next else R.string.ok)) }

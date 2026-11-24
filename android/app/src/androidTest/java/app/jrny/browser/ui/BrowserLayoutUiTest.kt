@@ -418,7 +418,11 @@ class BrowserLayoutUiTest {
             )
             loadAndWait(opener, "opener")
             show(PHONE_PORTRAIT)
-            compose.onNodeWithTag("page").performTouchInput { click(center) }
+            // The page may not take touches yet: tap again until the popup opens.
+            for (attempt in 1..3) {
+                compose.onNodeWithTag("page").performTouchInput { click(center) }
+                if (runCatching { compose.waitUntil(3_000) { tab.popup != null } }.isSuccess) break
+            }
             compose.waitUntil(10_000) { tab.popup != null }
             compose.waitUntil(10_000) { tab.popup == null }
             assertTrue(SessionViews.viewOf(tab.session)?.isAttachedToWindow == true)

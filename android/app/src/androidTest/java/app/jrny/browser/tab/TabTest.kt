@@ -14,6 +14,7 @@ import app.jrny.browser.engine.PageSettings
 import org.mozilla.geckoview.GeckoSession
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -477,6 +478,22 @@ class TabTest {
             await("alert dismissed") { tab.title == "alert returned" }
             assertEquals(null, onMain { tab.prompt })
             onMain { tab.permissionAsk?.deny(); tab.closePermissionAsk() }
+        }
+    }
+
+    @Test
+    fun aFileFetchedFromThePageGoesAsThePageWouldAskForIt() {
+        TestServer(mapOf("/page" to "<title>page</title>", "/file.txt" to "hello")).use { server ->
+            val tab = newTab("test-page-fetch")
+            onMain { tab.load(server.url("/page")) }
+            awaitPage(tab, server.url("/page"), "page")
+            val done = java.util.concurrent.CountDownLatch(1)
+            var file: app.jrny.browser.engine.PageFile? = null
+            onMain { kotlinx.coroutines.MainScope().launch { file = tab.fetchFromPage(server.url("/file.txt")); done.countDown() } }
+            assertTrue("fetched", done.await(20, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals("hello", String(file!!.bytes))
+            // Sites that only serve their images to their own pages see the site that asked.
+            assertEquals(server.url("/"), server.referrers.last { it.first == "/file.txt" }.second)
         }
     }
 

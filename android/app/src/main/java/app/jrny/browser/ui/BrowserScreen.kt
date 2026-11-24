@@ -152,7 +152,8 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         fetchImage = { browser.fetchImage(browser.tabFor(current.selected), it) },
         openedBehind = browser.openedBehind?.takeIf { it.profileId == profile.id },
         dismissOpenedBehind = browser::dismissOpenedBehind,
-        pageFileSaved = browser.pageFileSaved,
+        // Only in the Tab the file came from.
+        pageFileSaved = browser.pageFileSaved?.takeIf { it.tab == current.selected.id }?.let { it.fileName to it.saved },
         dismissPageFileSaved = browser::dismissPageFileSaved,
         setDesktopSite = { on -> browser.setDesktopSite(current.selected, browser.tabFor(current.selected), on) },
         addToHomeScreen = if (current.selected.isPrivate || !HomeShortcuts.supported(LocalContext.current)) {
@@ -273,6 +274,11 @@ fun BrowserWindow(
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
     // The file whose download just started, named over the page with a way to the Downloads list.
     var downloading by remember(tab) { mutableStateOf<String?>(null) }
+    // A file that couldn't be saved after all says so, in place of "Downloading".
+    LaunchedEffect(links.pageFileSaved) {
+        val notice = links.pageFileSaved
+        if (notice != null && !notice.second && notice.first == downloading) downloading = null
+    }
     // The Site Rules and Site settings are reached from the settings, and Back leads there again.
     BackHandler(enabled = panel != null) { panel = if (panel == Panel.SiteRules || panel == Panel.SiteSettings) Panel.Settings else null }
     // A link from another app shows at once, with its Move offer, not behind an open panel.

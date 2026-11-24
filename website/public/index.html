@@ -485,7 +485,7 @@
             <ul>
               <li>Pages render in GeckoView inside the app instead of Android System WebView. Sites see Firefox for Android, and no request carries the app's package name any more.</li>
               <li>Page dialogs, list and date fields, Okapi's own error pages, and downloads written by Okapi with their progress on the list.</li>
-              <li>Deleting a Profile wipes its web data at once. Private Tabs keep their storage in memory only.</li>
+              <li>Deleting a Profile wipes its web data at once. Private Tabs keep their storage in memory, apart from site databases, which are written to disk encrypted and deleted with the last Private Tab.</li>
               <li>The app is larger, about 95 MB to download, and Okapi now ships each GeckoView security release itself.</li>
             </ul>
           </details>

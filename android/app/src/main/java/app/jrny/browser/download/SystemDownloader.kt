@@ -51,34 +51,47 @@ class SystemDownloader(private val context: Context) : Downloader {
         val progress = Writing(size)
         writing[address] = progress
         writer.execute {
-            val done = try {
-                resolver.openOutputStream(file)?.use { out ->
+            try {
+                // The response is closed however this ends, even if the file can't be opened.
+                val done = try {
                     body.use { input ->
-                        val buffer = ByteArray(BUFFER)
-                        while (!progress.cancelled) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            out.write(buffer, 0, read)
-                            progress.written += read
-                        }
-                    }
-                } != null && !progress.cancelled
-            } catch (_: Exception) {
-                false
+                        resolver.openOutputStream(file)?.use { out ->
+                            val buffer = ByteArray(BUFFER)
+                            while (!progress.cancelled) {
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                out.write(buffer, 0, read)
+                                progress.written += read
+                            }
+                        } != null
+                    } && !progress.cancelled && runCatching { finish(file) }.isSuccess
+                } catch (_: Exception) {
+                    false
+                }
+                if (!done) {
+                    runCatching { resolver.delete(file, null, null) }
+                    if (!progress.cancelled) failed += address
+                }
+            } finally {
+                writing.remove(address)
             }
-            if (done) {
-                finish(file)
-            } else {
-                runCatching { resolver.delete(file, null, null) }
-                if (!progress.cancelled) failed += address
-            }
-            writing.remove(address)
         }
         return address
     }
 
     override fun cancelSaved(fileUri: String) {
-        writing[fileUri]?.cancelled = true
+        val progress = writing[fileUri]
+        if (progress != null) {
+            progress.cancelled = true
+            return
+        }
+        // Nothing writes it any more: a file the app left unfinished when it ended. Finished files stay.
+        val columns = arrayOf(MediaStore.Downloads.IS_PENDING)
+        val unfinished = runCatching {
+            context.contentResolver.query(fileUri.toUri(), columns, null, null, null)?.use { it.moveToFirst() && it.getInt(0) == 1 }
+        }.getOrNull() == true
+        if (unfinished) runCatching { context.contentResolver.delete(fileUri.toUri(), null, null) }
+        failed -= fileUri
     }
 
     override fun statuses(ids: List<Long>): Map<Long, DownloadStatus> {

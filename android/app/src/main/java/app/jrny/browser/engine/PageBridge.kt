@@ -24,6 +24,7 @@ class PageFile(val bytes: ByteArray, val mimeType: String)
  * - darken a page without a dark theme ([dark]);
  * - fetch a file as the page would, with its Profile's cookies ([fetch]);
  * - measure the video the page shows fullscreen ([measureFullscreenVideo]);
+ * - scroll a page that comes back to where it was ([scrollTo]);
  * - in debug builds only, run a test's script in the content script's world ([evaluate]).
  *
  * Use it on the main thread, where GeckoView calls it too.
@@ -115,6 +116,9 @@ class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _,
         return if (size.length() == 2 && width > 0 && height > 0) width to height else null
     }
 
+    /** Scrolls the page to [y] CSS pixels from its top. False when there is no page to scroll. */
+    suspend fun scrollTo(y: Int): Boolean = ask(JSONObject().put("type", "scrollTo").put("y", y)) != null
+
     /**
      * Runs [script] in the content script's world, which sees the page's DOM but not its own
      * scripts, and gives its result as JSON, or null when there is no page to run it in. Only
@@ -193,13 +197,22 @@ class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _,
 
         const val MAX_FETCH_BYTES = 25 * 1024 * 1024
 
+        /** The largest side an icon is decoded at, in pixels. Larger images are scaled down on the way. */
+        private const val MAX_ICON_SIDE = 256
+
         /** The image in a `data:image/...;base64,...` address, or null. */
         fun decodeDataImage(data: String): Bitmap? {
             if (!data.startsWith("data:image/", ignoreCase = true)) return null
             val comma = data.indexOf(',')
             if (comma < 0 || !data.substring(0, comma).endsWith(";base64", ignoreCase = true)) return null
             val bytes = runCatching { Base64.getDecoder().decode(data.substring(comma + 1)) }.getOrNull() ?: return null
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            // A small file can still be a huge picture: it is read at no more than an icon needs.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_ICON_SIDE) sample *= 2
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
         }
     }
 }

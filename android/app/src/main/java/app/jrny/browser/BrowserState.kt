@@ -553,10 +553,11 @@ class BrowserState(
     }
 
     /**
-     * What happened to a file fetched from the page ("Save image"), once Okapi tried to save it:
-     * its name, and whether it was saved.
+     * What happened to a file Okapi saved without listing it first ("Save image", or any file of a
+     * Private Tab), once it tried: which Tab it came from, its name, and whether it was saved. It
+     * shows only in that Tab, so a Private Tab's file is never named in another.
      */
-    var pageFileSaved: Pair<String, Boolean>? by mutableStateOf(null)
+    var pageFileSaved: SavedFileNotice? by mutableStateOf(null)
         private set
 
     fun dismissPageFileSaved() {
@@ -576,7 +577,7 @@ class BrowserState(
                 scope.launch {
                     val file = withContext(Dispatchers.IO) { downloader.receive(request.fileName, request.mimeType, request.size, body) }
                     when {
-                        file == null -> pageFileSaved = request.fileName to false
+                        file == null -> pageFileSaved = SavedFileNotice(tab.id, request.fileName, saved = false)
                         // A Private Tab's files aren't listed, so the person hears when it is saved.
                         tab.isPrivate -> {
                             var status: DownloadStatus
@@ -584,7 +585,7 @@ class BrowserState(
                                 delay(SAVED_CHECK_MS)
                                 status = withContext(Dispatchers.IO) { downloader.savedStatus(file) }
                             } while (status is DownloadStatus.Running)
-                            pageFileSaved = request.fileName to (status is DownloadStatus.Done)
+                            pageFileSaved = SavedFileNotice(tab.id, request.fileName, saved = status is DownloadStatus.Done)
                         }
                         // The Profile was deleted meanwhile: nothing of it is fetched or listed any more.
                         !downloadRepository.addSaved(tab.profileId, file, request) -> withContext(Dispatchers.IO) { downloader.cancelSaved(file) }
@@ -600,18 +601,23 @@ class BrowserState(
                 val mimeType = request.mimeType.ifBlank { fetched?.mimeType.orEmpty() }
                 val file = fetched?.let { found ->
                     withContext(Dispatchers.IO) {
-                        // Written to the app's cache first, then moved into Downloads.
-                        val staged = java.io.File.createTempFile("page-file", null, context.cacheDir)
+                        // Written to the app's cache first, then moved into Downloads. A full
+                        // device is reported as a file that wasn't saved.
                         try {
-                            staged.writeBytes(found.bytes)
-                            downloader.save(request.fileName, mimeType, staged)
-                        } finally {
-                            staged.delete()
+                            val staged = java.io.File.createTempFile("page-file", null, context.cacheDir)
+                            try {
+                                staged.writeBytes(found.bytes)
+                                downloader.save(request.fileName, mimeType, staged)
+                            } finally {
+                                staged.delete()
+                            }
+                        } catch (_: java.io.IOException) {
+                            null
                         }
                     }
                 }
                 if (file != null && !tab.isPrivate) downloadRepository.addSaved(tab.profileId, file, request.copy(mimeType = mimeType))
-                pageFileSaved = request.fileName to (file != null)
+                pageFileSaved = SavedFileNotice(tab.id, request.fileName, saved = file != null)
             }
         }
     }
@@ -1085,8 +1091,10 @@ class BrowserState(
                 if (saved == null) {
                     val status = downloader.statuses(listOf(download.downloadId))[download.downloadId]
                     if (status is DownloadStatus.Running) downloader.cancel(download.downloadId)
-                } else if (downloader.savedStatus(saved) is DownloadStatus.Running) {
-                    downloader.cancelSaved(saved)
+                } else {
+                    // One still being written stops; one left unfinished when the app ended goes too.
+                    val status = downloader.savedStatus(saved)
+                    if (status is DownloadStatus.Running || status is DownloadStatus.Failed) downloader.cancelSaved(saved)
                 }
             }
             downloadRepository.remove(download)
@@ -1168,3 +1176,6 @@ class BrowserState(
         const val MAX_LIVE_TABS = 5
     }
 }
+
+/** A file Okapi tried to save for the Tab [tab]: its name, and whether it was saved. */
+data class SavedFileNotice(val tab: TabId, val fileName: String, val saved: Boolean)

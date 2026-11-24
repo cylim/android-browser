@@ -23,6 +23,9 @@ import app.jrny.browser.handoff.HandoffRules
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.site.SiteOrigin
 import app.jrny.browser.site.SiteSetting
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -79,6 +82,9 @@ class Tab(
 ) {
     private val runtime = Engine.runtime(context)
     private val main = Handler(Looper.getMainLooper())
+
+    /** Work for the Tab's page that waits on it, such as scrolling a restored page back. Ends with the Tab. */
+    private val scope = MainScope()
 
     /** Whether pages are shown dark. It reaches the page that is open at once. */
     var darkPages: Boolean = darkPages
@@ -530,6 +536,7 @@ class Tab(
 
     /** Frees the sessions. The Tab can't be used afterwards. */
     fun destroy() {
+        scope.cancel()
         pendingSeen?.let(main::removeCallbacks)
         endAsks()
         download?.let(::discard)
@@ -602,13 +609,21 @@ class Tab(
      */
     private fun scrollWhenLaidOut(scrollY: Int) {
         val target = session
+        val page = bridge
         fun attempt(left: Int) {
             if (target != session || !restoreDone || restoreScrollY != scrollY) return
-            target.panZoomController.scrollTo(ScreenLength.zero(), ScreenLength.fromPixels(scrollY.toDouble()), PanZoomController.SCROLL_BEHAVIOR_AUTO)
-            if (left > 0) {
-                main.postDelayed({ if (pageScrollY < scrollY) attempt(left - 1) else restoreScrollY = 0 }, SCROLL_RETRY_MS)
-            } else {
-                restoreScrollY = 0
+            scope.launch {
+                // The page scrolls itself, in CSS pixels, as GeckoView reports the position.
+                // GeckoView's own scrollTo counts screen pixels, so it is only for a page the
+                // content script can't reach.
+                if (!page.scrollTo(scrollY)) {
+                    target.panZoomController.scrollTo(ScreenLength.zero(), ScreenLength.fromPixels(scrollY.toDouble()), PanZoomController.SCROLL_BEHAVIOR_AUTO)
+                }
+                if (left > 0) {
+                    main.postDelayed({ if (pageScrollY < scrollY) attempt(left - 1) else restoreScrollY = 0 }, SCROLL_RETRY_MS)
+                } else {
+                    restoreScrollY = 0
+                }
             }
         }
         main.postDelayed({ attempt(SCROLL_RETRIES) }, SCROLL_RETRY_MS)

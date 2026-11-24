@@ -51,6 +51,7 @@ class DownloadsUiTest {
     private val opened = mutableListOf<Download>()
     private val removed = mutableListOf<Download>()
     private var canOpen = true
+    private var pageFileSaved by mutableStateOf<Pair<String, Boolean>?>(null)
 
     @Before
     fun createTab() {
@@ -84,6 +85,7 @@ class DownloadsUiTest {
                         },
                         removeDownload = { removed += it },
                     ),
+                    links = LinksUi(pageFileSaved = pageFileSaved),
                 )
             }
         }
@@ -113,6 +115,20 @@ class DownloadsUiTest {
         compose.onNodeWithText("Downloading report.pdf").assertExists()
         compose.onNodeWithTag("download-started-action").performClick()
         compose.onNodeWithTag("panel-Downloads").assertExists()
+    }
+
+    @Test
+    fun aFileThatCantBeSavedAfterAllSaysSoInPlaceOfDownloading() {
+        show(PHONE_PORTRAIT)
+        clickLink("f")
+        compose.onNodeWithTag("confirm-download").performClick()
+        compose.onNodeWithText("Downloading report.pdf").assertExists()
+
+        // The Downloads folder refused the file.
+        compose.runOnUiThread { pageFileSaved = "report.pdf" to false }
+        compose.waitForIdle()
+        compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.page_file_failed, "report.pdf")).assertExists()
     }
 
     @Test
