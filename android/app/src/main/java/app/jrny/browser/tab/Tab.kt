@@ -129,43 +129,8 @@ class Tab(
         of.settings.viewportMode = if (desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
     }
 
-    /** What Find in page is looking for and has found, or null while it is closed (SPEC, "Find in page"). */
-    var find: FindState? by mutableStateOf(null)
-        private set
-
-    /** Opens Find in page, empty. */
-    fun openFind() {
-        if (find == null) find = FindState("", 0, 0)
-    }
-
-    /** Looks for [text] in the page and highlights every match. */
-    fun find(text: String) {
-        find = FindState(text, 0, 0)
-        val finder = session.finder
-        if (text.isEmpty()) return finder.clear()
-        finder.displayFlags = GeckoSession.FINDER_DISPLAY_HIGHLIGHT_ALL
-        finder.find(text, 0).accept { result -> showFound(text, result) }
-    }
-
-    /** Moves to the next match, or the one before with [forward] false. */
-    fun findNext(forward: Boolean) {
-        val query = find?.query
-        if (query.isNullOrEmpty()) return
-        session.finder.find(null, if (forward) 0 else GeckoSession.FINDER_FIND_BACKWARDS).accept { result -> showFound(query, result) }
-    }
-
-    private fun showFound(query: String, result: GeckoSession.FinderResult?) {
-        val open = find ?: return
-        if (open.query != query || result == null) return
-        find = open.copy(current = if (result.total == 0) 0 else result.current.coerceAtLeast(1), total = result.total)
-    }
-
-    /** Closes Find in page and clears its highlights. */
-    fun closeFind() {
-        if (find == null) return
-        find = null
-        session.finder.clear()
-    }
+    /** Find in page, in whichever session shows the Tab's page (SPEC, "Find in page"). */
+    val findInPage = FindInPage { session }
 
     /** What the page's own scripts ask the person: an alert, a question, a list to choose from. */
     var prompt: PagePrompt? by mutableStateOf(null)
@@ -185,7 +150,7 @@ class Tab(
      * The session showing this Tab. It is replaced with a new one if its content process dies, so
      * observe it rather than keeping a reference.
      */
-    var session: GeckoSession by mutableStateOf(newSession(popup = false).also { open(it, bridge) })
+    var session: GeckoSession by mutableStateOf(newPageSession().also { open(it, bridge) })
         private set
 
     /**
@@ -345,6 +310,14 @@ class Tab(
      */
     suspend fun measureFullscreenVideo(): Pair<Int, Int>? = bridge.measureFullscreenVideo()
 
+    /**
+     * True while the Tab shows something the person must answer, or is about to: a page dialog, a
+     * site's ask, a sign-in, a file field or a download offer. One shows at a time (SPEC, "Page
+     * dialogs"), so anything else the page asks meanwhile is refused.
+     */
+    private val asking: Boolean
+        get() = prompt != null || permissionAsk != null || pendingAsk?.open == true || fileChooser != null || httpAuth != null || download != null
+
     /** Refuses or drops whatever the page is waiting on, when the page or the Tab goes away. */
     private fun endAsks() {
         permissionAsk?.deny()
@@ -482,8 +455,8 @@ class Tab(
     /** True when the page loading next is one the person tapped a link to. */
     private var nextLoadByPerson = false
 
-    /** True while a new session loads its own empty page first. */
-    private var blankStarted = false
+    /** True while a new session loads the empty page it starts with, which no one asked for. */
+    private var loadingOwnBlank = false
 
     /** The title the Tab had when the page now loading started, for when it turns out to be a file. */
     private var titleBeforeStart: String? = null
@@ -561,7 +534,7 @@ class Tab(
         endAsks()
         download?.let(::discard)
         download = null
-        find = null
+        findInPage.close()
         allowedOnce.clear()
         closePopup()
         bridge.detach()
@@ -579,28 +552,33 @@ class Tab(
         if (!loadFailed && page == loadedUrl) onIcon(page, icon)
     }).also { it.dark = darkPages }
 
-    private fun newSession(popup: Boolean): GeckoSession {
+    /** A session for the Tab's page, which reports its loading, scrolling and history. */
+    private fun newPageSession(): GeckoSession = newSession(PageNavigation(), PageContent()).apply {
+        progressDelegate = PageProgress()
+        scrollDelegate = PageScroll()
+        historyDelegate = object : GeckoSession.HistoryDelegate {
+            override fun onHistoryStateChange(session: GeckoSession, historyList: GeckoSession.HistoryDelegate.HistoryList) {
+                if (session == this@Tab.session) history = historyList
+            }
+        }
+    }
+
+    /** A session for a popup the page opens. */
+    private fun newPopupSession(): GeckoSession = newSession(PopupNavigation(), PopupContent())
+
+    private fun newSession(navigation: NavigationDelegate, content: ContentDelegate): GeckoSession {
         val settings = GeckoSessionSettings.Builder()
             // The Profile's own store (ADR 0004), in memory only for a Private Tab.
             .contextId(profile.name)
             .usePrivateMode(profile.isPrivate)
             .useTrackingProtection(false)
             .build()
-        val created = GeckoSession(settings)
-        created.navigationDelegate = if (popup) PopupNavigation() else PageNavigation()
-        created.contentDelegate = if (popup) PopupContent() else PageContent()
-        created.promptDelegate = Prompts()
-        created.permissionDelegate = Permissions()
-        if (!popup) {
-            created.progressDelegate = PageProgress()
-            created.scrollDelegate = PageScroll()
-            created.historyDelegate = object : GeckoSession.HistoryDelegate {
-                override fun onHistoryStateChange(session: GeckoSession, historyList: GeckoSession.HistoryDelegate.HistoryList) {
-                    if (session == this@Tab.session) history = historyList
-                }
-            }
+        return GeckoSession(settings).apply {
+            navigationDelegate = navigation
+            contentDelegate = content
+            promptDelegate = Prompts()
+            permissionDelegate = Permissions()
         }
-        return created
     }
 
     /** True for the Tab's own session and its open popup: the pages the person can see. */
@@ -656,20 +634,17 @@ class Tab(
             popup, openingPopup -> closePopup()
             else -> return discard(request)
         }
+        // A file the page sends while another question is open is dropped: one at a time. The
+        // person can't have tapped it meanwhile, so the page sent it by itself.
+        if (asking && download == null) return discard(request)
         download?.let(::discard)
         download = request
     }
 
     private fun downloadRequest(response: WebResponse): DownloadRequest {
-        fun header(name: String) = response.headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
-        val disposition = header("Content-Disposition")
-        val mimeType = header("Content-Type")?.substringBefore(';')?.trim().orEmpty()
-        val size = header("Content-Length")?.trim()?.toLongOrNull() ?: -1
-        val suggested = DownloadRequest.suggestedFileName(disposition)
-            ?: URLUtil.guessFileName(response.uri, disposition, mimeType.ifBlank { null })
         // The page the link was on: only a web page, without its fragment.
         val page = loadedUrl?.takeIf { !addressRequested && WebAddress.isWebAddress(it) }?.substringBefore('#')
-        return DownloadRequest(response.uri, DownloadRequest.safeFileName(suggested), mimeType, size, page, DownloadSource.Response(response.body))
+        return DownloadRequest.of(response, page)
     }
 
     /**
@@ -685,7 +660,7 @@ class Tab(
         bridge.detach()
         bridge = newBridge()
         history = null
-        val fresh = newSession(popup = false)
+        val fresh = newPageSession()
         open(fresh, bridge)
         applyMode(fresh, desktopSite)
         session = fresh
@@ -710,8 +685,11 @@ class Tab(
         // GeckoView asks once more, with no address, while it turns a response into a download.
         if (request.uri.isBlank()) return GeckoResult.allow()
         if (loadsHere(request.uri)) {
+            // A load into a new window is the popup's, which gets its own mode once it opens.
+            if (request.target == NavigationDelegate.TARGET_WINDOW_NEW) return GeckoResult.allow()
             if (from == session && !request.isRedirect) nextLoadByPerson = request.hasUserGesture
-            if (from == session && WebAddress.isWebAddress(request.uri)) applyMode(from, wantsDesktop(SiteOrigin.of(request.uri)))
+            // The Tab's page and its popup alike.
+            if (WebAddress.isWebAddress(request.uri)) applyMode(from, wantsDesktop(SiteOrigin.of(request.uri)))
             return GeckoResult.allow()
         }
         val scheme = schemeOf(request.uri)
@@ -775,7 +753,9 @@ class Tab(
             if (session != this@Tab.session) return null
             closePopup()
             // Same Profile as the page, so the popup sees the page's sign-ins.
-            val window = newSession(popup = true)
+            val window = newPopupSession()
+            // As its site wants it, or as the page that wrote into it, when it has no address yet.
+            applyMode(window, SiteOrigin.of(uri)?.let(::wantsDesktop) ?: desktopSite)
             openingPopup = window
             popupUrl = uri.ifBlank { "about:blank" }
             val windowBridge = newBridge()
@@ -805,7 +785,7 @@ class Tab(
             pageStarting = false
             url = uri
             onPageChanged(this@Tab)
-            return GeckoResult.fromValue(ErrorPages.page(context, uri, ErrorPages.kindOf(error), darkPages))
+            return GeckoResult.fromValue(ErrorPages.page(context, uri, error, darkPages))
         }
     }
 
@@ -815,8 +795,8 @@ class Tab(
             // A link for another app that was refused, or Okapi's error page, isn't a page start.
             if (session != this@Tab.session || ErrorPages.isErrorPage(url) || !loadsHere(url)) return
             // A new session's own empty page, which no one asked for: it isn't the Tab's page.
-            blankStarted = url == "about:blank" && this@Tab.url != "about:blank"
-            if (blankStarted) return
+            loadingOwnBlank = url == "about:blank" && this@Tab.url != "about:blank"
+            if (loadingOwnBlank) return
             isLoading = true
             progress = 0
             loadFailed = false
@@ -842,7 +822,7 @@ class Tab(
             }
             if (url != "about:blank") this@Tab.url = url
             // Find in page belongs to the page it was opened on.
-            if (find != null && url != loadedUrl) closeFind()
+            if (url != loadedUrl) findInPage.close()
             // An offer to open another app belongs to the page that made it.
             if (url != handoffPage) handoff = null
             // A grant for once ends when the page leaves its site.
@@ -858,8 +838,8 @@ class Tab(
 
         override fun onPageStop(session: GeckoSession, success: Boolean) {
             if (session != this@Tab.session) return
-            if (blankStarted) {
-                blankStarted = false
+            if (loadingOwnBlank) {
+                loadingOwnBlank = false
                 return
             }
             isLoading = false
@@ -944,7 +924,7 @@ class Tab(
         override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? = null
 
         override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? =
-            uri?.let { GeckoResult.fromValue(ErrorPages.page(context, it, ErrorPages.kindOf(error), darkPages)) }
+            uri?.let { GeckoResult.fromValue(ErrorPages.page(context, it, error, darkPages)) }
     }
 
     /** Lets a popup close itself with `window.close()`, as sign-in popups do when they finish. */
@@ -969,7 +949,7 @@ class Tab(
      * refused: one question at a time.
      */
     private fun raise(ask: PermissionAsk, source: Any) {
-        if (permissionAsk != null || pendingAsk?.open == true) return ask.deny()
+        if (asking) return ask.deny()
         permissionSource = source
         pendingAsk = ask
         onPermissionAsk(this, ask)
@@ -1048,7 +1028,7 @@ class Tab(
         private fun <P : PromptDelegate.BasePrompt> show(session: GeckoSession, prompt: P, make: (PromptAnswer<P>) -> PagePrompt): GeckoResult<PromptResponse> {
             val answer = PromptAnswer(prompt)
             // One at a time, and only from a page that is shown.
-            if (this@Tab.prompt != null || !shows(session)) {
+            if (asking || !shows(session)) {
                 answer.dismiss()
                 return answer.result
             }
@@ -1079,7 +1059,7 @@ class Tab(
 
         override fun onColorPrompt(session: GeckoSession, prompt: PromptDelegate.ColorPrompt) = show(session, prompt) { PagePrompt.Color(it) }
 
-        /** A pop-up the page opened without a tap stays blocked. */
+        /** A popup the page opened without a tap stays blocked. */
         override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt): GeckoResult<PromptResponse> =
             GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
 
@@ -1102,7 +1082,7 @@ class Tab(
         override fun onFilePrompt(session: GeckoSession, prompt: PromptDelegate.FilePrompt): GeckoResult<PromptResponse> {
             val answer = PromptAnswer(prompt)
             // One at a time, files only (not a folder), and only from a page that is shown.
-            if (fileChooser != null || prompt.type == PromptDelegate.FilePrompt.Type.FOLDER || !shows(session)) {
+            if (asking || prompt.type == PromptDelegate.FilePrompt.Type.FOLDER || !shows(session)) {
                 answer.dismiss()
             } else {
                 fileChooser = FileChooserAsk(context, answer)
@@ -1112,12 +1092,15 @@ class Tab(
 
         override fun onAuthPrompt(session: GeckoSession, prompt: PromptDelegate.AuthPrompt): GeckoResult<PromptResponse> {
             val answer = PromptAnswer(prompt)
-            if (!shows(session)) {
+            // Only from a page that is shown, and not over another question. A new sign-in
+            // replaces the one before.
+            if (!shows(session) || (asking && httpAuth == null)) {
                 answer.dismiss()
                 return answer.result
             }
             httpAuth?.cancel()
-            val host = prompt.authOptions.uri.orEmpty().toUri().host.orEmpty().ifEmpty { prompt.authOptions.uri.orEmpty() }
+            val asker = prompt.authOptions.uri.orEmpty()
+            val host = asker.toUri().host.orEmpty().ifEmpty { asker }
             // The site's own words, its realm, are the part of the message in quotes.
             val realm = REALM.find(prompt.message.orEmpty())?.groupValues?.get(1).orEmpty()
             httpAuth = HttpAuthAsk(host, realm, answer)
@@ -1143,9 +1126,6 @@ class Tab(
 }
 
 private typealias Uri = android.net.Uri
-
-/** What Find in page looks for, and which of its matches is the current one (1-based, 0 for none) of [total]. */
-data class FindState(val query: String, val current: Int, val total: Int)
 
 /** What the person is holding on the page: a link, an image, or an image that is a link. */
 data class PressedItem(val link: String?, val image: String?)

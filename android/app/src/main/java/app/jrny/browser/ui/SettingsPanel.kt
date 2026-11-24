@@ -327,6 +327,14 @@ private fun ClearBrowsingDataDialog(profileName: String, onClear: (Set<BrowsingD
                         Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
                     }
                 }
+                // The engine can clear its cache only for every Profile at once (SPEC, "Clear browsing data").
+                if (BrowsingData.Cache in chosen) {
+                    Text(
+                        stringResource(R.string.clear_cache_note),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp).testTag("clear-cache-note"),
+                    )
+                }
                 if (BrowsingData.Cookies in chosen) {
                     Text(
                         stringResource(R.string.clear_cookies_warning, profileName),

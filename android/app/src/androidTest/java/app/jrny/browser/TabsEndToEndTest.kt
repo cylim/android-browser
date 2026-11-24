@@ -1,6 +1,5 @@
 package app.jrny.browser
 
-import android.annotation.SuppressLint
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -14,7 +13,6 @@ import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,16 +21,11 @@ import org.junit.runner.RunWith
  * The real app and database, through the real UI in whichever layout the device shows: open a
  * Tab, have both Tabs come back after the activity is recreated, and close one.
  */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class TabsEndToEndTest {
 
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
-
-    @Before
-    fun requireMultiProfile() {
-    }
 
     private fun browser(): BrowserState {
         var browser: BrowserState? = null

@@ -258,7 +258,7 @@ fun BrowserWindow(
         if (tab.popup != null) tab.closePopup() else tab.goBack()
     }
     // Find in page closes before anything else on the page.
-    BackHandler(enabled = tab.find != null) { tab.closeFind() }
+    BackHandler(enabled = tab.findInPage.state != null) { tab.findInPage.close() }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
     // The Profile picker for Move or Open in Profile, opened from the page menu or the Incoming
     // Link prompt. It belongs to the Tab it was opened for: if another Tab is shown meanwhile
@@ -358,13 +358,13 @@ fun BrowserWindow(
                         onSetDefaultBrowser = onSetDefaultBrowser,
                         onFind = {
                             draft.value = null
-                            tab.openFind()
+                            tab.findInPage.open()
                         },
                         onDesktopSite = links.setDesktopSite,
                         onAddToHome = links.addToHomeScreen,
                     )
                 },
-                findBar = if (tab.find != null) {
+                findBar = if (tab.findInPage.state != null) {
                     { modifier, shape -> FindBar(tab, shape, modifier) }
                 } else {
                     null
@@ -559,9 +559,10 @@ fun BrowserWindow(
             request,
             onDownload = {
                 library.startDownload(request)
-                // A Private Tab's download isn't on the list, so there is nothing to show there.
-                // A file fetched from the page says once it is saved.
-                if (!private && request.streamed) downloading = request.fileName
+                // A file saved in the background is named over the page, with a way to the list.
+                // A Private Tab's files aren't on the list, and a file fetched from the page is
+                // saved first: both say so once saved instead (BrowserState.saveDownload).
+                if (!private && request.savedInBackground) downloading = request.fileName
                 // Its response is now Okapi's to read.
                 tab.dismissDownload(kept = true)
             },

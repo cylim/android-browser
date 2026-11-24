@@ -61,11 +61,19 @@ p{font-size:16px;line-height:1.5;color:$muted;margin:0 0 8px;word-wrap:break-wor
 <p>${escape(context.getString(body, host.ifEmpty { failed }))}</p>
 $action
 </main></body></html>"""
-        return "data:text/html;charset=utf-8;base64," + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
+        return PREFIX + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
     }
 
-    /** True for an address [page] made. */
-    fun isErrorPage(address: String?): Boolean = address != null && address.startsWith("data:text/html;charset=utf-8;base64,")
+    /** The error page for [failed], which didn't load because of [error]. */
+    fun page(context: Context, failed: String, error: WebRequestError, dark: Boolean): String = page(context, failed, kindOf(error), dark)
+
+    /**
+     * True for an address [page] made. Its media type carries a token made at each start of the
+     * app, so a `data:` page that a site or the person opens can't pass for one.
+     */
+    fun isErrorPage(address: String?): Boolean = address != null && address.startsWith(PREFIX)
+
+    private val PREFIX = "data:text/html;charset=utf-8;okapi-error=${java.util.UUID.randomUUID().toString().replace("-", "")};base64,"
 
     private fun escape(text: String): String = text
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")

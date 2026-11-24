@@ -1,11 +1,13 @@
 package app.jrny.browser.download
 
+import android.webkit.URLUtil
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.data.DownloadDao
 import app.jrny.browser.data.DownloadEntity
 import app.jrny.browser.profile.ProfileId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.mozilla.geckoview.WebResponse
 
 /** Where an offered file's bytes come from, once the person agrees. */
 sealed interface DownloadSource {
@@ -37,13 +39,31 @@ data class DownloadRequest(
     /** True when the file can be saved at all. */
     val supported: Boolean get() = source !is DownloadSource.Response || source.body != null
 
-    /** True for a file the page offered itself, which goes on the list while it downloads. */
-    val streamed: Boolean get() = source is DownloadSource.Response
+    /**
+     * True for a file the engine fetched as the page offered it, which Okapi saves in the
+     * background, with its progress on the list. One fetched from the page ("Save image") is saved
+     * first, and only then does Okapi say so.
+     */
+    val savedInBackground: Boolean get() = source is DownloadSource.Response
 
     /** The address the list shows: the file's own web address, else the page's. */
     val listedAddress: String get() = url.takeIf(WebAddress::isWebAddress) ?: page.orEmpty()
 
     companion object {
+        /**
+         * The offer for the file GeckoView's [response] brings, named as its headers say. [page] is
+         * the web page the link to it was on, if any.
+         */
+        fun of(response: WebResponse, page: String?): DownloadRequest {
+            fun header(name: String) = response.headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+            val disposition = header("Content-Disposition")
+            val mimeType = header("Content-Type")?.substringBefore(';')?.trim().orEmpty()
+            val size = header("Content-Length")?.trim()?.toLongOrNull() ?: -1
+            val suggested = suggestedFileName(disposition)
+                ?: URLUtil.guessFileName(response.uri, disposition, mimeType.ifBlank { null })
+            return DownloadRequest(response.uri, safeFileName(suggested), mimeType, size, page, DownloadSource.Response(response.body))
+        }
+
         private const val MAX_NAME_LENGTH = 120
         private val LEADING_DOTS = Regex("^[._]*\\.[._]*")
 
@@ -129,25 +149,25 @@ interface Downloader {
     fun receive(fileName: String, mimeType: String, size: Long, body: java.io.InputStream): String?
 
     /** Where each of [ids], downloads of Android's download service, stands. */
-    fun statuses(ids: List<Long>): Map<Long, DownloadStatus> = ids.associateWith { DownloadStatus.Gone }
+    fun statuses(ids: List<Long>): Map<Long, DownloadStatus>
 
     /** Opens the finished file in an app that can show it. False when none can, or it isn't there. */
     fun open(download: Download): Boolean
 
     /** Stops a running download of Android's download service and discards what it fetched. */
-    fun cancel(downloadId: Long) {}
+    fun cancel(downloadId: Long)
 
     /** Stops writing the file at [fileUri], if it is still being written, and deletes it. */
-    fun cancelSaved(fileUri: String) {}
+    fun cancelSaved(fileUri: String)
 
     /**
      * Saves [file] as a finished file named [fileName] in the Downloads folder. Returns the saved
      * file's address, or null when it couldn't be saved.
      */
-    fun save(fileName: String, mimeType: String, file: java.io.File): String? = null
+    fun save(fileName: String, mimeType: String, file: java.io.File): String?
 
     /** Where the file at [fileUri] stands: still being written, done, failed, or gone. */
-    fun savedStatus(fileUri: String): DownloadStatus = DownloadStatus.Gone
+    fun savedStatus(fileUri: String): DownloadStatus
 }
 
 /** Each Profile's list of downloads (SPEC, "Browsing features"). */

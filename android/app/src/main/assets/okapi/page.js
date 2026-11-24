@@ -6,8 +6,10 @@
 //   - "fetch": a file the person chose to save or share, fetched as the page would;
 //   - "measureVideo": the size of the video the page shows fullscreen.
 // The page itself can't reach the port, so nothing on the page can send the app anything.
-// Debug builds add a test script that registers more questions in okapiTestQuestions.
-var okapiTestQuestions = {};
+//
+// The questions the app may ask, by type. Each gets the message and gives its answer, or a
+// Promise of it. Debug builds add one for tests (src/debug/assets/okapi/test.js).
+var okapiQuestions = {};
 (() => {
   let port = null;
   let dark = false;
@@ -30,12 +32,13 @@ var okapiTestQuestions = {};
       updateDark();
     } else if (message.type === "fetch") {
       fetchFile(message);
-    } else if (message.type === "measureVideo") {
-      measureVideo().then((size) => answer(message, true, size));
-    } else if (okapiTestQuestions[message.type]) {
-      okapiTestQuestions[message.type](message, answer);
+    } else if (Object.hasOwn(okapiQuestions, message.type)) {
+      new Promise((resolve) => resolve(okapiQuestions[message.type](message)))
+        .then((value) => answer(message, true, value), (error) => answer(message, false, String(error)));
     }
   }
+
+  okapiQuestions.measureVideo = measureVideo;
 
   // The answer to the question [message] asked, as JSON.
   function answer(message, ok, value) {

@@ -15,10 +15,10 @@ class WebProfile private constructor(
     val isPrivate: Boolean,
 ) {
     /**
-     * Deletes everything the store keeps. GeckoView can do this while the app runs. [then] runs
-     * once the engine has the wipe in hand; it gives no word when the wipe is done.
+     * Deletes everything the store keeps. GeckoView can do this while the app runs. [handedOver]
+     * runs once the engine has the wipe in hand; it gives no word when the wipe is done.
      */
-    fun clear(context: Context, then: () -> Unit = {}) = Engine.clearContext(context, name, then)
+    fun clear(context: Context, handedOver: () -> Unit = {}) = Engine.clearContext(context, name, handedOver)
 
     override fun equals(other: Any?): Boolean = other is WebProfile && other.name == name && other.isPrivate == isPrivate
 
@@ -37,13 +37,9 @@ class WebProfile private constructor(
         /**
          * The temporary store for one private session of the Profile [id] (SPEC, "Private Tabs").
          * Each session has a store of its own, so a new session never meets what an earlier one
-         * left behind. It lives in memory only and is gone when the app's process ends.
+         * left behind. It keeps its data in memory, apart from site databases, which are encrypted
+         * on disk until no private store is left.
          */
-        fun privateOf(id: ProfileId, session: Int): WebProfile = WebProfile("$PRIVATE_PREFIX${id.value}-$session", isPrivate = true)
-
-        /** The store called [name], which one of the functions here gave out before. */
-        fun named(name: String): WebProfile = WebProfile(name, isPrivate = name.startsWith(PRIVATE_PREFIX))
-
-        private const val PRIVATE_PREFIX = "jrny-private-"
+        fun privateOf(id: ProfileId, session: Int): WebProfile = WebProfile("jrny-private-${id.value}-$session", isPrivate = true)
     }
 }

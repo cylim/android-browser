@@ -26,6 +26,11 @@ class FakeDownloader : Downloader {
         return address
     }
 
+    /** Downloads of Android's download service: none here. */
+    override fun statuses(ids: List<Long>): Map<Long, DownloadStatus> = ids.associateWith { DownloadStatus.Gone }
+
+    override fun cancel(downloadId: Long) {}
+
     override fun open(download: Download): Boolean {
         opened += download
         return canOpen

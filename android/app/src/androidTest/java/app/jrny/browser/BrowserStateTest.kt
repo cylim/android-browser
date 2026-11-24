@@ -1,6 +1,5 @@
 package app.jrny.browser
 
-import android.annotation.SuppressLint
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -49,7 +48,6 @@ import org.junit.runner.RunWith
  * BrowserState with real GeckoView sessions and a throwaway database: at most 5 Tabs are live across all
  * Profiles, unloaded Tabs load again when shown, and Tabs come back after the app is killed.
  */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class BrowserStateTest {
 
@@ -1168,7 +1166,7 @@ class BrowserStateTest {
             // The link names the file.
             await("named") { tab.download?.fileName == "notes.txt" }
             val request = onMain { tab.download!! }
-            assertTrue(request.streamed)
+            assertTrue(request.savedInBackground)
             // Long after the page dropped its address, the person agrees.
             Thread.sleep(2000)
             assertTrue(downloader.received.isEmpty())

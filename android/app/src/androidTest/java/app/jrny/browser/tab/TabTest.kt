@@ -1,6 +1,5 @@
 package app.jrny.browser.tab
 
-import android.annotation.SuppressLint
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -11,6 +10,7 @@ import app.jrny.browser.TestPages.runInPage
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.TestServer
 import app.jrny.browser.engine.Engine
+import app.jrny.browser.engine.PageSettings
 import org.mozilla.geckoview.GeckoSession
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -23,7 +23,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /** Runs on a device or emulator. Uses `data:` pages, so it needs no network. */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class TabTest {
 
@@ -108,7 +107,8 @@ class TabTest {
 
     @Test
     fun httpPagesLoad() {
-        // A browser must load the http:// pages people ask for (network_security_config.xml).
+        // A browser must load the http:// pages people ask for, though Okapi's own connections
+        // refuse http:// (network_security_config.xml): the engine doesn't go through that.
         TestServer(mapOf("/" to "<title>http ok</title>")).use { server ->
             val tab = newTab("test-http")
             val address = server.url("/")
@@ -308,10 +308,10 @@ class TabTest {
     fun textSizeReachesEveryPage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         try {
-            onMain { Engine.apply(context, textZoom = 150, safeBrowsing = true, pagesDark = false) }
+            onMain { Engine.applyPageSettings(context, PageSettings(textZoom = 150, safeBrowsing = true, dark = false)) }
             assertEquals(1.5f, onMain { Engine.runtime(context).settings.fontSizeFactor })
         } finally {
-            onMain { Engine.apply(context, textZoom = 100, safeBrowsing = true, pagesDark = false) }
+            onMain { Engine.applyPageSettings(context, PageSettings(textZoom = 100, safeBrowsing = true, dark = false)) }
         }
     }
 
@@ -325,7 +325,7 @@ class TabTest {
         val darkened = "getComputedStyle(document.documentElement).filter.indexOf('invert')>=0"
         TestServer(pages).use { server ->
             try {
-                onMain { Engine.apply(context, textZoom = 100, safeBrowsing = true, pagesDark = true) }
+                onMain { Engine.applyPageSettings(context, PageSettings(textZoom = 100, safeBrowsing = true, dark = true)) }
                 val tab = newTab("test-dark")
                 onMain { tab.darkPages = true }
                 onMain { tab.load(server.url("/light")) }
@@ -345,8 +345,138 @@ class TabTest {
                 onMain { tab.darkPages = false }
                 awaitInPage("light again", tab, darkened, "false")
             } finally {
-                onMain { Engine.apply(context, textZoom = 100, safeBrowsing = true, pagesDark = false) }
+                onMain { Engine.applyPageSettings(context, PageSettings(textZoom = 100, safeBrowsing = true, dark = false)) }
             }
+        }
+    }
+
+    @Test
+    fun pageAddressesStayOutOfTheSystemLog() {
+        val nonce = System.nanoTime().toString()
+        TestServer(mapOf("/jrny-page-$nonce" to "<title>logged?</title><a id='go' href='/jrny-next-$nonce'>next</a>", "/jrny-next-$nonce" to "<title>next</title>")).use { server ->
+            val tab = newTab("test-log-addresses")
+            onMain { tab.load(server.url("/jrny-page-$nonce")) }
+            awaitPage(tab, server.url("/jrny-page-$nonce"), "logged?")
+            runInPage(tab, "document.getElementById('go').click()")
+            awaitPage(tab, server.url("/jrny-next-$nonce"), "next")
+            // A page that fails to load, too.
+            val unreachable = "http://127.0.0.1:9/jrny-failed-$nonce"
+            onMain { tab.load(unreachable) }
+            await("load failed") { !tab.isLoading && tab.url == unreachable }
+        }
+        Log.i("JrnyTabTest", "jrny-control-$nonce")
+        Thread.sleep(500)
+
+        val log = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "brief")).inputStream.bufferedReader().readText()
+        assertTrue("the test can read its own log", log.contains("jrny-control-$nonce"))
+        // Release builds strip debug and verbose lines, GeckoView's too (proguard-rules.pro), and
+        // GeckoView's debug lines do name pages. What release keeps, Info and above, never does.
+        val kept = log.lines().filter { it.length > 1 && it[1] == '/' && it[0] in "IWEF" }
+        val named = kept.filter { "jrny-page-$nonce" in it || "jrny-next-$nonce" in it || "jrny-failed-$nonce" in it }
+        assertEquals(emptyList<String>(), named)
+    }
+
+    @Test
+    fun aPageThatFailedLoadsOnceItWorksWhenTriedAgain() {
+        // The page sends the browser round in circles, so it fails, until the site is mended.
+        val pages = java.util.concurrent.ConcurrentHashMap(mapOf("/flaky" to "redirect:/flaky"))
+        TestServer(pages).use { server ->
+            val tab = newTab("test-try-again")
+            val address = server.url("/flaky")
+            onMain { tab.load(address) }
+            // The engine gives up after many rounds; the Tab's address is set before any starts.
+            await("load failed") { server.requests.size >= 15 && !tab.isLoading && tab.url == address }
+            Thread.sleep(500)
+            assertEquals("", onMain { tab.title })
+            assertFalse(onMain { tab.isLoading })
+
+            pages["/flaky"] = "<title>works now</title>"
+            onMain { tab.reload() }
+            awaitPage(tab, address, "works now")
+        }
+    }
+
+    @Test
+    fun aDataPageThePersonOpensIsNoErrorPage() {
+        val visits = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val tab = onMain {
+            Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-data-page")), onVisited = { visits += it })
+                .also { tabs += it }
+        }
+        // Written as Okapi's error pages were once written.
+        val mine = "data:text/html;charset=utf-8;base64," + java.util.Base64.getEncoder().encodeToString("<title>mine</title>".toByteArray())
+        onMain { tab.load(mine) }
+        awaitPage(tab, mine, "mine")
+        await("a visit") { visits.contains(mine) }
+    }
+
+    @Test
+    fun desktopSiteFollowsALinkAndAFormToTheSite() {
+        TestServer(mapOf("/agent" to "echo-agent", "/agent?q=sent" to "echo-agent")).use { desktop ->
+            val site = app.jrny.browser.site.SiteOrigin.of(desktop.url("/"))!!
+            val start = "<title>start</title><a id='go' href='${desktop.url("/agent")}'>link</a>" +
+                "<form id='form' action='${desktop.url("/agent")}'><input name='q' value='sent'></form>"
+            TestServer(mapOf("/start" to start)).use { mobile ->
+                val tab = onMain {
+                    Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-desktop-follow")), desktopFor = { it == site })
+                        .also { tabs += it }
+                }
+                onMain { tab.load(mobile.url("/start")) }
+                awaitPage(tab, mobile.url("/start"), "start")
+                assertFalse(onMain { tab.desktopSite })
+
+                // A link the page follows to the site.
+                runInPage(tab, "document.getElementById('go').click()")
+                await("desktop agent after a link") { !tab.isLoading && tab.title.startsWith("agent: ") }
+                assertTrue(onMain { tab.title }, "X11; Linux x86_64" in onMain { tab.title })
+                assertTrue(onMain { tab.desktopSite })
+
+                // A form the page sends to the site.
+                onMain { tab.load(mobile.url("/start")) }
+                awaitPage(tab, mobile.url("/start"), "start")
+                assertFalse(onMain { tab.desktopSite })
+                runInPage(tab, "document.getElementById('form').submit()")
+                await("desktop agent after a form") { !tab.isLoading && tab.url == desktop.url("/agent?q=sent") && tab.title.startsWith("agent: ") }
+                assertTrue(onMain { tab.title }, "X11; Linux x86_64" in onMain { tab.title })
+            }
+        }
+    }
+
+    @Test
+    fun aSitesCookieReachesTheDiskSoItOutlivesTheApp() {
+        val name = "jrny_keep_${System.nanoTime()}"
+        TestServer(mapOf("/set" to "set-cookie:$name=1")).use { server ->
+            val tab = newTab("test-cookie-disk")
+            onMain { tab.load(server.url("/set")) }
+            awaitPage(tab, server.url("/set"), "cookie set")
+        }
+        // Android may end the app at any moment: a sign-in must be on disk soon, not only in memory.
+        val engineFiles = java.io.File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "mozilla")
+        await("cookie written to disk", timeoutMs = 30_000) {
+            engineFiles.walkTopDown().filter { it.isFile && it.name.startsWith("cookies.sqlite") }
+                .any { String(it.readBytes(), Charsets.ISO_8859_1).contains(name) }
+        }
+    }
+
+    @Test
+    fun oneQuestionAtATime() {
+        val page = "<title>asking</title><script>" +
+            "navigator.geolocation.getCurrentPosition(function(){},function(){});" +
+            "setTimeout(function(){alert('also');document.title='alert returned'},1000)</script>"
+        TestServer(mapOf("/ask" to page), loopback = true).use { server ->
+            val tab = onMain {
+                Tab(
+                    InstrumentationRegistry.getInstrumentation().targetContext,
+                    WebProfile.of(ProfileId("test-one-question")),
+                    onPermissionAsk = { tab, ask -> tab.showPermissionAsk(ask) },
+                ).also { tabs += it }
+            }
+            onMain { tab.load(server.url("/ask")) }
+            await("location asked") { tab.permissionAsk != null }
+            // The alert that comes while the site's ask is open is dismissed: the page goes on.
+            await("alert dismissed") { tab.title == "alert returned" }
+            assertEquals(null, onMain { tab.prompt })
+            onMain { tab.permissionAsk?.deny(); tab.closePermissionAsk() }
         }
     }
 

@@ -59,12 +59,12 @@ class DownloadRequestTest {
     fun aFileCanBeSavedWhenThereIsSomethingToRead() {
         fun response(url: String, body: java.io.InputStream?) = DownloadRequest(url, "file", "", -1, source = DownloadSource.Response(body))
         assertTrue(response("https://example.com/file.zip", "x".byteInputStream()).supported)
-        assertTrue(response("blob:https://example.com/1234", "x".byteInputStream()).streamed)
+        assertTrue(response("blob:https://example.com/1234", "x".byteInputStream()).savedInBackground)
         assertFalse(response("https://example.com/file.zip", null).supported)
         // "Save image" fetches from the page once the person agrees.
         val image = DownloadRequest("https://example.com/a.png", "a.png", "", -1, source = DownloadSource.FromPage)
         assertTrue(image.supported)
-        assertFalse(image.streamed)
+        assertFalse(image.savedInBackground)
     }
 
     @Test

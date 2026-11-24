@@ -1,6 +1,5 @@
 package app.jrny.browser.ui
 
-import android.annotation.SuppressLint
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -71,7 +70,6 @@ import org.junit.runner.RunWith
  * field, and on a phone the on-screen keyboard would then squeeze a forced tablet-sized window's
  * page down to nothing.
  */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class BrowserLayoutUiTest {
 

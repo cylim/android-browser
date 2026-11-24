@@ -86,10 +86,10 @@ class PageToolsUiTest {
         openFind()
         compose.onNodeWithTag("address").assertDoesNotExist()
         compose.onNodeWithTag("find-field").performTextInput("okapi")
-        compose.waitUntil(10_000) { tab.find?.total == 2 }
+        compose.waitUntil(10_000) { tab.findInPage.state?.total == 2 }
         compose.onNodeWithText("1 of 2").assertExists()
         compose.onNodeWithTag("find-next").performClick()
-        compose.waitUntil(10_000) { tab.find?.current == 2 }
+        compose.waitUntil(10_000) { tab.findInPage.state?.current == 2 }
 
         // Closing brings the address bar back.
         compose.onNodeWithTag("find-close").performClick()
@@ -107,7 +107,7 @@ class PageToolsUiTest {
         Espresso.closeSoftKeyboard()
         Espresso.pressBack()
         compose.waitUntil(5_000) { !exists("find-bar") }
-        assertEquals(null, tab.find)
+        assertEquals(null, tab.findInPage.state)
     }
 
     @Test

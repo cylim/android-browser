@@ -93,6 +93,10 @@ GeckoView keeps some security data current by itself, such as lists of revoked c
 
 A page can only offer a file. Nothing is saved until you agree. The engine asks the site for the file as the page would, with the Profile's cookies for that site, and the site receives what is listed under "Sites you open". Once you agree, Okapi saves the file to your device's Downloads folder. Downloads is a shared folder, so other apps that can read your files can read the files you download. When you open a finished file, Android gives it to the app that you choose.
 
+### Protected video (DRM)
+
+Some streaming sites protect their videos against copying (DRM). The engine plays them through Android's own DRM system (Widevine on most devices), without asking first. To play such a video, your device's DRM system asks the site's licence server for a key. The request carries information about your device's DRM system, which the site and its DRM provider can use to tell devices apart. The first time a video needs it, Android may also ask Google to set up the DRM system on your device. Pages without protected video send none of this.
+
 ## Private Tabs
 
 Each Profile can open Private Tabs. Private Tabs:

@@ -12,6 +12,7 @@ import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.download.DownloadSource
 import app.jrny.browser.download.FetchedImage
 import app.jrny.browser.engine.Engine
+import app.jrny.browser.engine.PageSettings
 import app.jrny.browser.engine.PageFile
 import app.jrny.browser.handoff.AppLink
 import app.jrny.browser.handoff.HandoffRules
@@ -301,7 +302,7 @@ class BrowserState(
 
     /** Gives the engine the settings that belong to every page: Safe Browsing, text size, dark pages. */
     private fun applyEngineSettings(current: Settings = settings.value) {
-        Engine.apply(context, current.textZoom, current.safeBrowsing, pagesDark(current))
+        Engine.applyPageSettings(context, PageSettings(current.textZoom, current.safeBrowsing, pagesDark(current)))
     }
 
     init {
@@ -342,7 +343,7 @@ class BrowserState(
     }
 
     /** Private stores whose session has ended, emptied once their last page is gone. */
-    private val endedStores = mutableSetOf<String>()
+    private val endedStores = mutableSetOf<WebProfile>()
 
 
     /** The Tab on screen. Its session can't be closed until another Tab replaces it. */
@@ -747,15 +748,15 @@ class BrowserState(
      * or as soon as the last one is gone.
      */
     private fun discard(session: PrivateSession) {
-        val store = WebProfile.privateOf(session.profile, session.session).name
+        val store = WebProfile.privateOf(session.profile, session.session)
         endedStores += store
         emptyEndedStore(store)
     }
 
-    private fun emptyEndedStore(store: String) {
-        if (store !in endedStores || live.values.any { it.tab.profile.name == store }) return
+    private fun emptyEndedStore(store: WebProfile) {
+        if (store !in endedStores || live.values.any { it.tab.profile == store }) return
         endedStores -= store
-        WebProfile.named(store).clear(context)
+        store.clear(context)
     }
 
     /**
@@ -1139,7 +1140,7 @@ class BrowserState(
         val entry = live.remove(id) ?: return
         entry.saving?.cancel()
         entry.tab.destroy()
-        emptyEndedStore(entry.tab.profile.name)
+        emptyEndedStore(entry.tab.profile)
     }
 
     private fun saveScroll(entry: LiveTab) {

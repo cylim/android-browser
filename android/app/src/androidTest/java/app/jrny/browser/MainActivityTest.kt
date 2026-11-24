@@ -1,6 +1,5 @@
 package app.jrny.browser
 
-import android.annotation.SuppressLint
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -14,22 +13,16 @@ import app.jrny.browser.tab.Tab
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /** The real activity: what survives recreation, and what reaches disk when the app goes to the background. */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
 
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
-
-    @Before
-    fun requireMultiProfile() {
-    }
 
     /** The Active Profile's selected Tab, once the database has said which it is. */
     private fun tab(): Tab {

@@ -14,6 +14,7 @@ import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.ui.clearPageFiles
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -45,6 +46,11 @@ class JrnyApplication : Application() {
      * do none of this. The database is tiny, so blocking here costs a few milliseconds. The web
      * data of Profiles deleted since the last cold start is wiped once the engine has started.
      */
+    private companion object {
+        /** How long a Profile's wipe gets to finish before the Profile is forgotten. A wipe takes well under a second. */
+        const val WIPE_SETTLE_MS = 10_000L
+    }
+
     override fun onCreate() {
         super.onCreate()
         if (!Engine.isMainProcess(this)) return
@@ -56,6 +62,9 @@ class JrnyApplication : Application() {
         MainScope().launch {
             ProfileCleanup(repositories.profiles) { id ->
                 suspendCancellableCoroutine { handed -> WebProfile.of(id).clear(this@JrnyApplication) { handed.resume(Unit) } }
+                // GeckoView gives no word when the wipe is done. The Profile is forgotten only
+                // once it has had time to finish; if the app ends sooner, the next start wipes again.
+                delay(WIPE_SETTLE_MS)
             }.run()
         }
     }

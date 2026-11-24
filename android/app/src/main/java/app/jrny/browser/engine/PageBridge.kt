@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
@@ -30,16 +31,10 @@ class PageFile(val bytes: ByteArray, val mimeType: String)
 class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _, _ -> }) {
     private var port: WebExtension.Port? = null
     private var nextId = 1
-    private val fetches = mutableMapOf<Int, Fetch>()
-    /** Questions sent to the page, by id, until it answers: each gets a JSON value, or null. */
-    private val questions = mutableMapOf<Int, (String?) -> Unit>()
+    /** What waits for the page's replies to each request, by id: each reply, or null when none will come. */
+    private val pending = mutableMapOf<Int, (reply: JSONObject?) -> Unit>()
     private val waitingForPort = mutableListOf<() -> Unit>()
     private val main = Handler(Looper.getMainLooper())
-
-    private class Fetch(val max: Int, val done: (PageFile?) -> Unit) {
-        val bytes = ByteArrayOutputStream()
-        var mimeType = ""
-    }
 
     /** Whether pages are darkened when they have no dark theme of their own. */
     var dark: Boolean = false
@@ -96,12 +91,14 @@ class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _,
      * Fetches [url] as the page would, with its Profile's cookies, or null when it can't be had:
      * the page is gone, the site refused, or the file is larger than [maxBytes].
      */
-    suspend fun fetch(url: String, maxBytes: Int = MAX_FETCH_BYTES): PageFile? = suspendCancellableCoroutine { done ->
-        val id = nextId++
-        fetches[id] = Fetch(maxBytes) { if (done.isActive) done.resume(it) }
-        done.invokeOnCancellation { main.post { fetches.remove(id) } }
-        send(JSONObject().put("type", "fetch").put("id", id).put("url", url).put("max", maxBytes)) {
-            fetches.remove(id)?.done?.invoke(null)
+    suspend fun fetch(url: String, maxBytes: Int = MAX_FETCH_BYTES): PageFile? {
+        val bytes = ByteArrayOutputStream()
+        return request(JSONObject().put("type", "fetch").put("url", url).put("max", maxBytes)) { reply, finish ->
+            if (reply.optString("type") != "fetched" || !reply.optBoolean("ok")) return@request finish(null)
+            val piece = runCatching { Base64.getDecoder().decode(reply.optString("data")) }.getOrNull()
+            if (piece == null || bytes.size() + piece.size > maxBytes) return@request finish(null)
+            bytes.write(piece)
+            if (reply.optBoolean("last")) finish(PageFile(bytes.toByteArray(), reply.optString("mime").substringBefore(';').trim().lowercase()))
         }
     }
 
@@ -111,8 +108,11 @@ class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _,
      */
     suspend fun measureFullscreenVideo(): Pair<Int, Int>? {
         val value = ask(JSONObject().put("type", "measureVideo")) ?: return null
-        val numbers = value.trim('[', ']').split(',').mapNotNull { it.trim().toIntOrNull() }
-        return numbers.takeIf { it.size == 2 && it[0] > 0 && it[1] > 0 }?.let { it[0] to it[1] }
+        // [width, height], or null when there is no video.
+        val size = runCatching { JSONArray(value) }.getOrNull() ?: return null
+        val width = size.optInt(0)
+        val height = size.optInt(1)
+        return if (size.length() == 2 && width > 0 && height > 0) width to height else null
     }
 
     /**
@@ -122,15 +122,26 @@ class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _,
      */
     suspend fun evaluate(script: String): String? = ask(JSONObject().put("type", "eval").put("code", script))
 
-    /** Sends [question] with a new id and waits for the page's answer, or null. */
-    private suspend fun ask(question: JSONObject): String? = suspendCancellableCoroutine { done ->
-        val id = nextId++
-        questions[id] = { if (done.isActive) done.resume(it) }
-        done.invokeOnCancellation { main.post { questions.remove(id) } }
-        send(question.put("id", id)) {
-            questions.remove(id)?.invoke(null)
-        }
+    /** Sends [question] and waits for the page's answer, as JSON, or null. */
+    private suspend fun ask(question: JSONObject): String? = request(question) { reply, finish ->
+        finish(if (reply.optString("type") == "answer" && reply.optBoolean("ok")) reply.optString("value", "null") else null)
     }
+
+    /**
+     * Sends [message] with a new id and waits for its result, which [onReply] makes from the
+     * page's replies and hands to `finish`. Null when the page goes, or never listens.
+     */
+    private suspend fun <T> request(message: JSONObject, onReply: (reply: JSONObject, finish: (T?) -> Unit) -> Unit): T? =
+        suspendCancellableCoroutine { done ->
+            val id = nextId++
+            fun finish(result: T?) {
+                pending.remove(id)
+                if (done.isActive) done.resume(result)
+            }
+            pending[id] = { reply -> if (reply == null) finish(null) else onReply(reply, ::finish) }
+            done.invokeOnCancellation { main.post { pending.remove(id) } }
+            send(message.put("id", id)) { finish(null) }
+        }
 
     /** Sends [message] once the page is listening, or runs [failed] when no page comes in time. */
     private fun send(message: JSONObject, failed: () -> Unit) {
@@ -159,40 +170,14 @@ class PageBridge(private val onIcon: (page: String, icon: Bitmap) -> Unit = { _,
                 val icon = decodeDataImage(data) ?: return
                 onIcon(page, icon)
             }
-            "fetched" -> {
-                val id = message.optInt("id")
-                val fetch = fetches[id] ?: return
-                if (!message.optBoolean("ok")) {
-                    fetches.remove(id)
-                    return fetch.done(null)
-                }
-                val piece = runCatching { Base64.getDecoder().decode(message.optString("data")) }.getOrNull()
-                if (piece == null || fetch.bytes.size() + piece.size > fetch.max) {
-                    fetches.remove(id)
-                    return fetch.done(null)
-                }
-                fetch.bytes.write(piece)
-                fetch.mimeType = message.optString("mime")
-                if (message.optBoolean("last")) {
-                    fetches.remove(id)
-                    fetch.done(PageFile(fetch.bytes.toByteArray(), fetch.mimeType.substringBefore(';').trim().lowercase()))
-                }
-            }
-            "answer" -> {
-                val id = message.optInt("id")
-                val answer = questions.remove(id) ?: return
-                answer(if (message.optBoolean("ok")) message.optString("value", "null") else null)
-            }
+            "fetched", "answer" -> pending[message.optInt("id")]?.invoke(message)
         }
     }
 
     private fun endAll() {
-        val ended = fetches.values.toList()
-        fetches.clear()
-        ended.forEach { it.done(null) }
-        val unanswered = questions.values.toList()
-        questions.clear()
-        unanswered.forEach { it(null) }
+        val waiting = pending.values.toList()
+        pending.clear()
+        waiting.forEach { it(null) }
     }
 
     companion object {

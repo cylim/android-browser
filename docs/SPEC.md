@@ -178,9 +178,9 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 - A list field (`<select>`) shows its items in a dialog, grouped as the page groups them. A list that takes several items has checkboxes and OK.
 - Date, month, week, time and date-and-time fields open Android-style pickers; "Clear" empties the field. A color field offers a set of colors and a color code.
 - A page that wants to stop the person leaving (it may have unsaved changes) asks "Leave this page?". Reloading a page a form made asks before the form is sent again.
-- Dismissing a dialog is the page's "Cancel". One dialog shows at a time, and only for the Tab on screen.
+- Dismissing a dialog is the page's "Cancel". One question shows at a time, and only for the Tab on screen: a page dialog, a site's ask for a permission, a sign-in, a file field or a download offer. One that comes while another is open is dismissed or refused.
 - A page's own Share button opens Android's share sheet with what the page shares.
-- A pop-up a page opens without a tap stays blocked.
+- A popup a page opens without a tap stays blocked.
 
 ### Error pages
 
@@ -223,7 +223,7 @@ Holding a link or an image opens a menu:
 ### Desktop site
 
 - "Desktop site" asks sites for their desktop version: the Tab sends the user agent of Firefox on a Linux desktop, and lays out a page that asks for the device's width as a desktop browser would.
-- The Tab switches before a page of the site loads, including a form sent to that site.
+- The Tab switches before a page of the site loads, including a link followed or a form sent to that site, and a popup of that site.
 - The choice is remembered for each site, in each Profile, and shows in Site settings. It applies to every Tab of that Profile on that site.
 - In a Private Tab the choice lasts until the Tab closes.
 
@@ -248,7 +248,7 @@ Holding a link or an image opens a menu:
 - It offers checkboxes for: history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs, and site icons. History and cached files are checked at first.
 - It clears everything stored, from all time. The engine can't clear a Profile's cookies for a time range, so the dialog offers no range.
 - With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out. It clears everything sites stored in the Profile's store: cookies, site storage, service workers, Cache Storage and its cached files, and the access to their cookies that embedded sign-ins were given.
-- "Cached files" clears the engine's cache of pages and images. Each Profile's cache is kept apart, so no Profile can read another's, but the engine can only clear it for every Profile at once.
+- "Cached files" clears the engine's cache of pages and images. Each Profile's cache is kept apart, so no Profile can read another's, but the engine can only clear it for every Profile at once. While it is checked, the dialog says so.
 - Site icons of the Profile's bookmarks and open Tabs are kept, as when history is cleared.
 - Bookmarks, downloaded files and Site Rules are never cleared here.
 
@@ -286,7 +286,9 @@ Holding a link or an image opens a menu:
 - The app has no telemetry and no crash-reporting SDK.
 - The engine sends no telemetry and no crash reports: Okapi sets up neither in GeckoView.
 - Logs never contain addresses, page titles or cookies in release builds. GeckoView's console output and debug logging are off, and release builds strip debug and verbose log calls, GeckoView's included.
-- Cookies follow Total Cookie Protection: a site embedded in another gets its own cookie jar there, so it can't follow the person across sites. Sign-in pop-ups and embedded sign-ins that ask for their cookies still get them.
+- Okapi's own connections, search suggestions only, refuse `http://`. Pages don't go through them: the engine loads the `http://` pages people ask for.
+- A site's cookies reach the disk within seconds of being set, so a sign-in survives Android ending the app.
+- Cookies follow Total Cookie Protection: a site embedded in another gets its own cookie jar there, so it can't follow the person across sites. Sign-in popups and embedded sign-ins that ask for their cookies still get them.
 - The app asks Android for the camera, microphone and location permissions only to pass them on to a site the person allowed (see "Site permissions and Site settings"). It never uses them itself.
 
 ## Out of scope for v1

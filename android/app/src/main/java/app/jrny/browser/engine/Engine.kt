@@ -27,6 +27,11 @@ object Engine {
 
     private val waitingForBridge = mutableListOf<(WebExtension) -> Unit>()
 
+    /** True once Gecko has started and answered the bridge's install, whether it worked or not. */
+    private var started = false
+
+    private val waitingForStart = mutableListOf<() -> Unit>()
+
     /** The runtime, made on first use with the app's settings for every page. */
     fun runtime(context: Context): GeckoRuntime {
         check(Looper.myLooper() == Looper.getMainLooper()) { "GeckoRuntime on the main thread only" }
@@ -49,7 +54,7 @@ object Engine {
             .contentBlocking(
                 ContentBlocking.Settings.Builder()
                     // Sites can't follow the person across sites with cookies: each site gets its own
-                    // jar for what it embeds (Total Cookie Protection). Sign-in pop-ups still work.
+                    // jar for what it embeds (Total Cookie Protection). Sign-in popups still work.
                     .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
                     .cookieBehaviorPrivateMode(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
                     // Blocking trackers and ads comes in 0.2, with a switch per site (ROADMAP).
@@ -67,16 +72,15 @@ object Engine {
     }
 
     /**
-     * Applies the app's settings to every page, open or not: they belong to the whole engine.
-     * [textZoom] is in percent; [pagesDark] asks pages for their dark theme (SPEC, "Dark pages").
+     * Applies [pages] to every page, open or not: these settings belong to the whole engine.
      */
-    fun apply(context: Context, textZoom: Int, safeBrowsing: Boolean, pagesDark: Boolean) {
+    fun applyPageSettings(context: Context, pages: PageSettings) {
         val settings = runtime(context).settings
-        val factor = textZoom / 100f
+        val factor = pages.textZoom / 100f
         if (settings.fontSizeFactor != factor) settings.setFontSizeFactor(factor)
-        val categories = if (safeBrowsing) ContentBlocking.SafeBrowsing.DEFAULT else ContentBlocking.SafeBrowsing.NONE
+        val categories = if (pages.safeBrowsing) ContentBlocking.SafeBrowsing.DEFAULT else ContentBlocking.SafeBrowsing.NONE
         if (settings.contentBlocking.safeBrowsingCategories != categories) settings.contentBlocking.setSafeBrowsing(categories)
-        val scheme = if (pagesDark) GeckoRuntimeSettings.COLOR_SCHEME_DARK else GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
+        val scheme = if (pages.dark) GeckoRuntimeSettings.COLOR_SCHEME_DARK else GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
         if (settings.preferredColorScheme != scheme) settings.setPreferredColorScheme(scheme)
     }
 
@@ -107,34 +111,49 @@ object Engine {
 
     private fun installBridge(runtime: GeckoRuntime) {
         runtime.webExtensionController.ensureBuiltIn(PageBridge.LOCATION, PageBridge.ID).accept({ extension ->
-            if (extension == null) return@accept
-            bridge = extension
-            val waiting = waitingForBridge.toList()
-            waitingForBridge.clear()
-            waiting.forEach { it(extension) }
-        }, { /* Pages still load; only icons, dark pages and files from the page wait for it. */ })
+            if (extension != null) {
+                bridge = extension
+                val waiting = waitingForBridge.toList()
+                waitingForBridge.clear()
+                waiting.forEach { it(extension) }
+            }
+            markStarted()
+        }, {
+            // Pages still load; only icons, dark pages and files from the page wait for it.
+            markStarted()
+        })
+    }
+
+    /** Gecko answers the install only once it has started, so either answer means it has. */
+    private fun markStarted() {
+        if (started) return
+        started = true
+        val waiting = waitingForStart.toList()
+        waitingForStart.clear()
+        waiting.forEach { it() }
     }
 
     /**
      * Deletes everything the session context [contextId] keeps: cookies, site storage, cache.
-     * GeckoView gives no word when the wipe is done, and one asked for before Gecko has started
-     * might not reach it, so it is handed over only once Gecko has started ([whenStarted]).
-     * [then] runs right after.
+     * One asked for before Gecko has started might not reach it, so it is handed over only once
+     * Gecko has started ([whenStarted]). GeckoView gives no word when the wipe is done; [handedOver]
+     * runs right after it is handed over.
      */
-    fun clearContext(context: Context, contextId: String, then: () -> Unit = {}) {
+    fun clearContext(context: Context, contextId: String, handedOver: () -> Unit = {}) {
         val storage = runtime(context).storageController
         whenStarted {
             storage.clearDataForSessionContext(contextId)
-            then()
+            handedOver()
         }
     }
 
     /**
-     * Runs [then] once Gecko has started, now if it has. GeckoView has no call for that; the
-     * built-in extension is installed only once it has. If the extension can't be installed,
-     * [then] never runs.
+     * Runs [then] once Gecko has started, now if it has. GeckoView has no call for that; it
+     * answers the built-in extension's install once it has, whether the install worked or not.
      */
-    private fun whenStarted(then: () -> Unit) = withBridge { then() }
+    private fun whenStarted(then: () -> Unit) {
+        if (started) then() else waitingForStart += then
+    }
 
     /**
      * Clears the engine's cache of pages and images. The cache is kept apart for each Profile, so no
@@ -147,3 +166,13 @@ object Engine {
     /** True in the app's own process, where the runtime may live; false in GeckoView's content processes. */
     fun isMainProcess(app: Application): Boolean = Application.getProcessName() == app.packageName
 }
+
+/** The app's settings that belong to the engine, so to every page at once. */
+data class PageSettings(
+    /** How large pages' text is, in percent (SPEC, "Text size"). */
+    val textZoom: Int,
+    /** Whether Safe Browsing checks pages. */
+    val safeBrowsing: Boolean,
+    /** Whether pages are asked for their dark theme (SPEC, "Dark pages"). */
+    val dark: Boolean,
+)

@@ -76,17 +76,19 @@ internal class PromptAnswer<P : PromptDelegate.BasePrompt>(val prompt: P) {
  * page, or none when the person cancelled; the page waits until it is called, and can't ask again
  * before.
  */
-class FileChooserAsk internal constructor(private val context: Context, private val prompt: PromptAnswer<PromptDelegate.FilePrompt>) {
+class FileChooserAsk internal constructor(private val context: Context, private val reply: PromptAnswer<PromptDelegate.FilePrompt>) {
+    private val field: PromptDelegate.FilePrompt = reply.prompt
+
     /** The kinds of file the page accepts: MIME types and `.ext` suffixes, as the page wrote them. */
-    val acceptTypes: List<String> = prompt.prompt.mimeTypes.orEmpty().flatMap { it.split(',') }.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+    val acceptTypes: List<String> = field.mimeTypes.orEmpty().flatMap { it.split(',') }.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
 
     /** True when the page takes several files. */
-    val multiple: Boolean = prompt.prompt.type == PromptDelegate.FilePrompt.Type.MULTIPLE
+    val multiple: Boolean = field.type == PromptDelegate.FilePrompt.Type.MULTIPLE
 
     fun answer(files: List<Uri>?) {
         val chosen = files?.takeIf { it.isNotEmpty() }
-        if (chosen == null) return prompt.dismiss()
-        prompt.confirm { if (multiple) it.confirm(context, chosen.toTypedArray()) else it.confirm(context, chosen.first()) }
+        if (chosen == null) return reply.dismiss()
+        reply.confirm { if (multiple) it.confirm(context, chosen.toTypedArray()) else it.confirm(context, chosen.first()) }
     }
 }
 

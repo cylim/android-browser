@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.jrny.browser.TestPages
 import app.jrny.browser.TestServer
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -55,6 +56,9 @@ class PageAsksUiTest {
     private lateinit var tab: Tab
     private var server: TestServer? = null
 
+    /** The sites the Profile asks for their desktop version. */
+    private val desktopSites = mutableSetOf<SiteOrigin>()
+
     /** The answers the window asked the Profile to keep: site, settings, allowed. */
     private val remembered = mutableListOf<Triple<SiteOrigin, Set<SiteSetting>, Boolean>>()
 
@@ -68,6 +72,7 @@ class PageAsksUiTest {
                 WebProfile.of(ProfileId("test-page-asks")),
                 // As BrowserState does for the Tab on screen with nothing remembered: ask the person.
                 onPermissionAsk = { tab, ask -> tab.showPermissionAsk(ask) },
+                desktopFor = { it in desktopSites },
             )
         }
     }
@@ -297,6 +302,28 @@ class PageAsksUiTest {
         compose.onNodeWithText("$popupHost says").assertExists()
         compose.onNodeWithText("127.0.0.1 says").assertDoesNotExist()
         compose.onNodeWithTag("page-prompt-ok").performClick()
+    }
+
+    @Test
+    fun aPopupOfADesktopSiteGetsItsDesktopVersion() {
+        val other = TestServer(mapOf("/agent" to "echo-agent"), loopback = false)
+        otherServer = other
+        desktopSites += SiteOrigin.of(other.url("/"))!!
+        show()
+        load(serve("<title>opener</title><button style='position:fixed;inset:0;width:100%;height:100%' onclick=\"window.open('${other.url("/agent")}')\">open</button>"))
+        awaitTitle("opener")
+        tapPage()
+        compose.waitUntil(15_000) { tab.popup != null && tab.popupUrl == other.url("/agent") }
+        // The popup's page names the agent it was asked with.
+        val deadline = System.currentTimeMillis() + 15_000
+        var agent = TestPages.runInPopup(tab, "document.title").orEmpty()
+        while (!agent.startsWith("\"agent: ") && System.currentTimeMillis() < deadline) {
+            Thread.sleep(200)
+            agent = TestPages.runInPopup(tab, "document.title").orEmpty()
+        }
+        assertTrue(agent, "X11; Linux x86_64" in agent)
+        // The Tab's own page stays as its site wants it.
+        assertTrue(!tab.desktopSite)
     }
 
     private companion object {

@@ -1,6 +1,5 @@
 package app.jrny.browser.ui
 
-import android.annotation.SuppressLint
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -48,7 +47,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /** Switching, creating and editing Profiles in both layouts, without a database. */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class ProfilesUiTest {
 

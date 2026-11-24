@@ -309,6 +309,7 @@
     <string name="data_site_settings">Site permissions and Desktop site choices</string>
     <string name="data_closed_tabs">Recently closed Tabs</string>
     <string name="data_site_icons">Site icons</string>
+    <string name="clear_cache_note">Cached images and files are cleared in every Profile.</string>
     <string name="clear_cookies_warning">Every Account signed in within %1$s will be signed out.</string>
     <string name="add_to_home_screen">Add to Home screen</string>
     <string name="shortcut_profile_deleted">This Profile was deleted</string>

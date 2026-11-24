@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.net.toUri
@@ -41,13 +42,7 @@ class SystemDownloader(private val context: Context) : Downloader {
 
     override fun receive(fileName: String, mimeType: String, size: Long, body: InputStream): String? {
         val resolver = context.contentResolver
-        val details = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            if (mimeType.isNotBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
-        val file = runCatching { resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) }.getOrNull()
+        val file = newPendingFile(fileName, mimeType)
         if (file == null) {
             runCatching { body.close() }
             return null
@@ -72,7 +67,7 @@ class SystemDownloader(private val context: Context) : Downloader {
                 false
             }
             if (done) {
-                resolver.update(file, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+                finish(file)
             } else {
                 runCatching { resolver.delete(file, null, null) }
                 if (!progress.cancelled) failed += address
@@ -109,21 +104,31 @@ class SystemDownloader(private val context: Context) : Downloader {
 
     override fun save(fileName: String, mimeType: String, file: java.io.File): String? {
         val resolver = context.contentResolver
+        val saved = newPendingFile(fileName, mimeType) ?: return null
+        return try {
+            resolver.openOutputStream(saved)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: error("No stream")
+            finish(saved)
+            saved.toString()
+        } catch (_: Exception) {
+            resolver.delete(saved, null, null)
+            null
+        }
+    }
+
+    /** A new file in Downloads, marked pending so no other app sees it until [finish], or null. */
+    private fun newPendingFile(fileName: String, mimeType: String): Uri? {
         val details = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)
             if (mimeType.isNotBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
             put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
-        val saved = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) ?: return null
-        return try {
-            resolver.openOutputStream(saved)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: error("No stream")
-            resolver.update(saved, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-            saved.toString()
-        } catch (_: Exception) {
-            resolver.delete(saved, null, null)
-            null
-        }
+        return runCatching { context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) }.getOrNull()
+    }
+
+    /** Shows [file], now written in full, to other apps. */
+    private fun finish(file: Uri) {
+        context.contentResolver.update(file, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
     }
 
     override fun savedStatus(fileUri: String): DownloadStatus {

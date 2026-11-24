@@ -55,7 +55,7 @@ class TabsAndDataUiTest {
     }
 
     @Test
-    fun clearBrowsingDataAsksWhatAndWarnsAboutSignOuts() {
+    fun clearBrowsingDataAsksWhatAndWarnsAboutSignOutsAndTheSharedCache() {
         compose.setContent {
             JrnyTheme {
                 SettingsPanel(SettingsUi(clearBrowsingData = { cleared += it }), onClose = {}, profileName = "Work")
@@ -63,6 +63,8 @@ class TabsAndDataUiTest {
         }
         compose.onNodeWithTag("setting-clear-data").performScrollTo().performClick()
         compose.onNodeWithText("Clear browsing data of Work?").assertExists()
+        // Cached files are checked at first, and the engine clears them for every Profile.
+        compose.onNodeWithText("Cached images and files are cleared in every Profile.").assertExists()
         compose.onNodeWithTag("clear-cookies-warning").assertDoesNotExist()
         compose.onNodeWithTag("clear-Cookies").performClick()
         compose.onNodeWithTag("clear-cookies-warning").assertExists()
