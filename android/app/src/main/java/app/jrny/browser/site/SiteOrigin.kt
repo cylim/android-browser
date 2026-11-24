@@ -16,7 +16,7 @@ value class SiteOrigin private constructor(val text: String) {
 
     companion object {
         /**
-         * The origin of [address], an `http` or `https` address or an origin as WebView reports
+         * The origin of [address], an `http` or `https` address or an origin as the engine reports
          * one (`https://example.com/`). Null for any other scheme, or an address without a host.
          */
         fun of(address: String?): SiteOrigin? {

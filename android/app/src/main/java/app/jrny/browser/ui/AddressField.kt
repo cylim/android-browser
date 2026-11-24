@@ -82,7 +82,7 @@ fun AddressField(
         // Hand focus to the page, as browsers do. Only clearing it isn't enough: when the
         // landscape fullscreen keyboard closes, Android gives focus back to the field.
         focusManager.clearFocus(force = true)
-        tab.webView.requestFocus()
+        focusPage(tab)
     }
 
     TextField(

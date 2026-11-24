@@ -56,15 +56,21 @@ class DownloadRequestTest {
     }
 
     @Test
-    fun webAddressesAreFetchedAndPageFilesAreSavedByOkapi() {
-        fun request(url: String, copy: String? = null) = DownloadRequest(url, "", "file", "", -1, pageCopy = copy)
-        assertTrue(request("https://example.com/file.zip").fromWeb)
-        assertTrue(request("http://example.com/file.zip").supported)
-        // A file the page made: a data: address holds it, and a blob: one only once the page kept a copy.
-        assertTrue(request("data:text/plain,hello").fromPage)
-        assertTrue(request("blob:https://example.com/1234", copy = "__okapi_1").fromPage)
-        assertFalse(request("blob:https://example.com/1234").supported)
-        assertFalse(request("data:text/plain,hello").fromWeb)
-        assertFalse(request("file:///sdcard/secret").supported)
+    fun aFileCanBeSavedWhenThereIsSomethingToRead() {
+        fun response(url: String, body: java.io.InputStream?) = DownloadRequest(url, "file", "", -1, source = DownloadSource.Response(body))
+        assertTrue(response("https://example.com/file.zip", "x".byteInputStream()).supported)
+        assertTrue(response("blob:https://example.com/1234", "x".byteInputStream()).streamed)
+        assertFalse(response("https://example.com/file.zip", null).supported)
+        // "Save image" fetches from the page once the person agrees.
+        val image = DownloadRequest("https://example.com/a.png", "a.png", "", -1, source = DownloadSource.FromPage)
+        assertTrue(image.supported)
+        assertFalse(image.streamed)
+    }
+
+    @Test
+    fun theListShowsTheFilesWebAddressOrElseThePages() {
+        assertEquals("https://example.com/a.zip", DownloadRequest("https://example.com/a.zip", "a.zip", "", -1, page = "https://example.com/").listedAddress)
+        assertEquals("https://example.com/", DownloadRequest("data:text/plain,hi", "hi.txt", "", -1, page = "https://example.com/").listedAddress)
+        assertEquals("", DownloadRequest("blob:https://example.com/1", "f", "", -1).listedAddress)
     }
 }

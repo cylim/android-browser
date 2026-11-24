@@ -2,16 +2,16 @@ package app.jrny.browser.tab
 
 import android.annotation.SuppressLint
 import android.util.Log
-import android.webkit.CookieManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.await
 import app.jrny.browser.TestPages.onMain
 import app.jrny.browser.TestPages.page
+import app.jrny.browser.TestPages.runInPage
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.TestServer
+import app.jrny.browser.engine.Engine
+import org.mozilla.geckoview.GeckoSession
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
 import org.junit.After
@@ -19,12 +19,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /** Runs on a device or emulator. Uses `data:` pages, so it needs no network. */
 @SuppressLint("RequiresFeature")
@@ -33,33 +29,29 @@ class TabTest {
 
     private val tabs = mutableListOf<Tab>()
 
-    @Before
-    fun requireMultiProfile() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
-    }
-
     @After
     fun destroyTabs() = onMain { tabs.forEach(Tab::destroy) }
 
     @Test
     fun aTabUsesItsProfilesWebData() {
         val tab = newTab("test-binding")
-        assertEquals("jrny-profile-test-binding", onMain { WebViewCompat.getProfile(tab.webView).name })
+        assertEquals("jrny-profile-test-binding", onMain { tab.session.settings.contextId })
+        assertFalse(onMain { tab.session.settings.usePrivateMode })
     }
 
     @Test
     fun profilesDontSeeEachOthersCookies() {
-        val site = "https://example.com"
-        val a = WebProfile.of(ProfileId("test-iso-a"))
-        val b = WebProfile.of(ProfileId("test-iso-b"))
-        val set = CountDownLatch(1)
-        onMain { a.cookieManager.setCookie(site, "jrny_test=a; Max-Age=60; Secure") { set.countDown() } }
-        assertTrue(set.await(5, TimeUnit.SECONDS))
-
-        fun sees(cookies: () -> CookieManager) = onMain { cookies().getCookie(site).orEmpty().contains("jrny_test=a") }
-        assertTrue("A sees its own cookie", sees { a.cookieManager })
-        assertFalse("B sees A's cookie", sees { b.cookieManager })
-        assertFalse("WebView's default profile sees A's cookie", sees { CookieManager.getInstance() })
+        TestServer(mapOf("/set" to "set-cookie:jrny_test=a", "/echo" to "echo-cookies")).use { server ->
+            val a = newTab("test-iso-a")
+            val b = newTab("test-iso-b")
+            onMain { a.load(server.url("/set")) }
+            awaitPage(a, server.url("/set"), "cookie set")
+            onMain { a.load(server.url("/echo")) }
+            awaitPage(a, server.url("/echo"), "cookies: jrny_test=a")
+            onMain { b.load(server.url("/echo")) }
+            await("B asked") { !b.isLoading && b.url == server.url("/echo") && b.title.startsWith("cookies:") }
+            assertEquals("B sees A's cookie", "cookies:", onMain { b.title.trim() })
+        }
     }
 
     @Test
@@ -78,11 +70,11 @@ class TabTest {
         assertFalse(onMain { tab.canGoForward })
 
         onMain { tab.goBack() }
-        awaitPage(tab, one, "one back_forward")
+        awaitHistoryStep(tab, one, "one")
         assertTrue(onMain { tab.canGoForward })
 
         onMain { tab.goForward() }
-        awaitPage(tab, two, "two back_forward")
+        awaitHistoryStep(tab, two, "two")
 
         // The page itself reports a reload, so this fails if reload() does nothing.
         onMain { tab.reload() }
@@ -134,7 +126,8 @@ class TabTest {
     fun pageConsoleOutputStaysOutOfTheSystemLog() {
         val tab = newTab("test-console")
         val nonce = System.nanoTime().toString()
-        val start = page("<script>console.log('jrny-console-$nonce');document.title='logged'</script>")
+        // The page puts the nonce together itself, so it is only in what it logs, not in its address.
+        val start = page("<script>console.log('jrny-console-'+'${nonce.reversed()}'.split('').reverse().join(''));document.title='logged'</script>")
         onMain { tab.load(start) }
         awaitPage(tab, start, "logged")
         // A line the test writes itself proves this process can read its own log.
@@ -147,7 +140,7 @@ class TabTest {
     }
 
     @Test
-    fun aDeadRendererGivesTheTabANewWebView() {
+    fun aDeadContentProcessGivesTheTabANewSession() {
         val visits = java.util.Collections.synchronizedList(mutableListOf<String>())
         val tab = onMain {
             Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-crash")), onVisited = { visits += it })
@@ -156,17 +149,17 @@ class TabTest {
         val one = titled("one")
         onMain { tab.load(one) }
         awaitPage(tab, one, "one navigate")
-        val first = onMain { tab.webView }
+        val first = onMain { tab.session }
 
-        // WebView's debug address for killing the renderer (see "Handle termination" in the WebView docs).
-        onMain { first.loadUrl("chrome://crash") }
-        await("renderer gone") { tab.crashed }
-        assertTrue(onMain { tab.webView } !== first)
+        // Gecko's own address for crashing the page's content process.
+        onMain { first.load(GeckoSession.Loader().uri("about:crashcontent").flags(GeckoSession.LOAD_FLAGS_BYPASS_LOAD_URI_DELEGATE)) }
+        await("content process gone") { tab.crashed }
+        assertTrue(onMain { tab.session } !== first)
 
-        // The reload brings the same page back in the new WebView, with its title kept meanwhile.
+        // The reload brings the same page back in the new session, with its title kept meanwhile.
         onMain { tab.reload() }
         assertEquals("one navigate", onMain { tab.title })
-        await("page back in the new WebView") { !tab.isLoading && tab.webView.url == one && tab.title == "one navigate" }
+        awaitPage(tab, one, "one navigate")
         assertFalse(onMain { tab.crashed })
         // It is the same visit as before, not a new one.
         assertEquals(listOf(one), visits.toList())
@@ -179,7 +172,7 @@ class TabTest {
         onMain { tab.load(one) }
         awaitPage(tab, one, "one navigate")
 
-        // Nothing listens on this port. WebView shows its own error page, titled "Webpage not available".
+        // Nothing listens on this port. Okapi's error page shows, and its title isn't the page's.
         val unreachable = "http://127.0.0.1:9/"
         onMain { tab.load(unreachable) }
         await("load failed") { !tab.isLoading && tab.url == unreachable }
@@ -215,9 +208,9 @@ class TabTest {
         onMain { tab.load(two) }
         awaitPage(tab, two, "two navigate")
         onMain { tab.goBack() }
-        awaitPage(tab, one, "one back_forward")
+        awaitHistoryStep(tab, one, "one")
         onMain { tab.goForward() }
-        awaitPage(tab, two, "two back_forward")
+        awaitHistoryStep(tab, two, "two")
         assertEquals(listOf(two), visits.toList())
     }
 
@@ -229,14 +222,14 @@ class TabTest {
             onMain { tab.load(server.url("/page")) }
             awaitPage(tab, server.url("/page"), "page")
 
-            onMain { tab.webView.evaluateJavascript("document.getElementById('f').click()", null) }
+            runInPage(tab, "document.getElementById('f').click()")
             await("file offered") { tab.download != null }
             val offered = onMain { tab.download!! }
             assertEquals(server.url("/file"), offered.url)
             // The site's name for the file, without the folders it tried to add.
-            assertEquals("notes 2026.txt", offered.fileName)
+            assertTrue(offered.fileName, offered.fileName.endsWith("notes 2026.txt") && "/" !in offered.fileName)
             assertEquals(5L, offered.size)
-            assertEquals(server.url("/page"), offered.referrer)
+            assertEquals(server.url("/page"), offered.page)
             assertTrue(offered.supported)
 
             // The Tab still shows the page, not a load that never ends.
@@ -248,7 +241,7 @@ class TabTest {
             // no page is named as the one that linked the file.
             onMain { tab.load(server.url("/file")) }
             await("file offered again") { tab.download != null }
-            assertEquals(null, onMain { tab.download!!.referrer })
+            assertEquals(null, onMain { tab.download!!.page })
             await("page still stays") { !tab.isLoading && tab.url == server.url("/page") && tab.title == "page" }
         }
     }
@@ -281,7 +274,7 @@ class TabTest {
             onMain { tab.load(server.url("/app")) }
             awaitPage(tab, server.url("/app"), "App")
 
-            onMain { tab.webView.evaluateJavascript("document.getElementById('go').click()", null) }
+            runInPage(tab, "document.getElementById('go').click()")
             await("moved on") { tab.url == server.url("/app/next") }
             assertEquals("App", onMain { tab.title })
             assertEquals(listOf(server.url("/app"), server.url("/app/next")), visits.toList())
@@ -312,23 +305,58 @@ class TabTest {
     }
 
     @Test
-    fun textSizeReachesTheOpenPage() {
-        val tab = newTab("test-zoom")
-        onMain { tab.textZoom = 150 }
-        assertEquals(150, onMain { tab.webView.settings.textZoom })
+    fun textSizeReachesEveryPage() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        try {
+            onMain { Engine.apply(context, textZoom = 150, safeBrowsing = true, pagesDark = false) }
+            assertEquals(1.5f, onMain { Engine.runtime(context).settings.fontSizeFactor })
+        } finally {
+            onMain { Engine.apply(context, textZoom = 100, safeBrowsing = true, pagesDark = false) }
+        }
     }
 
     @Test
-    fun darkPagesGiveTheTabANewWebViewThatShowsThePageAgain() {
-        val tab = newTab("test-dark")
-        val start = page("<title>dark</title><p>text</p>")
-        onMain { tab.load(start) }
-        awaitPage(tab, start, "dark")
-        val before = onMain { tab.webView }
-        onMain { tab.darkPages = true }
-        assertNotSame(before, onMain { tab.webView })
-        awaitPage(tab, start, "dark")
-        assertTrue(onMain { tab.webView.context.theme.obtainStyledAttributes(intArrayOf(android.R.attr.isLightTheme)).use { !it.getBoolean(0, true) } })
+    fun darkPagesDarkenOnlyAPageWithoutADarkTheme() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val pages = mapOf(
+            "/light" to "<title>light</title><body style='background:#fff'><p>text</p></body>",
+            "/themed" to "<title>themed</title><style>body{background:#fff}@media (prefers-color-scheme: dark){body{background:#111}}</style><p>text</p>",
+        )
+        val darkened = "getComputedStyle(document.documentElement).filter.indexOf('invert')>=0"
+        TestServer(pages).use { server ->
+            try {
+                onMain { Engine.apply(context, textZoom = 100, safeBrowsing = true, pagesDark = true) }
+                val tab = newTab("test-dark")
+                onMain { tab.darkPages = true }
+                onMain { tab.load(server.url("/light")) }
+                awaitPage(tab, server.url("/light"), "light")
+                awaitInPage("light page darkened", tab, darkened, "true")
+
+                // A page with a dark theme of its own shows that, untouched.
+                onMain { tab.load(server.url("/themed")) }
+                awaitPage(tab, server.url("/themed"), "themed")
+                Thread.sleep(800)
+                assertEquals("false", runInPage(tab, darkened))
+
+                // Turned off, the light page is light again.
+                onMain { tab.load(server.url("/light")) }
+                awaitPage(tab, server.url("/light"), "light")
+                awaitInPage("darkened again", tab, darkened, "true")
+                onMain { tab.darkPages = false }
+                awaitInPage("light again", tab, darkened, "false")
+            } finally {
+                onMain { Engine.apply(context, textZoom = 100, safeBrowsing = true, pagesDark = false) }
+            }
+        }
+    }
+
+    /** Waits until [script], run in [tab]'s page, gives [expected]. */
+    private fun awaitInPage(what: String, tab: Tab, script: String, expected: String, timeoutMs: Long = 15_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (runInPage(tab, script) != expected) {
+            if (System.currentTimeMillis() > deadline) throw AssertionError("Timed out waiting for: $what")
+            Thread.sleep(100)
+        }
     }
 
     private fun newTab(profileId: String): Tab = onMain {
@@ -336,8 +364,21 @@ class TabTest {
             .also { tabs += it }
     }
 
-    private fun awaitPage(tab: Tab, url: String, title: String) =
+    /**
+     * Waits for Back or Forward to show [url] again, the page named [name]: as it was, from the
+     * back-forward cache (with the title it had), or loaded again ("back_forward").
+     */
+    private fun awaitHistoryStep(tab: Tab, url: String, name: String) = try {
+        await("$name again at $url") { !tab.isLoading && tab.url == url && tab.title.startsWith("$name ") }
+    } catch (e: AssertionError) {
+        throw AssertionError("${e.message}, but the Tab has " + onMain { "title=${tab.title} loading=${tab.isLoading} url=${tab.url}" })
+    }
+
+    private fun awaitPage(tab: Tab, url: String, title: String) = try {
         await("$title at $url") { !tab.isLoading && tab.url == url && tab.title == title }
+    } catch (e: AssertionError) {
+        throw AssertionError("${e.message}, but the Tab has " + onMain { "title=${tab.title} loading=${tab.isLoading} url=${tab.url}" })
+    }
 
     private fun readOwnLog(): String =
         Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "raw")).inputStream.bufferedReader().readText()

@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "Okapi",
+  "version": "1.3",
+  "description": "Built into Okapi. Lets the browser show a page's icon, darken a page without a dark theme, and save a file or image from the page. It reads nothing else.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bridge@okapi.jrny.app"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
+  "permissions": ["nativeMessaging", "nativeMessagingFromContent", "geckoViewAddons", "<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page.js", "test.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

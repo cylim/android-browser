@@ -19,9 +19,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestServer
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -35,7 +35,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -43,7 +42,7 @@ import org.junit.runner.RunWith
 
 /**
  * What a page asks for, in the browser window (SPEC, "Pages"): a site's ask for the camera, a
- * sign-in, a file field and fullscreen video. Pages come from a server on 127.0.0.1, a secure
+ * sign-in, a file field, fullscreen video and the page's own dialogs. Pages come from a server on 127.0.0.1, a secure
  * origin, so they may ask for the camera.
  */
 @RunWith(AndroidJUnit4::class)
@@ -61,7 +60,6 @@ class PageAsksUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         // Android's own prompt is a system dialog a test can't answer, so the app already has the camera.
         instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, Manifest.permission.CAMERA)
         compose.runOnUiThread {
@@ -78,7 +76,11 @@ class PageAsksUiTest {
     fun destroy() {
         if (::tab.isInitialized) compose.runOnUiThread { tab.destroy() }
         server?.close()
+        otherServer?.close()
     }
+
+    /** A second site, for a popup of another site than its page. */
+    private var otherServer: TestServer? = null
 
     private fun serve(html: String, loopback: Boolean = true): String {
         val started = TestServer(mapOf("/page" to html), loopback)
@@ -114,13 +116,13 @@ class PageAsksUiTest {
 
     /**
      * Taps the middle of the page, as a person would: a page may open a file field or go
-     * fullscreen only on a tap. The touch goes to the WebView itself, so it lands whatever the
+     * fullscreen only on a tap. The touch goes to the page's view itself, so it lands whatever the
      * test window's size.
      */
     private fun tapPage() {
         compose.waitForIdle()
         compose.runOnUiThread {
-            val view = tab.webView
+            val view = SessionViews.viewOf(tab.session)!!
             val x = view.width / 2f
             val y = view.height / 2f
             val down = SystemClock.uptimeMillis()
@@ -241,7 +243,13 @@ class PageAsksUiTest {
             ),
         )
         awaitTitle("video")
-        tapPage()
+        // A page that has only just loaded may not take touches yet: a person would tap again.
+        repeat(5) {
+            if (!exists("fullscreen-video")) {
+                tapPage()
+                runCatching { compose.waitUntil(3_000) { exists("fullscreen-video") } }
+            }
+        }
         compose.waitUntil(15_000) { exists("fullscreen-video") }
         val expected = if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         compose.waitUntil(15_000) { activity?.requestedOrientation == expected }
@@ -252,6 +260,43 @@ class PageAsksUiTest {
         compose.waitUntil(15_000) { !exists("fullscreen-video") }
         assertNull(compose.runOnUiThread { tab.fullscreen })
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, activity?.requestedOrientation)
+    }
+
+    @Test
+    fun anAlertNamesItsSiteAndOkLetsThePageGoOn() {
+        show()
+        load(serve("<title>before</title><script>onload=function(){setTimeout(function(){alert('Hello there');document.title='after'},0)}</script>"))
+        compose.waitUntil(15_000) { exists("page-alert") }
+        compose.onNodeWithText("127.0.0.1 says").assertExists()
+        compose.onNodeWithText("Hello there").assertExists()
+        compose.onNodeWithTag("page-prompt-ok").performClick()
+        awaitTitle("after")
+        assertNull(compose.runOnUiThread { tab.prompt })
+    }
+
+    @Test
+    fun aQuestionsAnswerReachesThePage() {
+        show()
+        load(serve("<title>before</title><script>onload=function(){setTimeout(function(){document.title='answered '+confirm('Leave?')},0)}</script>"))
+        compose.waitUntil(15_000) { exists("page-confirm") }
+        compose.onNodeWithTag("page-prompt-cancel").performClick()
+        awaitTitle("answered false")
+    }
+
+    @Test
+    fun aPopupsDialogNamesThePopupsOwnSite() {
+        val other = TestServer(mapOf("/popup" to "<title>popup</title><script>onload=function(){setTimeout(function(){alert('From the popup')},0)}</script>"), loopback = false)
+        otherServer = other
+        val popupHost = other.url("/popup").toUri().host!!
+        show()
+        load(serve("<title>opener</title><button style='position:fixed;inset:0;width:100%;height:100%' onclick=\"window.open('${other.url("/popup")}')\">open</button>"))
+        awaitTitle("opener")
+        tapPage()
+        compose.waitUntil(15_000) { exists("page-alert") }
+        // The popup's site, not the page's that opened it.
+        compose.onNodeWithText("$popupHost says").assertExists()
+        compose.onNodeWithText("127.0.0.1 says").assertDoesNotExist()
+        compose.onNodeWithTag("page-prompt-ok").performClick()
     }
 
     private companion object {

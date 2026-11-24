@@ -35,7 +35,7 @@ data class Settings(
     val compactTabs: Boolean = false,
     /** How large the text of every page is, in percent (SPEC, "Text size"). */
     val textZoom: Int = 100,
-    /** Whether WebView darkens pages that have no dark theme, while the app's theme is dark (SPEC, "Dark pages"). */
+    /** Whether Okapi darkens pages that have no dark theme, while the app's theme is dark (SPEC, "Dark pages"). */
     val darkenPages: Boolean = false,
     /** Whether pulling down on a page scrolled to its top reloads it (SPEC, "Pull to refresh"). */
     val pullToRefresh: Boolean = true,

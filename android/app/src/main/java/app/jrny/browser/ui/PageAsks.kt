@@ -56,7 +56,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.key
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.jrny.browser.R
@@ -474,7 +474,8 @@ private fun HttpAuthDialog(ask: HttpAuthAsk, onSignIn: (String, String) -> Unit,
 private const val MAX_REALM_LENGTH = 120
 
 /**
- * The Tab's fullscreen video over the whole window (SPEC, "Fullscreen video"). The screen turns
+ * The Tab's fullscreen video over the whole window (SPEC, "Fullscreen video"): the page's own
+ * session moves here from the layout, and the page shows its video across it. The screen turns
  * to match the video: a wide one shows in landscape, a tall one in portrait, and one that can't
  * be measured in landscape. Back ends fullscreen, and the orientation goes back to normal.
  */
@@ -484,18 +485,10 @@ fun FullscreenVideoHost(tab: Tab) {
     val activity = LocalActivity.current
     BackHandler { tab.exitFullscreen() }
     LaunchedEffect(video) {
-        // The page marks its fullscreen element a moment after WebView hands over the view, and
-        // the video may still be loading its size.
+        // The video may still be loading its size when the page goes fullscreen.
         repeat(MEASURE_ATTEMPTS) { attempt ->
             delay(MEASURE_INTERVAL_MS)
-            var size: Pair<Int, Int>? = null
-            var measured = false
-            tab.measureFullscreenVideo {
-                size = it
-                measured = true
-            }
-            while (!measured) delay(MEASURE_POLL_MS)
-            val found = size
+            val found = tab.measureFullscreenVideo()
             if (found != null || attempt == MEASURE_ATTEMPTS - 1) {
                 activity?.requestedOrientation = if (found != null && found.second > found.first) {
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
@@ -509,12 +502,10 @@ fun FullscreenVideoHost(tab: Tab) {
     DisposableEffect(video) {
         onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
     }
-    AndroidView(
-        factory = { video.view },
-        modifier = Modifier.fillMaxSize().background(Color.Black).testTag("fullscreen-video"),
-    )
+    key(tab.session) {
+        SessionHost(tab.session, Modifier.fillMaxSize().background(Color.Black).testTag("fullscreen-video"))
+    }
 }
 
 private const val MEASURE_ATTEMPTS = 4
 private const val MEASURE_INTERVAL_MS = 250L
-private const val MEASURE_POLL_MS = 20L

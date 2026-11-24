@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
@@ -128,15 +130,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         deleteVisit = browser::deleteVisit,
         clearHistory = { browser.clearHistory(profile) },
         downloads = downloads,
-        startDownload = {
-            val shown = current.selected
-            when {
-                // A file the page made itself is saved by Okapi, from the page.
-                it.fromPage -> browser.savePageFile(shown, browser.tabFor(shown), it)
-                shown.isPrivate -> browser.startPrivateDownload(shown, it)
-                else -> browser.startDownload(profile, it)
-            }
-        },
+        startDownload = { browser.saveDownload(current.selected, browser.tabFor(current.selected), it) },
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
         removeDownload = browser::removeDownload,
@@ -155,7 +149,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         openInNewTab = { browser.openInNewTab(current.selected, it) },
         openInPrivateTab = { browser.openInPrivateTab(profile, it) },
         openInProfile = browser::openLinkInProfile,
-        fetchImage = { browser.fetchImage(current.selected, browser.tabFor(current.selected), it) },
+        fetchImage = { browser.fetchImage(browser.tabFor(current.selected), it) },
         openedBehind = browser.openedBehind?.takeIf { it.profileId == profile.id },
         dismissOpenedBehind = browser::dismissOpenedBehind,
         pageFileSaved = browser.pageFileSaved,
@@ -316,7 +310,7 @@ fun BrowserWindow(
             suggestions = emptyList()
             // As after Go: the page takes the focus, and the keyboard closes.
             focusManager.clearFocus(force = true)
-            tab.webView.requestFocus()
+            focusPage(tab)
         }
     }
     // Leaving the Start Page gives up an address being typed, and the keyboard closes.
@@ -465,7 +459,7 @@ fun BrowserWindow(
                     null
                 },
                 // A Tab without a web page shows the Start Page in the page's place. A dead
-                // renderer's message and a popup come first, though neither is likely there.
+                // dead page's message and a popup come first, though neither is likely there.
                 startPage = if (StartPage.shows(tab.url) && !tab.crashed && tab.popup == null) {
                     { padding, insets ->
                         StartPage(
@@ -556,6 +550,8 @@ fun BrowserWindow(
 
     // What the page asks for: permissions, files and a sign-in.
     PageAsks(tab, profiles.active.name, private, onRemember = siteSettings.rememberPermission)
+    // What its scripts and form fields ask: alerts, questions, lists, dates and colors.
+    PagePrompts(tab)
 
     // A page can only offer a file. It downloads once the person agrees.
     tab.download?.let { request ->
@@ -564,15 +560,18 @@ fun BrowserWindow(
             onDownload = {
                 library.startDownload(request)
                 // A Private Tab's download isn't on the list, so there is nothing to show there.
-                // A file the page made says once it is saved.
-                if (!private && request.fromWeb) downloading = request.fileName
-                // The page keeps its copy of a file it made until Okapi has read it.
-                tab.dismissDownload(kept = request.fromPage)
+                // A file fetched from the page says once it is saved.
+                if (!private && request.streamed) downloading = request.fileName
+                // Its response is now Okapi's to read.
+                tab.dismissDownload(kept = true)
             },
             onDismiss = tab::dismissDownload,
         )
     }
 
+    // Holding a link or an image is felt, as the menu opens.
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(tab.pressed) { if (tab.pressed != null) haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
     tab.pressed?.let { item ->
         LinkMenu(
             item,

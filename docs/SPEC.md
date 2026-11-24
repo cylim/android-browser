@@ -6,7 +6,7 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 
 - Android 15 (API 35) and later. `targetSdk` is the latest stable API level.
 - Kotlin, Jetpack Compose, Material 3, Room. Gradle uses the Kotlin DSL and a version catalog.
-- Pages render in Android System WebView, with one androidx.webkit profile for each **Profile** ([ADR 0001](adr/0001-system-webview-as-engine.md)).
+- Pages render in GeckoView, Mozilla's Gecko engine, shipped inside the app, with one session context for each **Profile** ([ADR 0006](adr/0006-geckoview-as-engine.md)). Okapi takes each GeckoView security release as it comes, about every 4 weeks.
 - No Google Play Services, Firebase, analytics or API keys ([ADR 0002](adr/0002-no-proprietary-dependencies-or-telemetry.md)).
 - Application ID: `app.jrny.browser`. Display name: Okapi ([ADR 0005](adr/0005-product-name-okapi.md)). Google Play title: "Okapi Browser by JRNY".
 
@@ -20,7 +20,7 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
   1. The person confirms. The dialog warns that every **Account** signed in within that Profile will be signed out.
   2. The Profile disappears from the UI and its Tabs close.
   3. If it was the Active Profile, another Profile becomes active. The last remaining Profile cannot be deleted.
-  4. Its web data is wiped at the next cold start. Settings show "N profiles pending removal" until then.
+  4. Its web data is wiped at once, and again at the next cold start, in case a page still on screen wrote something meanwhile. Settings show "N profiles pending removal" until then.
   5. Its Site settings and recently closed Tabs are deleted at once, and its Home Screen Shortcuts are disabled.
 
 ## Tabs
@@ -82,8 +82,7 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 
 - Each Profile can open **Private Tabs**. All of a Profile's Private Tabs share one temporary web data store, which is separate from the Profile's normal store.
 - Private Tabs never write to history, are never restored after the app is killed, and block screenshots and recent-apps previews (`FLAG_SECURE`).
-- Their storage is discarded once the last Private Tab of the Profile closes. Any leftover private storage is wiped at every cold start.
-  - WebView can't delete a store while the app runs. So when the last Private Tab closes, its cookies and site storage are cleared, and the next Private Tab gets a new, empty store. The old store's folder goes at the next cold start.
+- Their storage is kept in memory, and is discarded once the last Private Tab of the Profile closes. The next Private Tab gets a new, empty store. The one exception is site databases (IndexedDB): the engine writes them to disk encrypted, with a key it holds only in memory, under names that don't say the site. They are deleted once no Private Tab is open in any Profile. If Android ends the app first, the key goes with it, so what is left can't be read.
 - Private Tabs are kept in memory only: they survive the app's window being rebuilt, but not the app being closed or killed. Closing the app's window ends them even while Android keeps the app's process around.
 - A Private Tab is listed after the Profile's other Tabs, marked with a lock. Its page is named in the list only while a Private Tab is the one showing, which is when the window can't be captured.
 - A Private Tab can't be Moved or opened in another Profile. Its downloads are saved to the device but not put on the Profile's list of downloads.
@@ -173,6 +172,23 @@ Items that need a web page, such as Share and Find in page, are disabled on the 
 - The fields are marked as a username and a password, so a password manager can fill them through Android Autofill.
 - Okapi never stores what is typed. Cancelling shows the site's own error page.
 
+### Page dialogs
+
+- What a page's scripts ask the person shows as a dialog: an alert, a question with OK and Cancel, and a line of text to type. Each names the site it comes from, so a page can't pass its words off as Okapi's.
+- A list field (`<select>`) shows its items in a dialog, grouped as the page groups them. A list that takes several items has checkboxes and OK.
+- Date, month, week, time and date-and-time fields open Android-style pickers; "Clear" empties the field. A color field offers a set of colors and a color code.
+- A page that wants to stop the person leaving (it may have unsaved changes) asks "Leave this page?". Reloading a page a form made asks before the form is sent again.
+- Dismissing a dialog is the page's "Cancel". One dialog shows at a time, and only for the Tab on screen.
+- A page's own Share button opens Android's share sheet with what the page shares.
+- A pop-up a page opens without a tap stays blocked.
+
+### Error pages
+
+- A page that can't be loaded shows Okapi's own page in the Tab: what went wrong in plain words (no connection, no such site, a connection that isn't secure, a site that refused, a dangerous site) and "Try again". The Tab keeps the page's address, and the Tab list shows its site, not the error.
+- A dangerous site, reported by Safe Browsing, isn't opened. Its page offers only "Go back".
+- A site whose security certificate can't be trusted isn't opened, and there is no way past it. Certificates are checked against Mozilla's list of trusted authorities, which comes with the engine. Authorities installed on the device by the person or an employer aren't trusted.
+- The error page is made by Okapi and needs nothing from the network.
+
 ### Links to other apps
 
 - A web address (`http` or `https`) always stays in the Tab.
@@ -196,7 +212,7 @@ Holding a link or an image opens a menu:
 ### Share, Copy link and Print
 
 - Share hands the page's address and title to Android's share sheet. Copy link puts the address on the clipboard. Nothing else from the page goes with them.
-- Print opens Android's print dialog for the page, which can also save it as a PDF.
+- Print lays the page out as a PDF, then opens Android's print dialog for it, which can also save the PDF. A page that can't be laid out says so in a short message.
 
 ### Find in page
 
@@ -206,8 +222,8 @@ Holding a link or an image opens a menu:
 
 ### Desktop site
 
-- "Desktop site" asks sites for their desktop version: the Tab sends the user agent of Chrome on a Linux desktop (with the device's Chrome version), says it is no mobile in its client hints, and lays out a page that asks for the device's width at 1280 pixels instead.
-- The Tab switches agent before a page of the site loads. A form that is being sent (POST) keeps the agent it has, so nothing is sent twice.
+- "Desktop site" asks sites for their desktop version: the Tab sends the user agent of Firefox on a Linux desktop, and lays out a page that asks for the device's width as a desktop browser would.
+- The Tab switches before a page of the site loads, including a form sent to that site.
 - The choice is remembered for each site, in each Profile, and shows in Site settings. It applies to every Tab of that Profile on that site.
 - In a Private Tab the choice lasts until the Tab closes.
 
@@ -219,7 +235,7 @@ Holding a link or an image opens a menu:
 ### Dark pages
 
 - Settings → "Darken pages without a dark theme" is off by default. It applies only while the app's theme is dark.
-- When it's on, pages are asked for their dark theme, and a page that has no dark theme of its own is darkened by WebView. Turning it on or off, or a change of the app's theme while it's on, loads open pages again, without their back/forward history.
+- When it's on, pages are asked for their dark theme. A web page whose background is still light once it has loaded has no dark theme of its own, and Okapi darkens it: its colors are inverted, and its images and videos are turned back so they keep theirs. Turning it on or off, or a change of the app's theme while it's on, reaches open pages at once, without loading them again.
 
 ### Pull to refresh
 
@@ -230,8 +246,9 @@ Holding a link or an image opens a menu:
 
 - Settings → "Clear browsing data" clears data of the Active Profile only. It names the Profile.
 - It offers checkboxes for: history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs, and site icons. History and cached files are checked at first.
-- It clears everything stored, from all time. WebView can't clear a Profile's cookies for a time range, so the dialog offers no range.
-- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out. It clears everything sites stored in the Profile's store: cookies, site storage, service workers and Cache Storage. An Android System WebView too old for this clears only cookies and site storage.
+- It clears everything stored, from all time. The engine can't clear a Profile's cookies for a time range, so the dialog offers no range.
+- With "cookies and site data" checked, the dialog warns that every Account signed in within the Profile will be signed out. It clears everything sites stored in the Profile's store: cookies, site storage, service workers, Cache Storage and its cached files, and the access to their cookies that embedded sign-ins were given.
+- "Cached files" clears the engine's cache of pages and images. Each Profile's cache is kept apart, so no Profile can read another's, but the engine can only clear it for every Profile at once.
 - Site icons of the Profile's bookmarks and open Tabs are kept, as when history is cleared.
 - Bookmarks, downloaded files and Site Rules are never cleared here.
 
@@ -249,8 +266,11 @@ Holding a link or an image opens a menu:
   - History keeps web pages the person goes to, not reloads, Back, Forward, or pages restored with a Tab. A redirect's stops on the way are left out. Each Profile keeps its latest 5,000 visits.
   - History and bookmarks open in the page's place: beside the Sidebar, or full screen above the Bottom Bar layout.
   - Deleting a Profile removes its history, its bookmarks, its Folders and its list of downloads at once. Downloaded files stay on the device.
-  - A page can only offer a file: it downloads once the person agrees. Android's download service fetches it with the Profile's cookies and saves it to the device's Downloads folder. A site that only answers a real browser may refuse the download service.
-  - A file the page makes itself (a `blob:` or `data:` address) is saved by Okapi, not the download service, once the person agrees. A `data:` address holds the file, so Okapi decodes it. For a `blob:` address, the page keeps a copy of that one file when it offers it, and Okapi reads the copy out of the page only after the person agrees. Declining drops the copy. Nothing else on the page can be read this way. A page that drops its file in the same moment it offers it may leave nothing to copy, and then the file can't be saved. The file takes the name the page's link gives it (`download`), and goes to the same Downloads folder and the same list of downloads. A bar says once it is saved.
+  - A page can only offer a file: it downloads once the person agrees. The engine asks for it as the page would, with the Profile's cookies, and Okapi starts reading the file only once the person agrees; declining drops it. Okapi saves it to the device's Downloads folder and lists it at once, with its progress. The download belongs to the app: if Android ends the app while it runs, the file is left unfinished and listed as failed. A file that can't be saved at all says so in a bar. A Private Tab's download isn't listed, so a bar says once it is saved, or that it couldn't be.
+  - A file the page makes itself (a `blob:` or `data:` address) downloads the same way, with the name the page's link gives it (`download`).
+  - "Save image" fetches the image from the page, as the page would, once the person agrees. A bar says once it is saved.
+- A PDF a site shows as a page opens in the engine's own PDF viewer, in the Tab. A PDF the site sends as a file to save is offered as a download, like any file.
+- Protected video (DRM), as on streaming sites, plays without asking, through Android's own media DRM.
 - Search: Google by default, and the engine can be changed in settings (Google, Bing, DuckDuckGo, Brave Search). Address-bar suggestions are on by default and can be turned off.
   - While the person types, the address field offers matching pages from the Active Profile's bookmarks and history, then searches the search engine suggests.
   - Typed text goes to the search engine only when it would be searched for anyway and typing on can't turn it into credentials. An address, text shaped like credentials, or text with a colon before its first `/`, `?` or `#` (`admin:hunter2`, where an `@` may come next) is never sent. So a search with an early colon, such as `python: list comprehension`, gets only bookmark and history suggestions while it is typed, and Go still searches for it. The request carries no cookies. A Private Tab offers no suggestions at all.
@@ -258,14 +278,15 @@ Holding a link or an image opens a menu:
 - Theme: the device's, light or dark. It sets the browser's own bars and lists; pages keep following the device's setting, unless "Darken pages without a dark theme" is on (see "Dark pages").
 - Settings open in the page's place, like history and bookmarks.
 - Password managers work through the Android Autofill framework. Okapi does not store passwords itself.
-- Passkeys are not supported until the app is approved as a privileged browser ([ADR 0001](adr/0001-system-webview-as-engine.md)).
+- Passkeys are not supported until the app is approved as a privileged browser ([ADR 0006](adr/0006-geckoview-as-engine.md)).
 
 ## Data protection
 
 - `android:allowBackup="false"`, and `dataExtractionRules` exclude everything from cloud backup and device-to-device transfer. Session cookies must never leave the device.
 - The app has no telemetry and no crash-reporting SDK.
-- The manifest sets `android.webkit.WebView.MetricsOptOut`, so Android System WebView sends no usage statistics from the app, whatever the device's usage and diagnostics setting is. WebView's crash reports still follow that setting.
-- Logs never contain addresses, page titles or cookies in release builds.
+- The engine sends no telemetry and no crash reports: Okapi sets up neither in GeckoView.
+- Logs never contain addresses, page titles or cookies in release builds. GeckoView's console output and debug logging are off, and release builds strip debug and verbose log calls, GeckoView's included.
+- Cookies follow Total Cookie Protection: a site embedded in another gets its own cookie jar there, so it can't follow the person across sites. Sign-in pop-ups and embedded sign-ins that ask for their cookies still get them.
 - The app asks Android for the camera, microphone and location permissions only to pass them on to a site the person allowed (see "Site permissions and Site settings"). It never uses them itself.
 
 ## Out of scope for v1

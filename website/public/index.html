@@ -86,7 +86,7 @@
     <section id="profiles" class="band wrap" aria-labelledby="profiles-title">
       <div class="section-head">
         <h2 id="profiles-title">What a Profile keeps to itself</h2>
-        <p>Each Profile is its own androidx.webkit profile inside Android System WebView, with its own cookies and storage on disk.</p>
+        <p>Each Profile is its own session context inside GeckoView, Mozilla's web engine, with its own cookies and storage on disk.</p>
       </div>
       <div class="ledger">
         <div class="ledger-col">
@@ -303,11 +303,11 @@
         <p>A browser sees everything you do online. So Okapi has no analytics, no crash reporter and no service that needs a key (<a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0002-no-proprietary-dependencies-or-telemetry.md">ADR 0002</a>).</p>
       </div>
       <ul class="checks">
-        <li><b>No telemetry.</b> No analytics, no crash-reporting SDK, and Android System WebView's usage statistics are turned off. Crash reports come from people who open a GitHub issue and paste a log they've read. WebView's own crash reports follow your device's setting, as the <a href="privacy.html#l-webview">privacy policy</a> explains.</li>
+        <li><b>No telemetry.</b> No analytics and no crash-reporting SDK, in the app or in its engine. Crash reports come from people who open a GitHub issue and paste a log they've read. The <a href="privacy.html#l-engine">privacy policy</a> says what the engine itself sends.</li>
         <li><b>No Google Play Services.</b> No Firebase, no API keys. A public repository with no secrets in the app has no secret to leak.</li>
         <li><b>Sessions stay on the device.</b> Cloud backup and device-to-device transfer leave out all of the app's data, so your signed-in sessions are never copied off the device.</li>
         <li><b>Quiet logs.</b> Release builds never log addresses, page titles or cookies.</li>
-        <li><b>Safe Browsing without a key.</b> It's built into Android System WebView, so the app doesn't need one.</li>
+        <li><b>Safe Browsing without a key.</b> It's built into GeckoView, so the app doesn't need one.</li>
         <li><b>Built in public, MIT licensed.</b> The code, the spec and the architecture decisions, with the reasons behind them, are on GitHub.</li>
       </ul>
       <p class="note">This page follows the same rule: no fonts, scripts or trackers from other servers.</p>
@@ -319,7 +319,7 @@
       </div>
       <dl class="reqs">
         <div><dt>Android</dt><dd>15 (API 35) or later</dd></div>
-        <div><dt>Engine</dt><dd>Android System WebView, already on the device</dd></div>
+        <div><dt>Engine</dt><dd>GeckoView (Gecko, as in Firefox), inside the app</dd></div>
         <div><dt>Google Play Services</dt><dd>Not needed</dd></div>
         <div><dt>Screens</dt><dd>Phones, tablets and foldables</dd></div>
       </dl>
@@ -481,9 +481,12 @@
           </details>
 
           <details>
-            <summary><em class="pending">not merged</em> <span>WebView usage metrics are turned off</span></summary>
+            <summary><em class="pending">not merged</em> <span>GeckoView, Mozilla's engine, renders pages</span></summary>
             <ul>
-              <li>Okapi tells Android System WebView not to send its usage statistics to Google, whatever the device's usage and diagnostics setting is. WebView's crash reports still follow that setting and contain no page addresses.</li>
+              <li>Pages render in GeckoView inside the app instead of Android System WebView. Sites see Firefox for Android, and no request carries the app's package name any more.</li>
+              <li>Page dialogs, list and date fields, Okapi's own error pages, and downloads written by Okapi with their progress on the list.</li>
+              <li>Deleting a Profile wipes its web data at once. Private Tabs keep their storage in memory only.</li>
+              <li>The app is larger, about 95 MB to download, and Okapi now ships each GeckoView security release itself.</li>
             </ul>
           </details>
 
@@ -501,12 +504,10 @@
           <ul>
             <li>Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.</li>
             <li>There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.</li>
-            <li>Files a page makes itself (<code>blob:</code> and <code>data:</code> addresses) can't be downloaded yet, and a site that only answers a real browser may refuse the download service.</li>
+            <li>A download stops if Android ends the app while it runs.</li>
             <li>Back/forward history isn't restored after Android kills the app.</li>
             <li>A Move loses unsaved form input and pages reached by submitting a form.</li>
-            <li>A deleted Profile's web data stays on the device until the next cold start.</li>
-            <li>Sign-in with two Accounts at once is confirmed for Google. Microsoft, GitHub and Apple are untested.</li>
-            <li>Android System WebView sends the app's package name with every request (<code>X-Requested-With</code>), and this can't be turned off. A site could use it to block sign-in.</li>
+            <li>Sign-in with two Accounts at once still needs checking on GeckoView, for Google, Microsoft, GitHub and Apple.</li>
             <li>Not in v1: sync, extensions, a built-in password manager, content blocking and a lock per Profile.</li>
           </ul>
         </section>

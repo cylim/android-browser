@@ -2,17 +2,18 @@ package app.jrny.browser
 
 import android.annotation.SuppressLint
 import android.content.Context
-import androidx.webkit.WebSettingsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.await
 import app.jrny.browser.TestPages.onMain
+import app.jrny.browser.TestPages.runInPage
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
+import app.jrny.browser.download.DownloadSource
 import app.jrny.browser.download.DownloadStatus
+import app.jrny.browser.engine.Engine
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
@@ -40,13 +41,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * BrowserState with real WebViews and a throwaway database: at most 5 Tabs are live across all
+ * BrowserState with real GeckoView sessions and a throwaway database: at most 5 Tabs are live across all
  * Profiles, unloaded Tabs load again when shown, and Tabs come back after the app is killed.
  */
 @SuppressLint("RequiresFeature")
@@ -76,7 +76,6 @@ class BrowserStateTest {
 
     @Before
     fun firstProfile() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         runBlocking { profiles.ensureFirstProfile("Personal") }
     }
 
@@ -131,6 +130,15 @@ class BrowserStateTest {
     private fun loadUntil(tab: Tab, url: String, title: (String) -> Boolean) {
         onMain { tab.load(url) }
         await("loaded $url") { !tab.isLoading && tab.url == url && title(tab.title) }
+    }
+
+    /** Waits until [condition], checked on the test thread, holds: it may wait on the main thread itself. */
+    private fun awaitTrue(what: String, timeoutMs: Long = 15_000, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!condition()) {
+            if (System.currentTimeMillis() > deadline) throw AssertionError("Timed out waiting for: $what")
+            Thread.sleep(100)
+        }
     }
 
     /** Waits until [id]'s saved address and title are [url] and [title]. */
@@ -683,80 +691,64 @@ class BrowserStateTest {
         await("work has nothing pinned") { browser.pinned.value.isEmpty() }
     }
 
+    /** A file the page offered, as GeckoView hands it over: [content] is its response's body. */
+    private fun offered(url: String, name: String, content: String = "content") =
+        DownloadRequest(url, name, "application/octet-stream", content.length.toLong(), source = DownloadSource.Response(content.byteInputStream()))
+
     @Test
-    fun aDownloadUsesItsProfilesCookiesAndIsListedInThatProfileOnly() {
-        val browser = newBrowser()
-        val personal = active(browser).profile
-        val file = DownloadRequest("https://example.com/files/report.pdf", "TestAgent", "report.pdf", "application/pdf", 2048)
+    fun aDownloadIsFetchedWithItsProfilesCookiesAndListedInThatProfileOnly() {
         val cookie = "jrny_download=${System.nanoTime()}"
-        val set = java.util.concurrent.CountDownLatch(1)
-        onMain { WebProfile.of(personal.id).cookieManager.setCookie("https://example.com", "$cookie; Max-Age=600; Secure; Path=/") { set.countDown() } }
-        assertTrue(set.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        TestServer(mapOf("/login" to "set-cookie:$cookie", "/report.pdf" to "download:report.pdf:the report")).use { server ->
+            val browser = newBrowser()
+            val tab = show(browser, active(browser).selected.id)
+            load(tab, server.url("/login"), "cookie set")
+            onMain { tab.load(server.url("/report.pdf")) }
+            await("offered") { tab.download != null }
+            // GeckoView asked for the file with the Profile's cookie, as the page would.
+            assertTrue(server.requests.last { it.first == "/report.pdf" }.second.contains(cookie))
+            val request = onMain { tab.download!! }
+            assertEquals("report.pdf", request.fileName)
+            val shown = active(browser).selected
+            onMain {
+                browser.saveDownload(shown, tab, request)
+                tab.dismissDownload(kept = true)
+            }
+            await("listed") { browser.downloads.value.map { it.fileName } == listOf("report.pdf") }
+            assertEquals("the report", String(downloader.received.single().bytes))
+            val listed = onMain { browser.downloads.value.single() }
+            assertEquals(server.url("/report.pdf"), listed.url)
+            assertEquals(mapOf(listed.id to DownloadStatus.Done(10)), runBlocking { browser.downloadStatuses(listOf(listed)) })
 
-        onMain { browser.startDownload(personal, file) }
-        await("listed") { browser.downloads.value.map { it.fileName } == listOf("report.pdf") }
-        val started = downloader.started.single()
-        assertEquals(file, started.request)
-        assertTrue(started.cookies, started.cookies!!.contains(cookie))
-        val listed = onMain { browser.downloads.value.single() }
-        assertEquals(started.id, listed.downloadId)
-        assertEquals(mapOf(listed.id to DownloadStatus.Running(null)), runBlocking { browser.downloadStatuses(listOf(listed)) })
-
-        // Another Profile has its own list, and its downloads don't carry the first Profile's cookies.
-        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
-        await("work active") { browser.active.value?.profile?.id == work.id }
-        await("work has none") { browser.downloads.value.isEmpty() }
-        onMain { browser.startDownload(work, file) }
-        await("work listed") { browser.downloads.value.size == 1 }
-        assertFalse(downloader.started[1].cookies.orEmpty().contains(cookie))
-
-        // Removing a running download stops it. A file that isn't a web address is never started.
-        val running = onMain { browser.downloads.value.single() }
-        onMain { browser.removeDownload(running) }
-        await("removed") { browser.downloads.value.isEmpty() }
-        assertEquals(listOf(running.downloadId), downloader.cancelled.toList())
-        onMain { browser.startDownload(work, file.copy(url = "blob:https://example.com/abc")) }
-        Thread.sleep(300)
-        assertEquals(2, downloader.started.size)
-    }
-
-    @Test
-    fun aDownloadThatRedirectsToAnotherSiteDoesNotTakeTheFirstSitesCookiesAlong() {
-        val browser = newBrowser()
-        val personal = active(browser).profile
-        val session = "jrny_session=${System.nanoTime()}"
-        val set = java.util.concurrent.CountDownLatch(1)
-        onMain { WebProfile.of(personal.id).cookieManager.setCookie("https://example.com", "$session; Max-Age=600; Secure; Path=/") { set.countDown() } }
-        assertTrue(set.await(5, java.util.concurrent.TimeUnit.SECONDS))
-        downloader.redirects["https://example.com/get/report"] = "https://files.example.net/report.pdf"
-
-        onMain { browser.startDownload(personal, DownloadRequest("https://example.com/get/report", "TestAgent", "report.pdf", "application/pdf", -1)) }
-        await("started") { downloader.started.size == 1 }
-
-        // The download service starts at the other site, without example.com's session cookie.
-        val started = downloader.started.single()
-        assertEquals("https://files.example.net/report.pdf", started.request.url)
-        assertFalse(started.cookies.orEmpty().contains(session))
-        // The Profile's list still names the address the page linked.
-        await("listed") { browser.downloads.value.size == 1 }
-        assertEquals("https://example.com/get/report", onMain { browser.downloads.value.single().url })
+            // Another Profile has its own list.
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            await("work active") { browser.active.value?.profile?.id == work.id }
+            await("work has none") { browser.downloads.value.isEmpty() }
+            val workTab = show(browser, active(browser).selected.id)
+            onMain { workTab.load(server.url("/report.pdf")) }
+            await("offered in work") { workTab.download != null }
+            // Its request carried none of the first Profile's cookies.
+            assertFalse(server.requests.last { it.first == "/report.pdf" }.second.contains(cookie))
+            onMain { workTab.dismissDownload() }
+        }
     }
 
     @Test
     fun removingADownloadStopsItIfItIsStillRunningWhateverTheListLastShowed() {
         val browser = newBrowser()
-        val personal = active(browser).profile
-        onMain { browser.startDownload(personal, DownloadRequest("https://example.com/a.zip", "", "a.zip", "application/zip", -1)) }
-        onMain { browser.startDownload(personal, DownloadRequest("https://example.com/b.zip", "", "b.zip", "application/zip", -1)) }
+        val shown = active(browser).selected
+        val tab = show(browser, shown.id)
+        onMain { browser.saveDownload(shown, tab, offered("https://example.com/a.zip", "a.zip")) }
+        await("a listed") { browser.downloads.value.size == 1 }
+        onMain { browser.saveDownload(shown, tab, offered("https://example.com/b.zip", "b.zip")) }
         await("listed") { browser.downloads.value.size == 2 }
         val (b, a) = onMain { browser.downloads.value }
-        downloader.status[a.downloadId] = DownloadStatus.Done(10)
+        downloader.status[b.fileUri!!] = DownloadStatus.Running(0.5f)
 
         onMain { browser.removeDownload(a) }
         onMain { browser.removeDownload(b) }
         await("removed") { browser.downloads.value.isEmpty() }
-        // Only the one that was still running is cancelled. The finished file stays.
-        assertEquals(listOf(b.downloadId), downloader.cancelled.toList())
+        // Only the one that was still running is stopped. The finished file stays.
+        assertEquals(listOf(b.fileUri), downloader.cancelled.toList())
     }
 
     @Test
@@ -765,12 +757,39 @@ class BrowserStateTest {
         val personal = active(browser).profile
         val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
         await("work active") { browser.active.value?.profile?.id == work.id }
-        onMain { browser.startDownload(work, DownloadRequest("https://example.com/a.zip", "", "a.zip", "application/zip", -1)) }
+        val shown = active(browser).selected
+        val tab = show(browser, shown.id)
+        onMain { browser.saveDownload(shown, tab, offered("https://example.com/a.zip", "a.zip")) }
         await("listed") { browser.downloads.value.size == 1 }
 
         onMain { browser.delete(work) }
         await("personal active") { browser.active.value?.profile?.id == personal.id }
         assertEquals(emptyList<Download>(), runBlocking { repositories.downloads.downloads(work.id).first() })
+    }
+
+    @Test
+    fun wipingAProfilesWebDataDeletesItsCookies() {
+        val cookie = "jrny_wipe=${System.nanoTime()}"
+        // A new address for each look, so each is a load of its own.
+        val echoes = (0 until 20).associate { "/echo$it" to "echo-cookies" }
+        TestServer(echoes + ("/set" to "set-cookie:$cookie")).use { server ->
+            val browser = newBrowser()
+            val profile = active(browser).profile.id
+            val tab = show(browser, active(browser).selected.id)
+            loadUntil(tab, server.url("/set")) { it == "cookie set" }
+            loadUntil(tab, server.url("/echo0")) { it.startsWith("cookies:") }
+            assertTrue(onMain { tab.title }, onMain { tab.title }.contains(cookie))
+
+            var handed = false
+            onMain { WebProfile.of(profile).clear(context) { handed = true } }
+            await("wipe handed to the engine") { handed }
+            // GeckoView gives no word when the wipe is done; it is within moments.
+            var look = 1
+            awaitTrue("cookie wiped") {
+                loadUntil(tab, server.url("/echo${look++}")) { it.startsWith("cookies:") }
+                !onMain { tab.title }.contains(cookie)
+            }
+        }
     }
 
     @Test
@@ -937,9 +956,9 @@ class BrowserStateTest {
         assertEquals(personal.id, active(browser).profile.id)
         assertTrue(runBlocking { tabs.tabs(work.id).first() }.none { it.url == titled("private") })
 
-        // Its download uses its own cookies and isn't put on the Profile's list.
-        onMain { browser.startPrivateDownload(private, DownloadRequest("https://example.com/file.zip", "", "file.zip", "application/zip", -1)) }
-        await("download started") { downloader.started.size == 1 }
+        // Its download is kept, but isn't put on the Profile's list.
+        onMain { browser.saveDownload(private, tab, offered("https://example.com/file.zip", "file.zip")) }
+        await("download kept") { downloader.received.size == 1 }
         Thread.sleep(300)
         assertEquals(emptyList<Download>(), onMain { browser.downloads.value })
 
@@ -1007,24 +1026,17 @@ class BrowserStateTest {
 
     @Test
     fun safeBrowsingFollowsTheSettingAlsoForPagesAlreadyOpen() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE))
         val browser = newBrowser()
-        val tab = show(browser, active(browser).selected.id)
-        fun enabled(of: Tab) = onMain { WebSettingsCompat.getSafeBrowsingEnabled(of.webView.settings) }
-        assertTrue(enabled(tab))
-
+        show(browser, active(browser).selected.id)
+        assertTrue(onMain { Engine.safeBrowsing(context) })
         onMain { browser.updateSettings { it.copy(safeBrowsing = false) } }
-        await("off for the open page") { !WebSettingsCompat.getSafeBrowsingEnabled(tab.webView.settings) }
-
-        // A Tab opened now starts with it off, and turning it on reaches both.
-        val (_, private) = openPrivate(browser)
-        assertFalse(enabled(private))
+        await("off for every page") { !Engine.safeBrowsing(context) }
         onMain { browser.updateSettings { it.copy(safeBrowsing = true) } }
-        await("on again") { WebSettingsCompat.getSafeBrowsingEnabled(tab.webView.settings) && WebSettingsCompat.getSafeBrowsingEnabled(private.webView.settings) }
+        await("on again") { Engine.safeBrowsing(context) }
     }
 
     @Test
-    fun closingTheShownTabShowsAnotherAndFreesItsWebView() {
+    fun closingTheShownTabShowsAnotherAndFreesItsSession() {
         val browser = newBrowser()
         val personal = active(browser).profile.id
         val keep = runBlocking { tabs.open(personal) }
@@ -1126,12 +1138,12 @@ class BrowserStateTest {
     }
 
     @Test
-    fun aDataFileIsSavedByOkapiAndListedInItsProfile() {
+    fun aDataImageSavedFromThePageIsDecodedAndListedInItsProfile() {
         val browser = newBrowser()
         val shown = active(browser).selected
         val tab = show(browser, shown.id)
-        val request = DownloadRequest("data:text/csv;base64,YSxiCjEsMgo=", "", "table.csv", "text/csv", -1)
-        onMain { browser.savePageFile(shown, tab, request) }
+        val request = DownloadRequest("data:text/csv;base64,YSxiCjEsMgo=", "table.csv", "text/csv", -1, source = DownloadSource.FromPage)
+        onMain { browser.saveDownload(shown, tab, request) }
         await("saved") { browser.pageFileSaved == ("table.csv" to true) }
         assertEquals("a,b\n1,2\n", String(downloader.saved.values.single().second))
         await("listed") { browser.downloads.value.size == 1 }
@@ -1141,7 +1153,7 @@ class BrowserStateTest {
     }
 
     @Test
-    fun aBlobFileIsReadOutOfThePageOnlyOnceThePersonAgrees() {
+    fun aFileThePageMakesIsOfferedWithItsNameAndSavedOnceThePersonAgrees() {
         // The page makes a file, offers it, and drops its own address for it a moment later, as
         // file-saving scripts do.
         val maker = "<title>maker</title><a id=a download='notes.txt'>save</a><script>" +
@@ -1156,17 +1168,19 @@ class BrowserStateTest {
             // The link names the file.
             await("named") { tab.download?.fileName == "notes.txt" }
             val request = onMain { tab.download!! }
-            assertTrue(request.fromPage)
+            assertTrue(request.streamed)
             // Long after the page dropped its address, the person agrees.
             Thread.sleep(2000)
-            assertTrue(downloader.saved.isEmpty())
+            assertTrue(downloader.received.isEmpty())
             onMain {
-                browser.savePageFile(shown, tab, request)
+                browser.saveDownload(shown, tab, request)
                 tab.dismissDownload(kept = true)
             }
-            await("saved") { browser.pageFileSaved != null }
-            assertEquals(true, onMain { browser.pageFileSaved?.second })
-            assertEquals("hello from the page", String(downloader.saved.values.single().second))
+            await("saved") { downloader.received.size == 1 }
+            assertEquals("hello from the page", String(downloader.received.single().bytes))
+            // It is listed under the page that made it.
+            await("listed") { browser.downloads.value.size == 1 }
+            assertEquals(server.url("/maker"), onMain { browser.downloads.value.single().url })
         }
     }
 
@@ -1250,25 +1264,32 @@ class BrowserStateTest {
 
     @Test
     fun clearingCookiesSignsTheProfileOutAndLeavesOthersAlone() {
-        val browser = newBrowser()
-        val personal = active(browser).profile
-        val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
-        val site = "https://example.com"
-        val set = java.util.concurrent.CountDownLatch(2)
-        onMain {
-            WebProfile.of(personal.id).cookieManager.setCookie(site, "a=1; Max-Age=600; Secure") { set.countDown() }
-            WebProfile.of(work.id).cookieManager.setCookie(site, "b=2; Max-Age=600; Secure") { set.countDown() }
+        TestServer(mapOf("/a" to "set-cookie:a=1", "/b" to "set-cookie:b=2", "/echo" to "echo-cookies")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            val mine = show(browser, active(browser).selected.id)
+            val theirs = onMain { Tab(context, WebProfile.of(work.id)) }
+            try {
+                load(mine, server.url("/a"), "cookie set")
+                load(theirs, server.url("/b"), "cookie set")
+                onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies, BrowsingData.Cache)) }
+                // The clear runs in the background: each look asks the server again.
+                awaitTrue("personal signed out") {
+                    loadUntil(mine, server.url("/echo")) { it.startsWith("cookies:") }
+                    onMain { mine.title.trim() } == "cookies:"
+                }
+                load(theirs, server.url("/echo"), "cookies: b=2")
+            } finally {
+                onMain { theirs.destroy() }
+            }
         }
-        assertTrue(set.await(5, java.util.concurrent.TimeUnit.SECONDS))
-        onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies, BrowsingData.Cache)) }
-        await("personal signed out") { WebProfile.of(personal.id).cookieManager.getCookie(site).isNullOrEmpty() }
-        assertEquals("b=2", onMain { WebProfile.of(work.id).cookieManager.getCookie(site) })
     }
-
 
     @Test
     fun clearingSiteDataEmptiesTheProfilesCacheStorageAndLeavesOthersAlone() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA))
         // Cache Storage needs a secure origin: a server on 127.0.0.1 is one.
         val page = "<title>cache</title><script>" +
             "function count(){caches.keys().then(function(k){document.title='caches '+k.length})}" +
@@ -1286,11 +1307,12 @@ class BrowserStateTest {
                 onMain { browser.clearBrowsingData(personal, setOf(BrowsingData.Cookies)) }
                 // The clear runs in the background: each look asks the page again.
                 val count = "caches.keys().then(function(k){document.title='left '+k.length})"
-                await("personal emptied") {
-                    mine.webView.evaluateJavascript(count, null)
-                    mine.title == "left 0"
+                awaitTrue("personal emptied") {
+                    runInPage(mine, count)
+                    Thread.sleep(200)
+                    onMain { mine.title } == "left 0"
                 }
-                onMain { theirs.webView.evaluateJavascript(count, null) }
+                runInPage(theirs, count)
                 await("work kept") { theirs.title == "left 1" }
             } finally {
                 onMain { theirs.destroy() }

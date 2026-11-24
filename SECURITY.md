@@ -26,7 +26,7 @@ You can expect:
 - Malicious links or apps that make Okapi open content in a Profile the person did not choose.
 - Secrets or signing material committed to this repository.
 
-Bugs in Android System WebView itself should be reported to the [Chromium project](https://issues.chromium.org/). Tell us as well if Okapi makes the bug worse.
+Bugs in GeckoView or Gecko itself should be reported to [Mozilla](https://www.mozilla.org/security/bug-bounty/) through [Bugzilla](https://bugzilla.mozilla.org/). Tell us as well if Okapi makes the bug worse, or ships a GeckoView with a known security hole.
 
 ## Supported versions
 

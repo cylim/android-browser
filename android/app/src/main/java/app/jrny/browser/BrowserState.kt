@@ -9,9 +9,10 @@ import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DataAddress
 import app.jrny.browser.download.DownloadStatus
+import app.jrny.browser.download.DownloadSource
 import app.jrny.browser.download.FetchedImage
-import app.jrny.browser.download.ImageFetch
-import app.jrny.browser.download.PageFiles
+import app.jrny.browser.engine.Engine
+import app.jrny.browser.engine.PageFile
 import app.jrny.browser.handoff.AppLink
 import app.jrny.browser.handoff.HandoffRules
 import app.jrny.browser.library.Bookmark
@@ -99,7 +100,7 @@ sealed interface LinkOffer {
  * What the browser window shows: the Profiles, the Active Profile and its Tabs.
  *
  * Every Tab is saved in the database, so Tabs come back after Android kills the app. Only a few
- * are live, with a WebView: the shown Tab and the [MAX_LIVE_TABS] - 1 most recently shown, across
+ * are live, with a GeckoSession: the shown Tab and the [MAX_LIVE_TABS] - 1 most recently shown, across
  * all Profiles (SPEC, "Tabs"). The others are unloaded and load again when shown.
  *
  * Create and use it on the main thread.
@@ -294,21 +295,20 @@ class BrowserState(
     fun deviceThemeChanged() {
         deviceDark = isDeviceDark()
         val dark = pagesDark()
+        applyEngineSettings()
         live.values.forEach { it.tab.darkPages = dark }
     }
 
+    /** Gives the engine the settings that belong to every page: Safe Browsing, text size, dark pages. */
+    private fun applyEngineSettings(current: Settings = settings.value) {
+        Engine.apply(context, current.textZoom, current.safeBrowsing, pagesDark(current))
+    }
+
     init {
-        // Turning Safe Browsing on or off reaches the pages that are already open.
+        // Safe Browsing, text size and dark pages reach the pages that are already open too.
+        applyEngineSettings()
         scope.launch {
-            settings.map { it.safeBrowsing }.distinctUntilChanged().drop(1).collect { on ->
-                live.values.forEach { it.tab.safeBrowsing = on }
-            }
-        }
-        // So do text size and dark pages.
-        scope.launch {
-            settings.map { it.textZoom }.distinctUntilChanged().drop(1).collect { zoom ->
-                live.values.forEach { it.tab.textZoom = zoom }
-            }
+            settings.drop(1).collect { applyEngineSettings(it) }
         }
         scope.launch {
             settings.map { pagesDark(it) }.distinctUntilChanged().drop(1).collect { dark ->
@@ -341,11 +341,11 @@ class BrowserState(
         }
     }
 
-    /** Private stores whose session has ended, emptied once their last WebView is gone. */
+    /** Private stores whose session has ended, emptied once their last page is gone. */
     private val endedStores = mutableSetOf<String>()
 
 
-    /** The Tab on screen. Its WebView can't be destroyed until another Tab replaces it. */
+    /** The Tab on screen. Its session can't be closed until another Tab replaces it. */
     private var shownId: TabId? = null
 
     /** Closed Tabs still on screen, destroyed once another Tab is shown. */
@@ -374,7 +374,7 @@ class BrowserState(
         linkOffer = offer
     }
 
-    /** How many Tabs have a WebView now. */
+    /** How many Tabs have a live session now. */
     val liveTabCount: Int get() = live.size
 
     fun isLive(id: TabId): Boolean = live.containsKey(id)
@@ -399,7 +399,6 @@ class BrowserState(
         val tab = Tab(
             context,
             WebProfile.of(saved.profileId),
-            safeBrowsing = settings.value.safeBrowsing,
             onPageChanged = { page.value = it.url to it.title },
             onVisited = { url ->
                 scope.launch {
@@ -422,7 +421,6 @@ class BrowserState(
             onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
             onHandoff = { tab, link, tapped -> handOff(saved, tab, link, tapped) },
             desktopFor = { origin -> origin in desktopSites[saved.profileId].orEmpty() },
-            textZoom = settings.value.textZoom,
             darkPages = pagesDark(),
         )
         val saving = scope.launch {
@@ -442,13 +440,11 @@ class BrowserState(
         val tab = Tab(
             context,
             WebProfile.privateOf(saved.profileId, session.session),
-            safeBrowsing = settings.value.safeBrowsing,
             onPageChanged = { privateTabs.savePage(saved.profileId, saved.id, it.url, it.title) },
             onPermissionAsk = { tab, ask -> answerPermissionAsk(saved, tab, ask) },
             onHandoff = { tab, link, tapped -> handOff(saved, tab, link, tapped) },
             // A Private Tab starts with its Profile's desktop sites, and keeps its own choices to itself.
             desktopFor = { origin -> origin in desktopSites[saved.profileId].orEmpty() },
-            textZoom = settings.value.textZoom,
             darkPages = pagesDark(),
         )
         saved.url?.let { tab.restore(it, saved.title, saved.scrollY) }
@@ -491,8 +487,7 @@ class BrowserState(
      * `intent:` link's fallback page loads only once "Open" found no app.
      */
     private fun handOff(saved: SavedTab, tab: Tab, link: AppLink, tapped: Boolean) {
-        // Loaded after WebView has finished asking about this navigation. Not through the
-        // WebView's own queue, which waits until it is on screen.
+        // Loaded after GeckoView has finished asking about this navigation.
         fun loadInstead(address: String) {
             android.os.Handler(android.os.Looper.getMainLooper()).post { tab.load(address) }
         }
@@ -543,35 +538,23 @@ class BrowserState(
     }
 
     /**
-     * The image at [url] that the person held in [tab], for "Copy image" and "Share image": fetched
-     * with the cookies of the Tab's own store, decoded from a `data:` address, or read out of the
-     * page for a `blob:` one. Null when it can't be had.
+     * The image at [url] that the person held in [live], for "Copy image" and "Share image":
+     * decoded from a `data:` address, or fetched from the page as the page would, with the
+     * cookies of the Tab's own store. Null when it can't be had.
      */
-    suspend fun fetchImage(tab: SavedTab, live: Tab, url: String): FetchedImage? {
+    suspend fun fetchImage(live: Tab, url: String): FetchedImage? {
         if (url.startsWith("data:", ignoreCase = true)) {
             return DataAddress.decode(url)?.takeIf { it.mimeType.startsWith("image/") }?.let { FetchedImage(it.bytes, it.mimeType) }
         }
-        if (url.startsWith("blob:", ignoreCase = true)) {
-            val name = PageFiles.newCopyName()
-            live.evaluate(PageFiles.keep(url, name))
-            val image = java.io.ByteArrayOutputStream()
-            return if (PageFiles.read(name, live::evaluate, image)) FetchedImage(image.toByteArray(), "image/png") else null
-        }
-        if (!WebAddress.isWebAddress(url)) return null
-        val cookies = cookieManagerFor(tab) ?: return null
-        val userAgent = live.webView.settings.userAgentString.orEmpty()
-        val referrer = live.url?.takeIf(WebAddress::isWebAddress)?.substringBefore('#')
-        return withContext(Dispatchers.IO) { ImageFetch.fetch(url, userAgent, referrer, cookies::getCookie) }
+        val file = live.fetchFromPage(url) ?: return null
+        val type = file.mimeType.ifBlank { "image/png" }
+        return if (type.startsWith("image/")) FetchedImage(file.bytes, type) else null
     }
 
-    /** The cookies of [tab]'s own store: its Profile's, or its private session's. */
-    private fun cookieManagerFor(tab: SavedTab) = if (tab.isPrivate) {
-        privateTabs.current(tab.profileId)?.let { WebProfile.privateOf(tab.profileId, it.session).cookieManager }
-    } else {
-        WebProfile.of(tab.profileId).cookieManager
-    }
-
-    /** What happened to a file a page made, once Okapi tried to save it: its name, and whether it was saved. */
+    /**
+     * What happened to a file fetched from the page ("Save image"), once Okapi tried to save it:
+     * its name, and whether it was saved.
+     */
     var pageFileSaved: Pair<String, Boolean>? by mutableStateOf(null)
         private set
 
@@ -580,35 +563,55 @@ class BrowserState(
     }
 
     /**
-     * Saves a file the page in [live] made itself, which the person agreed to keep (SPEC,
-     * "Browsing features"): a `data:` address is decoded, a `blob:` one read out of the page's
-     * copy. It goes to the Downloads folder, and on the Profile's list unless [tab] is private.
+     * Saves the file [live] offered, which the person agreed to keep (SPEC, "Browsing features"),
+     * into the Downloads folder. A file the page offered itself goes on the Profile's list at once
+     * and is written out there in the background; one fetched from the page ("Save image") is
+     * saved whole, then listed. A Private Tab's file is kept but never listed.
      */
-    fun savePageFile(tab: SavedTab, live: Tab, request: DownloadRequest) {
-        val page = live.url?.takeIf(WebAddress::isWebAddress)?.substringBefore('#')
-        scope.launch {
-            // Written to the app's cache first, piece by piece, then moved into Downloads: a
-            // large file never sits whole in memory.
-            val staged = withContext(Dispatchers.IO) { java.io.File.createTempFile("page-file", null, context.cacheDir) }
-            val dataFile = if (request.url.startsWith("data:", ignoreCase = true)) DataAddress.decode(request.url) else null
-            val read = try {
-                if (dataFile != null) {
-                    withContext(Dispatchers.IO) { staged.writeBytes(dataFile.bytes) }
-                    true
-                } else {
-                    val copy = request.pageCopy
-                    copy != null && withContext(Dispatchers.IO) { staged.outputStream() }.use { out ->
-                        PageFiles.read(copy, live::evaluate, out) { step -> withContext(Dispatchers.IO) { step() } }
+    fun saveDownload(tab: SavedTab, live: Tab, request: DownloadRequest) {
+        when (val source = request.source) {
+            is DownloadSource.Response -> {
+                val body = source.body ?: return
+                scope.launch {
+                    val file = withContext(Dispatchers.IO) { downloader.receive(request.fileName, request.mimeType, request.size, body) }
+                    when {
+                        file == null -> pageFileSaved = request.fileName to false
+                        // A Private Tab's files aren't listed, so the person hears when it is saved.
+                        tab.isPrivate -> {
+                            var status: DownloadStatus
+                            do {
+                                delay(SAVED_CHECK_MS)
+                                status = withContext(Dispatchers.IO) { downloader.savedStatus(file) }
+                            } while (status is DownloadStatus.Running)
+                            pageFileSaved = request.fileName to (status is DownloadStatus.Done)
+                        }
+                        // The Profile was deleted meanwhile: nothing of it is fetched or listed any more.
+                        !downloadRepository.addSaved(tab.profileId, file, request) -> withContext(Dispatchers.IO) { downloader.cancelSaved(file) }
                     }
                 }
-            } catch (_: java.io.IOException) {
-                false
             }
-            val mimeType = request.mimeType.ifBlank { dataFile?.mimeType.orEmpty() }
-            val file = if (read) withContext(Dispatchers.IO) { downloader.save(request.fileName, mimeType, staged) } else null
-            withContext(Dispatchers.IO) { staged.delete() }
-            if (file != null && !tab.isPrivate) downloadRepository.addSaved(tab.profileId, file, request.copy(mimeType = mimeType), page)
-            pageFileSaved = request.fileName to (file != null)
+            DownloadSource.FromPage -> scope.launch {
+                val fetched = if (request.url.startsWith("data:", ignoreCase = true)) {
+                    DataAddress.decode(request.url)?.let { PageFile(it.bytes, it.mimeType) }
+                } else {
+                    live.fetchFromPage(request.url)
+                }
+                val mimeType = request.mimeType.ifBlank { fetched?.mimeType.orEmpty() }
+                val file = fetched?.let { found ->
+                    withContext(Dispatchers.IO) {
+                        // Written to the app's cache first, then moved into Downloads.
+                        val staged = java.io.File.createTempFile("page-file", null, context.cacheDir)
+                        try {
+                            staged.writeBytes(found.bytes)
+                            downloader.save(request.fileName, mimeType, staged)
+                        } finally {
+                            staged.delete()
+                        }
+                    }
+                }
+                if (file != null && !tab.isPrivate) downloadRepository.addSaved(tab.profileId, file, request.copy(mimeType = mimeType))
+                pageFileSaved = request.fileName to (file != null)
+            }
         }
     }
 
@@ -677,6 +680,9 @@ class BrowserState(
             if (profileRepository.delete(profile.id)) {
                 HomeShortcuts.disable(context, shortcuts, context.getString(R.string.shortcut_profile_deleted))
                 live.entries.filter { it.value.saved.profileId == profile.id }.map { it.key }.forEach(::retire)
+                // Its web data goes at once. The next cold start wipes it again, in case a page
+                // that was still on screen wrote something meanwhile, and only then forgets it.
+                WebProfile.of(profile.id).clear(context)
                 // Its Private Tabs close with it.
                 privateTabs.closeAll(profile.id)?.let(::discard)
                 siteIcons.clear(profile.id)
@@ -749,7 +755,7 @@ class BrowserState(
     private fun emptyEndedStore(store: String) {
         if (store !in endedStores || live.values.any { it.tab.profile.name == store }) return
         endedStores -= store
-        WebProfile.named(store).clear()
+        WebProfile.named(store).clear(context)
     }
 
     /**
@@ -986,73 +992,15 @@ class BrowserState(
     }
 
     /**
-     * Starts the download the person agreed to, in [profile]: with that Profile's cookies, so a
-     * file behind its sign-in arrives as the page would get it, and on that Profile's list.
-     */
-    fun startDownload(profile: Profile, request: DownloadRequest) {
-        if (!request.fromWeb) return
-        val cookieManager = WebProfile.of(profile.id).cookieManager
-        scope.launch {
-            val id = withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) }
-            // The Profile was deleted meanwhile: nothing of it is fetched or listed any more.
-            if (!downloadRepository.add(profile.id, id, request)) withContext(Dispatchers.IO) { downloader.cancel(id) }
-        }
-    }
-
-    /**
-     * Starts [request] at the address its redirects end at, with only that address's cookies.
-     * Followed here, each hop gets the cookies of its own site; left to the download service,
-     * the first site's cookies would travel along to every site a redirect leads to.
-     */
-    private fun startAtFinalAddress(request: DownloadRequest, cookiesFor: (String) -> String?): Long {
-        val address = downloader.resolve(request.url, request.userAgent, cookiesFor)
-        return downloader.start(request.copy(url = address), cookiesFor(address))
-    }
-
-    /**
-     * Starts a download from the Private Tab [tab], with its session's cookies. The file is the
-     * person's to keep, but the download isn't put on the Profile's list: a Private Tab leaves
-     * nothing behind in the app.
-     */
-    fun startPrivateDownload(tab: SavedTab, request: DownloadRequest) {
-        if (!request.fromWeb) return
-        val session = privateTabs.current(tab.profileId) ?: return
-        val cookieManager = WebProfile.privateOf(tab.profileId, session.session).cookieManager
-        scope.launch { withContext(Dispatchers.IO) { startAtFinalAddress(request, cookieManager::getCookie) } }
-    }
-
-    /**
      * Clears what [choices] names from [profile] (SPEC, "Clear browsing data"). Cookies and site
-     * storage are cleared in the Profile's store; the cache with a WebView of that store, as
-     * WebView keeps it per store. Icons of its bookmarks and open Tabs stay.
+     * data go from the Profile's own store only. The engine's cache is kept apart for each
+     * Profile but can only be cleared for all of them at once. Icons of its bookmarks and open
+     * Tabs stay.
      */
     fun clearBrowsingData(profile: Profile, choices: Set<BrowsingData>) {
         if (choices.isEmpty()) return
-        val store = WebProfile.of(profile.id)
-        if (BrowsingData.Cookies in choices) {
-            val webStorage = androidx.webkit.ProfileStore.getInstance().getOrCreateProfile(store.name).webStorage
-            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DELETE_BROWSING_DATA)) {
-                // Everything sites stored in this Profile's store: cookies, site storage, service
-                // workers and Cache Storage. Other Profiles' stores aren't touched.
-                androidx.webkit.WebStorageCompat.deleteBrowsingData(webStorage) { store.flush() }
-            } else {
-                webStorage.deleteAllData()
-            }
-            store.cookieManager.removeAllCookies(null)
-            store.flush()
-        }
-        if (BrowsingData.Cache in choices) {
-            val view = live.values.firstOrNull { it.tab.profile.name == store.name }?.tab?.webView
-            if (view != null) {
-                view.clearCache(true)
-            } else {
-                // A WebView of the store only to clear its cache, gone at once.
-                val temporary = android.webkit.WebView(context)
-                androidx.webkit.WebViewCompat.setProfile(temporary, store.name)
-                temporary.clearCache(true)
-                temporary.destroy()
-            }
-        }
+        if (BrowsingData.Cookies in choices) WebProfile.of(profile.id).clear(context)
+        if (BrowsingData.Cache in choices) Engine.clearCaches(context)
         scope.launch {
             if (BrowsingData.History in choices) history.clear(profile.id)
             if (BrowsingData.SiteSettings in choices) siteSettingsRepository.resetAll(profile.id)
@@ -1131,11 +1079,13 @@ class BrowserState(
      */
     fun removeDownload(download: Download) {
         scope.launch {
-            // A file Okapi saved itself is already done: there is nothing to stop.
-            if (download.fileUri == null) {
-                withContext(Dispatchers.IO) {
+            val saved = download.fileUri
+            withContext(Dispatchers.IO) {
+                if (saved == null) {
                     val status = downloader.statuses(listOf(download.downloadId))[download.downloadId]
                     if (status is DownloadStatus.Running) downloader.cancel(download.downloadId)
+                } else if (downloader.savedStatus(saved) is DownloadStatus.Running) {
+                    downloader.cancelSaved(saved)
                 }
             }
             downloadRepository.remove(download)
@@ -1151,11 +1101,9 @@ class BrowserState(
     /** The address [tab] shows now: the live page's, which can be newer than the saved one. */
     private fun currentUrl(tab: SavedTab): String? = live[tab.id]?.tab?.url ?: tab.url
 
-    /** Saves the live Tabs' scroll positions and writes every open Profile's cookies to disk. */
+    /** Saves the live Tabs' scroll positions. GeckoView writes cookies to disk by itself. */
     fun flush() {
         live.values.forEach(::saveScroll)
-        // Not the private stores: nothing of them needs to reach the disk.
-        live.values.filter { !it.saved.isPrivate }.map { it.tab.profile.name }.distinct().forEach { WebProfile.named(it).flush() }
     }
 
     fun destroy() {
@@ -1180,7 +1128,7 @@ class BrowserState(
         if (id == shownId) retired += id else destroy(id)
     }
 
-    /** Frees [id]'s WebView, keeping it saved so it loads again when shown. */
+    /** Frees [id]'s session, keeping it saved so it loads again when shown. */
     private fun unload(id: TabId) {
         val entry = live[id] ?: return
         saveScroll(entry)
@@ -1206,6 +1154,9 @@ class BrowserState(
 
     companion object {
         private const val INCOMING_LINK_ATTEMPTS = 3
+
+        /** How often a Private Tab's download is checked, to tell the person once it is saved. */
+        private const val SAVED_CHECK_MS = 250L
 
         /** How long "Undo" for a closed Tab is offered. */
         private const val UNDO_MS = 6_000L

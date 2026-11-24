@@ -3,27 +3,15 @@ package app.jrny.browser
 import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Bundle
-import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.webkit.WebViewFeature
 import androidx.lifecycle.lifecycleScope
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.shortcut.HomeShortcuts
@@ -44,15 +32,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
-            setContent {
-                SystemBarsFollowTheme()
-                JrnyTheme { UnsupportedWebView() }
-            }
-            return
-        }
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         // Tabs come back from the database, after a recreation or after Android killed the app.
         val app = application as JrnyApplication
@@ -99,6 +78,8 @@ class MainActivity : ComponentActivity() {
     /** Dark mode doesn't recreate the activity (configChanges), so the browser hears of it here. */
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
+        // Pages hear of rotation and resizing through the engine (screen.orientation).
+        app.jrny.browser.engine.Engine.runtime(this).configurationChanged(newConfig)
         browser?.deviceThemeChanged()
     }
 
@@ -149,14 +130,5 @@ class MainActivity : ComponentActivity() {
         browser?.destroy()
         browser = null
         super.onDestroy()
-    }
-}
-
-@Composable
-private fun UnsupportedWebView() {
-    Surface(Modifier.fillMaxSize()) {
-        Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.unsupported_webview))
-        }
     }
 }

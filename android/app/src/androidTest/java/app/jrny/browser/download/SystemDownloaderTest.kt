@@ -1,32 +1,58 @@
 package app.jrny.browser.download
 
+import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.jrny.browser.TestServer
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.InputStream
 
-/** Android's download service accepts what the app hands it, and forgets a download that is cancelled. */
+/** Files a page offers are written into the Downloads folder, and one stopped halfway is gone. */
 @RunWith(AndroidJUnit4::class)
 class SystemDownloaderTest {
 
-    private val downloader = SystemDownloader(InstrumentationRegistry.getInstrumentation().targetContext)
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val downloader = SystemDownloader(context)
+
+    private fun awaitStatus(file: String, done: (DownloadStatus) -> Boolean): DownloadStatus {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (true) {
+            val status = downloader.savedStatus(file)
+            if (done(status) || System.currentTimeMillis() > deadline) return status
+            Thread.sleep(50)
+        }
+    }
 
     @Test
-    fun aDownloadIsAcceptedThenCancelled() {
-        TestServer(mapOf("/file" to "download:jrny-test.txt:hello")).use { server ->
-            val request = DownloadRequest(server.url("/file"), "JrnyTest", "jrny-test-${System.nanoTime()}.txt", "text/plain", 5)
-            val id = downloader.start(request, cookies = "session=test")
-            try {
-                // Running or already done, depending on how fast the service picked it up.
-                assertNotEquals(DownloadStatus.Gone, downloader.statuses(listOf(id))[id])
-            } finally {
-                downloader.cancel(id)
-            }
-            assertEquals(DownloadStatus.Gone, downloader.statuses(listOf(id))[id])
+    fun aFileIsWrittenOutAndThenDone() {
+        val content = "hello from a page".toByteArray()
+        val file = downloader.receive("jrny-test-${System.nanoTime()}.txt", "text/plain", content.size.toLong(), content.inputStream())!!
+        try {
+            assertEquals(DownloadStatus.Done(content.size.toLong()), awaitStatus(file) { it is DownloadStatus.Done })
+            val written = context.contentResolver.openInputStream(file.toUri())!!.use { it.readBytes() }
+            assertTrue(written.contentEquals(content))
+        } finally {
+            context.contentResolver.delete(file.toUri(), null, null)
         }
+    }
+
+    @Test
+    fun aFileStoppedHalfwayIsGone() {
+        // A body that never ends, as a large file still on its way.
+        val endless = object : InputStream() {
+            override fun read(): Int = 'x'.code
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                Thread.sleep(5)
+                b.fill('x'.code.toByte(), off, off + len)
+                return len
+            }
+        }
+        val file = downloader.receive("jrny-test-${System.nanoTime()}.bin", "application/octet-stream", 1L shl 40, endless)!!
+        assertTrue(awaitStatus(file) { it is DownloadStatus.Running } is DownloadStatus.Running)
+        downloader.cancelSaved(file)
+        assertEquals(DownloadStatus.Gone, awaitStatus(file) { it == DownloadStatus.Gone })
     }
 
     @Test

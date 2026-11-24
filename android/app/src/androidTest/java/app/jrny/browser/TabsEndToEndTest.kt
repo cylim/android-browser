@@ -9,13 +9,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.page
 import app.jrny.browser.tab.SavedTab
 import app.jrny.browser.tab.Tab
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -34,7 +32,6 @@ class TabsEndToEndTest {
 
     @Before
     fun requireMultiProfile() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
     }
 
     private fun browser(): BrowserState {

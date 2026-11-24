@@ -177,7 +177,7 @@ fun PageMenu(
                 modifier = Modifier.testTag("menu-desktop-site"),
             )
             Item(R.string.print, JrnyIcons.Print, "menu-print", enabled = url != null) {
-                Sharing.print(context, tab.webView, tab.pageTitle ?: tab.displayHost)
+                Sharing.print(context, tab, tab.pageTitle ?: tab.displayHost)
             }
             if (onAddToHome != null) {
                 Item(R.string.add_to_home_screen, Icons.Filled.Home, "menu-add-to-home", enabled = url != null, onClick = onAddToHome)
@@ -414,7 +414,7 @@ private fun PagePrompt(text: String, action: String?, onAction: () -> Unit, onDi
 
 /**
  * Asks before a file is downloaded: its name, the site it comes from and its size. A page can't
- * start a download by itself. A file the download service can't fetch only gets an explanation.
+ * start a download by itself. A file Okapi can't read only gets an explanation.
  */
 @Composable
 fun DownloadDialog(request: DownloadRequest, onDownload: () -> Unit, onDismiss: () -> Unit) {
@@ -423,7 +423,7 @@ fun DownloadDialog(request: DownloadRequest, onDownload: () -> Unit, onDismiss: 
     // one was offered by the page it was linked from.
     val site = WebAddress.hostOf(request.url)
         .ifEmpty { WebAddress.hostOf(request.url.removePrefix("blob:")) }
-        .ifEmpty { WebAddress.hostOf(request.referrer) }
+        .ifEmpty { WebAddress.hostOf(request.page) }
         .ifEmpty { request.url.substringBefore(':') }
     AlertDialog(
         onDismissRequest = onDismiss,

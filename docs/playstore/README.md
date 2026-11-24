@@ -2,6 +2,8 @@
 
 This folder holds everything Okapi, a browser by JRNY, needs for a Google Play listing: the listing text, the graphics, the privacy policy, the answers to Play Console's declaration forms, and a release checklist. Nothing here is submitted yet. [ROADMAP.md](../ROADMAP.md) puts the Google Play release under "After v1", Milestone 6 (a signed APK on GitHub Releases and an F-Droid check) comes first, and no release signing key exists.
 
+> **Engine change, 2026-11-19.** Okapi now renders pages with GeckoView, not Android System WebView ([ADR 0006](../adr/0006-geckoview-as-engine.md)). The privacy policy, both copies, is updated. The Data safety answers, the App content notes, the listing and the release checklist still describe WebView in places (`MetricsOptOut`, `X-Requested-With`, WebView crash reports, Safe Browsing through WebView). Those answers must be redone for GeckoView once its own network traffic is captured, before anything is submitted.
+
 The repository is public. Names, email addresses, phone numbers, postal addresses, account IDs, keystores and passwords go into Play Console, GitHub secrets or the owner's own machine, never into these files. A `TODO(owner)` marks each place where the owner has to decide something or enter personal data outside the repository.
 
 ## Files and the Play Console page each one feeds
@@ -73,7 +75,8 @@ Developer account:
 App fixes and the privacy policy:
 
 - [ ] Add the developer name, exactly as Google Play shows it, to both copies of the privacy policy. (privacy-policy.md, privacy.html, section 3, data-safety.md Blocker 4)
-- [ ] Test whether androidx.webkit's `setRequestedWithHeaderOriginAllowList` stops the `X-Requested-With` header on the installed WebView. Use it or keep the current wording, and change the policy, ADR 0001, CHANGELOG.md and the listing to match. (privacy-policy.md, privacy.html, section 3)
+- [x] ~~Test whether androidx.webkit's `setRequestedWithHeaderOriginAllowList` stops the `X-Requested-With` header.~~ No longer needed: GeckoView sends no such header (ADR 0006).
+- [ ] Capture what GeckoView requests by itself on a fresh install, and describe it in both copies of the privacy policy and the Data safety answers. (privacy-policy.md, privacy.html, data-safety.md)
 - [ ] Check on a device with Google Play Services whether androidx.emoji2's `EmojiCompatInitializer` fetches an emoji font from Google Play Services. Remove the initializer, or describe the request in the policy. (privacy-policy.md, privacy.html, store-listing.md, section 3)
 - [ ] Confirm the privacy contact: GitHub issues, and the private "Report a vulnerability" route from SECURITY.md. (section 3)
 - [ ] Decide whether search suggestions, which are on by default, need a prominent in-app notice or should be off by default. (section 3, data-safety.md D3, app-content.md)

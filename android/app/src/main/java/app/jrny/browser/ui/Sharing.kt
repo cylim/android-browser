@@ -10,8 +10,9 @@ import android.os.PersistableBundle
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.MimeTypeMap
-import android.webkit.WebView
+import android.widget.Toast
 import androidx.core.content.FileProvider
+import app.jrny.browser.R
 import app.jrny.browser.download.FetchedImage
 import java.io.File
 
@@ -58,11 +59,17 @@ object Sharing {
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
     }
 
-    /** Opens Android's print dialog for the page in [webView], which can also save it as a PDF. */
-    fun print(context: Context, webView: WebView, title: String) {
+    /**
+     * Opens Android's print dialog for [tab]'s page, which can also save it as a PDF. The engine
+     * lays the page out as a PDF first, and the dialog prints that.
+     */
+    fun print(context: Context, tab: app.jrny.browser.tab.Tab, title: String) {
         val name = title.ifBlank { "Page" }
-        context.getSystemService(PrintManager::class.java)
-            .print(name, webView.createPrintDocumentAdapter(name), PrintAttributes.Builder().build())
+        tab.print { pdf ->
+            if (pdf == null) return@print Toast.makeText(context, R.string.print_failed, Toast.LENGTH_LONG).show()
+            context.getSystemService(PrintManager::class.java)
+                .print(name, org.mozilla.geckoview.GeckoViewPrintDocumentAdapter(pdf, context), PrintAttributes.Builder().build())
+        }
     }
 
     /**

@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestServer
+import app.jrny.browser.TestPages.runInPage
 import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadStatus
@@ -26,7 +26,6 @@ import app.jrny.browser.tab.Tab
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -55,7 +54,6 @@ class DownloadsUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread {
             tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-downloads")))
             tab.load(server.url("/page"))
@@ -92,7 +90,7 @@ class DownloadsUiTest {
     }
 
     private fun clickLink(id: String) {
-        compose.runOnUiThread { tab.webView.evaluateJavascript("document.getElementById('$id').click()", null) }
+        runInPage(tab, "document.getElementById('$id').click()")
         compose.waitUntil(10_000) { tab.download != null }
     }
 
@@ -129,9 +127,10 @@ class DownloadsUiTest {
     }
 
     @Test
-    fun aFileMadeByThePageItselfCantBeDownloadedYetAndSaysSo() {
+    fun aFileWithNothingToReadCantBeDownloadedAndSaysSo() {
         var dismissed = 0
-        val made = DownloadRequest("blob:https://example.com/1b2c", "", "made-here.txt", "text/plain", -1)
+        // An offer whose response had no body.
+        val made = DownloadRequest("blob:https://example.com/1b2c", "made-here.txt", "text/plain", -1)
         compose.setContent {
             JrnyTheme { DownloadDialog(made, onDownload = { started += made }, onDismiss = { dismissed++ }) }
         }

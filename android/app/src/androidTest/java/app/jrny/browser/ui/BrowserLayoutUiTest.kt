@@ -1,7 +1,6 @@
 package app.jrny.browser.ui
 
 import android.annotation.SuppressLint
-import android.webkit.WebView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -43,8 +42,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.page
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.TestServer
@@ -52,6 +49,9 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.tab.Tab
+import app.jrny.browser.TestPages.runInPage
+import app.jrny.browser.TestPages.runInPopup
+import org.mozilla.geckoview.GeckoSession
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -84,7 +84,6 @@ class BrowserLayoutUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread {
             tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-layout")))
         }
@@ -151,7 +150,7 @@ class BrowserLayoutUiTest {
     fun resizingSwitchesLayoutsLiveAndKeepsTheTabsPage() {
         val one = titled("one")
         loadAndWait(one, "one navigate")
-        val webView = tab.webView
+        val session = tab.session
         show(TABLET_LANDSCAPE)
 
         for (size in listOf(PHONE_PORTRAIT, TABLET_LANDSCAPE, TABLET_PORTRAIT, PHONE_LANDSCAPE)) {
@@ -163,26 +162,28 @@ class BrowserLayoutUiTest {
                 "bottom-bar-layout"
             }
             compose.onNodeWithTag(expected).assertExists()
-            // The same WebView moved into the new layout, with the page still loaded.
-            assertSame(webView, tab.webView)
-            compose.waitUntil(5_000) { webView.isAttachedToWindow }
+            // The same session moved into the new layout, with the page still loaded.
+            assertSame(session, tab.session)
+            compose.waitUntil(5_000) { SessionViews.viewOf(session)?.isAttachedToWindow == true }
             assertEquals(one, tab.url)
             assertEquals("one navigate", tab.title)
         }
     }
 
     @Test
-    fun aDeadRendererShowsAMessageAndReloadBringsThePageBack() {
+    fun aDeadContentProcessShowsAMessageAndReloadBringsThePageBack() {
         val one = titled("one")
         loadAndWait(one, "one navigate")
         show(TABLET_LANDSCAPE)
-        val first: WebView = tab.webView
+        val first = tab.session
 
-        compose.runOnUiThread { first.loadUrl("chrome://crash") }
+        compose.runOnUiThread {
+            first.load(GeckoSession.Loader().uri("about:crashcontent").flags(GeckoSession.LOAD_FLAGS_BYPASS_LOAD_URI_DELEGATE))
+        }
         compose.waitUntil(15_000) { tab.crashed }
         compose.onNodeWithText("This page stopped working.").assertIsDisplayed()
-        // The new WebView is already in the window, behind the message.
-        compose.waitUntil(5_000) { tab.webView !== first && tab.webView.isAttachedToWindow }
+        // The new session is already in the window, behind the message.
+        compose.waitUntil(5_000) { tab.session !== first && SessionViews.viewOf(tab.session)?.isAttachedToWindow == true }
 
         compose.onNodeWithText("Reload").performClick()
         compose.waitUntil(15_000) { !tab.crashed && !tab.isLoading && tab.title == "one navigate" }
@@ -206,7 +207,7 @@ class BrowserLayoutUiTest {
             // The page takes focus once the on-screen keyboard has gone. Checked only where the
             // forced window fits the real screen: squeezing a 1280dp window onto a phone breaks
             // focus for embedded Android views (it works on a real tablet).
-            if (fitsTheScreen(size)) compose.waitUntil(5_000) { tab.webView.hasFocus() }
+            if (fitsTheScreen(size)) compose.waitUntil(5_000) { SessionViews.viewOf(tab.session)?.hasFocus() == true }
             compose.onNodeWithTag("address").assertIsNotFocused()
             compose.onNodeWithTag("address").assert(
                 SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(address)),
@@ -239,11 +240,11 @@ class BrowserLayoutUiTest {
         loadAndWait(opener, "opener")
         show(TABLET_LANDSCAPE)
 
-        // A real tap: without one, WebView blocks window.open.
+        // A real tap: without one, the page may not open a window.
         compose.onNodeWithTag("page").performTouchInput { click(center) }
         compose.waitUntil(10_000) { tab.popup != null }
         compose.onNodeWithTag("popup").assertExists()
-        assertEquals(tab.profile.name, WebViewCompat.getProfile(tab.popup!!).name)
+        assertEquals(tab.profile.name, tab.popup!!.settings.contextId)
 
         Espresso.pressBack()
         compose.waitUntil(5_000) { tab.popup == null }
@@ -270,11 +271,7 @@ class BrowserLayoutUiTest {
             // An IP address has no registrable domain, so the whole host is the site.
             compose.onNodeWithTag("popup-site", useUnmergedTree = true).assertTextEquals(WebAddress.hostOf(popupAddress))
             // The popup's page really loaded, rather than an error page at that address.
-            var popupTitle = ""
-            compose.waitUntil(10_000) {
-                compose.runOnUiThread { tab.popup?.evaluateJavascript("document.title") { popupTitle = it } }
-                popupTitle == "\"sign in\""
-            }
+            compose.waitUntil(10_000) { runInPopup(tab, "document.title") == "\"sign in\"" }
             assertEquals(opener, tab.url)
 
             val address = "https://jrny-test.invalid/next"
@@ -415,21 +412,19 @@ class BrowserLayoutUiTest {
 
     @Test
     fun aPopupClosesItselfWithWindowClose() {
-        val opener = page(
-            "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
-                "onclick=\"window.open('about:blank','signin')\">Sign in</button>",
-        )
-        loadAndWait(opener, "opener")
-        show(PHONE_PORTRAIT)
-        compose.onNodeWithTag("page").performTouchInput { click(center) }
-        compose.waitUntil(10_000) { tab.popup != null }
-
-        // A window that was just created may not run scripts yet, so ask until it has closed.
-        compose.waitUntil(10_000) {
-            compose.runOnUiThread { tab.popup?.evaluateJavascript("window.close()", null) }
-            tab.popup == null
+        // As a sign-in popup does once it has signed the person in.
+        TestServer(mapOf("/done" to "<title>done</title><script>setTimeout(function(){window.close()},500)</script>")).use { server ->
+            val opener = page(
+                "<title>opener</title><button style='position:fixed;left:0;top:0;width:100%;height:100%' " +
+                    "onclick=\"window.open('${server.url("/done")}','signin')\">Sign in</button>",
+            )
+            loadAndWait(opener, "opener")
+            show(PHONE_PORTRAIT)
+            compose.onNodeWithTag("page").performTouchInput { click(center) }
+            compose.waitUntil(10_000) { tab.popup != null }
+            compose.waitUntil(10_000) { tab.popup == null }
+            assertTrue(SessionViews.viewOf(tab.session)?.isAttachedToWindow == true)
         }
-        assertTrue(tab.webView.isAttachedToWindow)
     }
 
     @Test
@@ -471,17 +466,19 @@ class BrowserLayoutUiTest {
 
     @Test
     fun aRestoredTabScrollsBackToWhereItWas() {
-        show(PHONE_PORTRAIT)
-        val tall = page("<title>tall</title><div style='height:20000px'>top</div>")
-        compose.runOnUiThread {
-            tab.restore(tall, "", 1500)
-            // Saved while it's still loading, the Tab keeps the position it's going back to.
-            assertEquals(1500, tab.scrollY)
+        TestServer(mapOf("/tall" to "<title>tall</title><div style='height:20000px'>top</div>")).use { server ->
+            show(PHONE_PORTRAIT)
+            val tall = server.url("/tall")
+            compose.runOnUiThread {
+                tab.restore(tall, "", 1500)
+                // Saved while it's still loading, the Tab keeps the position it's going back to.
+                assertEquals(1500, tab.scrollY)
+            }
+            compose.waitUntil(15_000) { !tab.isLoading && tab.title == "tall" }
+            // The page itself, not the position the Tab is still waiting to apply.
+            compose.waitUntil(15_000) { runInPage(tab, "window.scrollY") == "1500" }
+            compose.waitUntil(5_000) { tab.scrollY == 1500 }
         }
-        compose.waitUntil(15_000) { !tab.isLoading && tab.title == "tall" }
-        // The page itself, not the position the Tab is still waiting to apply.
-        compose.waitUntil(15_000) { tab.webView.scrollY == 1500 }
-        assertEquals(1500, tab.scrollY)
     }
 
     private companion object {

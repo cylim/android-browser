@@ -82,7 +82,7 @@
     <string name="delete">Delete</string>
     <string name="delete_profile">Delete Profile</string>
     <string name="delete_profile_title">Delete %1$s?</string>
-    <string name="delete_profile_body">Every Account signed in within %1$s will be signed out. Its Tabs close now, and its cookies and site data are erased the next time the app starts.</string>
+    <string name="delete_profile_body">Every Account signed in within %1$s will be signed out. Its Tabs close and its cookies and site data are erased now.</string>
     <string name="last_profile_cannot_be_deleted">The last Profile can\'t be deleted.</string>
     <plurals name="profiles_pending_removal">
         <item quantity="one">%d deleted Profile is erased the next time the app starts.</item>
@@ -158,7 +158,7 @@
     <string name="search_suggestions_explanation">What you type in the address field is sent to %1$s to suggest searches. Addresses are not sent, and nothing is sent from a Private Tab.</string>
     <string name="safety">Safety</string>
     <string name="safe_browsing">Safe Browsing</string>
-    <string name="safe_browsing_explanation">Warns before a page known to be dangerous opens. Android System WebView checks addresses with Google Safe Browsing.</string>
+    <string name="safe_browsing_explanation">Warns before a page known to be dangerous opens. The engine checks addresses with Google Safe Browsing.</string>
     <string name="theme">Theme</string>
     <string name="theme_system">Same as the device</string>
     <string name="theme_light">Light</string>
@@ -190,7 +190,6 @@
     <string name="close_popup">Close popup</string>
     <string name="show_full_address">Show the full address</string>
     <string name="page_crashed">This page stopped working.</string>
-    <string name="unsupported_webview">Okapi needs a newer Android System WebView with multi-profile support. Update Android System WebView from your app store, then reopen Okapi.</string>
 
     <!-- Site permissions and Site settings (SPEC, "Site permissions and Site settings") -->
     <string name="permission_ask_camera">Let %1$s use your camera?</string>
@@ -254,6 +253,7 @@
     <string name="share">Share</string>
     <string name="copy_link">Copy link</string>
     <string name="print">Print</string>
+    <string name="print_failed">This page couldn\'t be printed</string>
 
     <!-- Link and image menu (SPEC, "Link and image menu") -->
     <string name="link">Link</string>
@@ -288,7 +288,7 @@
     <string name="percent">%1$d%%</string>
     <string name="text_size_sample">Text on pages will be this size.</string>
     <string name="darken_pages">Darken pages without a dark theme</string>
-    <string name="darken_pages_explanation">While Okapi\'s theme is dark, pages show their dark theme, and pages without one are darkened. Open pages load again.</string>
+    <string name="darken_pages_explanation">While Okapi\'s theme is dark, pages show their dark theme, and pages without one are darkened.</string>
     <string name="pull_to_refresh">Pull to refresh</string>
     <string name="pull_to_refresh_explanation">Pull down on a page at its top to load it again. Turn it off for sites with their own pull gesture.</string>
 
@@ -313,4 +313,31 @@
     <string name="add_to_home_screen">Add to Home screen</string>
     <string name="shortcut_profile_deleted">This Profile was deleted</string>
     <string name="shortcut_requested">Your launcher asks before it adds %1$s.</string>
+    <!-- What a page's own scripts and form fields ask (SPEC, "Page dialogs"). -->
+    <string name="page_says">%1$s says</string>
+    <string name="leave_page_title">Leave this page?</string>
+    <string name="leave_page_body">Changes you made may not be saved.</string>
+    <string name="leave">Leave</string>
+    <string name="stay">Stay</string>
+    <string name="resend_title">Send the form again?</string>
+    <string name="resend_body">This page shows what a form sent. Loading it again sends the form again, which may repeat a purchase or a message.</string>
+    <string name="resend">Send again</string>
+    <string name="choose_color">Choose a color</string>
+    <string name="color_hex">Color code</string>
+    <string name="next">Next</string>
+    <!-- Okapi's page in a Tab when a page can't be loaded (SPEC, "Error pages"). -->
+    <string name="error_offline_title">No connection</string>
+    <string name="error_offline_body">%1$s couldn\'t be reached. Check that the device is online.</string>
+    <string name="error_not_found_title">Site not found</string>
+    <string name="error_not_found_body">No site answers at %1$s. Check the address for a typo.</string>
+    <string name="error_insecure_title">Connection isn\'t secure</string>
+    <string name="error_insecure_body">Okapi couldn\'t confirm that this is really %1$s, so it didn\'t open the page. Someone may be trying to read what you send.</string>
+    <string name="error_dangerous_title">Dangerous site</string>
+    <string name="error_dangerous_body">Safe Browsing reports %1$s for stealing information or harming devices. Okapi didn\'t open it.</string>
+    <string name="error_refused_title">Site refused the connection</string>
+    <string name="error_refused_body">%1$s didn\'t let Okapi connect. It may be down for now.</string>
+    <string name="error_other_title">Page couldn\'t be loaded</string>
+    <string name="error_other_body">Something went wrong while loading %1$s.</string>
+    <string name="error_try_again">Try again</string>
+    <string name="error_go_back">Go back</string>
 </resources>

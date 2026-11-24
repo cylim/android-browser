@@ -7,33 +7,45 @@ import app.jrny.browser.profile.ProfileId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/** Where an offered file's bytes come from, once the person agrees. */
+sealed interface DownloadSource {
+    /**
+     * The response GeckoView already started for it, with the page's cookies. Its [body] isn't read
+     * until the person agrees, and is closed if they decline. Null when there is nothing to read.
+     */
+    class Response(val body: java.io.InputStream?) : DownloadSource {
+        fun discard() {
+            runCatching { body?.close() }
+        }
+    }
+
+    /** Fetched from the page, as the page would fetch it: "Save image" (SPEC, "Link and image menu"). */
+    data object FromPage : DownloadSource
+}
+
 /** A file a page offers for download, before the person has agreed to it. */
 data class DownloadRequest(
     val url: String,
-    val userAgent: String,
     val fileName: String,
     val mimeType: String,
     /** The size in bytes, or -1 when the site didn't say. */
     val size: Long,
-    /** The page the file was linked from, which some sites check before they hand the file out. */
-    val referrer: String? = null,
-    /**
-     * For a `blob:` file, the name under which the page keeps its own copy of it until the person
-     * answers (SPEC, "Browsing features"). Null for any other file.
-     */
-    val pageCopy: String? = null,
+    /** The web page that offered it, for the list when the file's own address isn't a web one. */
+    val page: String? = null,
+    val source: DownloadSource = DownloadSource.Response(null),
 ) {
-    /** A web address goes to Android's download service. */
-    val fromWeb: Boolean get() = WebAddress.isWebAddress(url)
-
-    /** A file the page made itself, which Okapi saves: a `data:` address, or a `blob:` the page kept a copy of. */
-    val fromPage: Boolean get() = url.startsWith("data:", ignoreCase = true) || (url.startsWith("blob:", ignoreCase = true) && pageCopy != null)
-
     /** True when the file can be saved at all. */
-    val supported: Boolean get() = fromWeb || fromPage
+    val supported: Boolean get() = source !is DownloadSource.Response || source.body != null
+
+    /** True for a file the page offered itself, which goes on the list while it downloads. */
+    val streamed: Boolean get() = source is DownloadSource.Response
+
+    /** The address the list shows: the file's own web address, else the page's. */
+    val listedAddress: String get() = url.takeIf(WebAddress::isWebAddress) ?: page.orEmpty()
 
     companion object {
         private const val MAX_NAME_LENGTH = 120
+        private val LEADING_DOTS = Regex("^[._]*\\.[._]*")
 
         // RFC 6266: filename*=UTF-8''percent-encoded, filename="quoted" or filename=token.
         private val ENCODED_NAME = Regex("""filename\*\s*=\s*[^';]*'[^']*'([^;]+)""", RegexOption.IGNORE_CASE)
@@ -67,7 +79,9 @@ data class DownloadRequest(
                 .substringAfterLast('/').substringAfterLast('\\')
                 .map { if (it.isISOControl() || it in "\"*:<>?|") '_' else it }
                 .joinToString("")
-                .trim().trimStart('.').trim()
+                .trim()
+                // Leading dots (hidden files), and the "_" GeckoView leaves where a "../" was.
+                .replace(LEADING_DOTS, "").trim()
             if (cleaned.isEmpty()) return "download"
             if (cleaned.length <= MAX_NAME_LENGTH) return cleaned
             val extension = cleaned.substringAfterLast('.', "").takeIf { it.length in 1..10 }?.let { ".$it" }.orEmpty()
@@ -102,39 +116,38 @@ sealed interface DownloadStatus {
 }
 
 /**
- * What fetches and keeps the files. In the app it is Android's own download service
- * ([SystemDownloader]), which saves into the device's Downloads folder; tests use a fake.
+ * What keeps the files, in the device's Downloads folder ([SystemDownloader]); tests use a fake.
+ * Downloads that Android's download service started before Okapi used GeckoView still have a
+ * [Download.downloadId] and are asked about with [statuses].
  */
 interface Downloader {
     /**
-     * Starts fetching [request], sending [cookies] (the Profile's, for files behind a sign-in),
-     * and returns the download's id.
+     * Starts writing [body], a file of [size] bytes (or -1), into a new file named [fileName] in
+     * the Downloads folder, and returns that file's address at once, or null when it can't be made.
+     * The writing goes on in the background, and [savedStatus] tells how far it got.
      */
-    fun start(request: DownloadRequest, cookies: String?): Long
+    fun receive(fileName: String, mimeType: String, size: Long, body: java.io.InputStream): String?
 
-    /** Where each of [ids] stands. */
-    fun statuses(ids: List<Long>): Map<Long, DownloadStatus>
+    /** Where each of [ids], downloads of Android's download service, stands. */
+    fun statuses(ids: List<Long>): Map<Long, DownloadStatus> = ids.associateWith { DownloadStatus.Gone }
 
     /** Opens the finished file in an app that can show it. False when none can, or it isn't there. */
     fun open(download: Download): Boolean
 
-    /** Stops a running download and discards what it fetched. */
-    fun cancel(downloadId: Long)
+    /** Stops a running download of Android's download service and discards what it fetched. */
+    fun cancel(downloadId: Long) {}
+
+    /** Stops writing the file at [fileUri], if it is still being written, and deletes it. */
+    fun cancelSaved(fileUri: String) {}
 
     /**
-     * Saves [file], a file a page made itself, as a finished file named [fileName] in the
-     * Downloads folder. Returns the saved file's address, or null when it couldn't be saved.
+     * Saves [file] as a finished file named [fileName] in the Downloads folder. Returns the saved
+     * file's address, or null when it couldn't be saved.
      */
     fun save(fileName: String, mimeType: String, file: java.io.File): String? = null
 
-    /** Where a file [save] made stands: done, or gone when it was removed. */
+    /** Where the file at [fileUri] stands: still being written, done, failed, or gone. */
     fun savedStatus(fileUri: String): DownloadStatus = DownloadStatus.Gone
-
-    /**
-     * The address a download of [url] ends up at after its redirects. [cookiesFor] gives the
-     * cookies that belong to an address, so each hop gets only its own (see [DownloadRedirects]).
-     */
-    fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String = url
 }
 
 /** Each Profile's list of downloads (SPEC, "Browsing features"). */
@@ -145,28 +158,16 @@ class DownloadRepository(private val dao: DownloadDao, private val now: () -> Lo
         rows.map { Download(it.id, it.downloadId, it.url, it.fileName, it.mimeType, it.startedAt, it.fileUri) }
     }
 
-    /** Lists a started download in [profile]. Returns false when the Profile is gone. */
-    suspend fun add(profile: ProfileId, downloadId: Long, request: DownloadRequest): Boolean = dao.add(
-        DownloadEntity(
-            profileId = profile.toLong(),
-            downloadId = downloadId,
-            url = request.url,
-            fileName = request.fileName,
-            mimeType = request.mimeType,
-            startedAt = now(),
-        ),
-    )
-
     /**
-     * Lists a file Okapi saved itself in [profile], at [fileUri]. Its address on the list is the
-     * page's, not the file's: a `data:` address can be as long as the file. Returns false when
-     * the Profile is gone.
+     * Lists a file in [profile], saved or being saved at [fileUri]. Its address on the list is the
+     * file's web address, or the page's when it has none: a `data:` address can be as long as the
+     * file. Returns false when the Profile is gone.
      */
-    suspend fun addSaved(profile: ProfileId, fileUri: String, request: DownloadRequest, page: String?): Boolean = dao.add(
+    suspend fun addSaved(profile: ProfileId, fileUri: String, request: DownloadRequest): Boolean = dao.add(
         DownloadEntity(
             profileId = profile.toLong(),
             downloadId = 0,
-            url = page.orEmpty(),
+            url = request.listedAddress,
             fileName = request.fileName,
             mimeType = request.mimeType,
             startedAt = now(),
@@ -179,3 +180,6 @@ class DownloadRepository(private val dao: DownloadDao, private val now: () -> Lo
 
     private fun ProfileId.toLong(): Long = value.toLong()
 }
+
+/** An image's bytes and its MIME type, for "Copy image" and "Share image". */
+class FetchedImage(val bytes: ByteArray, val mimeType: String)

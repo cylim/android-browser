@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.library.Bookmark
 import app.jrny.browser.library.Folder
@@ -41,7 +40,6 @@ import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -79,7 +77,6 @@ class StartPageUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread {
             tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-start-page-ui")))
         }
@@ -255,11 +252,11 @@ class StartPageUiTest {
     @Test
     fun thePageUnderTheStartPageIsHiddenFromAScreenReader() {
         show(PHONE_PORTRAIT)
-        compose.runOnIdle { assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, tab.webView.importantForAccessibility) }
+        compose.runOnIdle { assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, SessionViews.viewOf(tab.session)!!.importantForAccessibility) }
         compose.runOnUiThread { tab.load(titled("one")) }
         compose.waitUntil(15_000) { tab.url == titled("one") }
         compose.onNodeWithTag("start-page").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, tab.webView.importantForAccessibility) }
+        compose.runOnIdle { assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, SessionViews.viewOf(tab.session)!!.importantForAccessibility) }
     }
 
     @Test

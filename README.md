@@ -21,7 +21,7 @@ Okapi is an Android browser with separate Profiles, so you can stay signed in to
 - **Pinned tabs and folders**: each Profile's bookmarks sit at the top of its tab list, open or closed, and closing one keeps it.
 - **Tablet layout** with an Arc-style sidebar of tabs and the Profile switcher at the bottom.
 - **Phone layout** with a Safari-style bottom bar for search and switching Profiles.
-- **No telemetry**: no analytics, and Android System WebView's usage statistics are turned off. No Google Play Services, no trackers.
+- **No telemetry**: no analytics and no crash reporting, in the app or in its engine. No Google Play Services, no trackers.
 
 Requires Android 15 or later.
 
