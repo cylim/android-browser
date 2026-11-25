@@ -51,8 +51,11 @@ sealed interface OpenedBackup {
  * Plain Kotlin and the JDK's own crypto, so it is unit-tested on the JVM.
  */
 object BackupFile {
-    /** No backup Okapi makes comes near this: 5,000 visits per Profile is about 1 MB. */
-    const val MAX_BYTES = 64 * 1024 * 1024
+    /**
+     * No backup Okapi makes comes near this: 5,000 visits per Profile is about 1 MB. Reading one
+     * takes a few times its size in memory, so the limit stays well below what the app may use.
+     */
+    const val MAX_BYTES = 16 * 1024 * 1024
 
     /** PBKDF2's work factor: OWASP's 2023 figure for HMAC-SHA256. */
     const val ITERATIONS = 600_000
@@ -101,13 +104,7 @@ object BackupFile {
     fun read(bytes: ByteArray): OpenedBackup {
         if (bytes.size > MAX_BYTES) throw BackupException(BackupProblem.TooLarge)
         val text = bytes.toString(Charsets.UTF_8)
-        val fields = try {
-            json.parseToJsonElement(text).jsonObject
-        } catch (_: SerializationException) {
-            throw BackupException(BackupProblem.NotABackup)
-        } catch (_: IllegalArgumentException) {
-            throw BackupException(BackupProblem.NotABackup)
-        }
+        val fields = decoding { json.parseToJsonElement(text).jsonObject }
         val format = fields["format"]?.let { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }
         val version = fields["version"]?.let { runCatching { it.jsonPrimitive.intOrNull }.getOrNull() } ?: throw BackupException(BackupProblem.NotABackup)
         return when (format) {
@@ -117,13 +114,7 @@ object BackupFile {
             }
             SEALED_FORMAT -> {
                 if (version > SEALED_VERSION) throw BackupException(BackupProblem.TooNew)
-                val sealed = try {
-                    json.decodeFromString(SealedBackup.serializer(), text)
-                } catch (_: SerializationException) {
-                    throw BackupException(BackupProblem.NotABackup)
-                } catch (_: IllegalArgumentException) {
-                    throw BackupException(BackupProblem.NotABackup)
-                }
+                val sealed = decoding { json.decodeFromString(SealedBackup.serializer(), text) }
                 if (sealed.kdf != KDF || sealed.iterations !in 1..MAX_ITERATIONS) throw BackupException(BackupProblem.NotABackup)
                 OpenedBackup.Locked(sealed)
             }
@@ -162,15 +153,19 @@ object BackupFile {
     }
 
     private fun decodeBackup(text: String): Backup {
-        val backup = try {
-            json.decodeFromString(Backup.serializer(), text)
-        } catch (_: SerializationException) {
-            throw BackupException(BackupProblem.NotABackup)
-        } catch (_: IllegalArgumentException) {
-            throw BackupException(BackupProblem.NotABackup)
-        }
+        val backup = decoding { json.decodeFromString(Backup.serializer(), text) }
         if (backup.profiles.isEmpty()) throw BackupException(BackupProblem.NotABackup)
         return backup
+    }
+
+    /** Runs [block], which reads JSON; what isn't the JSON it expects is no backup. */
+    private inline fun <T> decoding(block: () -> T): T = try {
+        block()
+    } catch (_: SerializationException) {
+        throw BackupException(BackupProblem.NotABackup)
+    } catch (_: IllegalArgumentException) {
+        // kotlinx-serialization's own errors are IllegalArgumentExceptions too.
+        throw BackupException(BackupProblem.NotABackup)
     }
 
     private fun key(password: CharArray, salt: ByteArray, iterations: Int): SecretKeySpec {

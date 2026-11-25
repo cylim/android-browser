@@ -7,6 +7,7 @@ import app.jrny.browser.data.BookmarkEntity
 import app.jrny.browser.data.HistoryEntity
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.data.ProfileEntity
+import app.jrny.browser.data.ProfileRows
 import app.jrny.browser.data.ShortcutEntity
 import app.jrny.browser.data.SiteSettingEntity
 import app.jrny.browser.settings.SearchEngine
@@ -155,7 +156,7 @@ class BackupsTest {
         val source = filledDevice().backups.snapshot()
         val imported = target.backups.restore(source, ImportMode.Merge)
 
-        assertEquals(Imported(emptyList(), emptyList()), imported)
+        assertEquals(Restored(emptyList(), emptyList()), imported)
         val after = target.backups.snapshot()
         assertEquals(listOf("Personal", "Work"), after.profiles.map { it.name })
         val merged = after.profiles[0]
@@ -182,6 +183,37 @@ class BackupsTest {
         assertEquals("Teal", after.profiles[1].color)
         // Settings are taken only when replacing.
         assertEquals(before.settings, after.settings)
+    }
+
+    @Test
+    fun mergingNeverRemovesAVisitHereAndAddsOnlyTheNewestThatFit() = runBlocking {
+        val target = Device()
+        val personal = target.profile("Personal")
+        listOf(1L, 2L).forEach { target.database.history().record(HistoryEntity(profileId = personal, url = "https://here.example/$it", visitedAt = it), keep = 100) }
+        val incoming = ProfileRows(
+            ProfileEntity(name = "Personal", color = "Blue", icon = "Person"),
+            history = listOf(0L, 5L, 6L).map { HistoryEntity(profileId = 0, url = "https://there.example/$it", visitedAt = it) },
+        )
+
+        target.database.backup().restore(listOf(incoming), replace = false, keepVisits = 3)
+
+        val visits = target.backups.snapshot().profiles.single().history.map { it.url }
+        assertEquals(listOf("https://here.example/1", "https://here.example/2", "https://there.example/6"), visits)
+    }
+
+    @Test
+    fun mergingDoesNotMakeABookmarkHereAPinnedTab() = runBlocking {
+        val target = Device()
+        val personal = target.profile("Personal")
+        target.database.bookmarks().add(BookmarkEntity(profileId = personal, url = "https://docs.example/manual", title = "Mine", createdAt = 1))
+        target.database.tabs().open(personal, "https://shop.example/cart")
+        val source = filledDevice().backups.snapshot()
+
+        target.backups.restore(source, ImportMode.Merge)
+
+        val merged = target.backups.snapshot().profiles.first { it.name == "Personal" }
+        val manual = merged.tabs.single { it.url == "https://docs.example/manual" }
+        assertEquals(null, manual.pinned)
     }
 
     @Test

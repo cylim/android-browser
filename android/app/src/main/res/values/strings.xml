@@ -368,6 +368,7 @@
     <string name="backup_failed">Backup</string>
     <string name="backup_cant_write">The backup couldn\'t be saved there.</string>
     <string name="backup_cant_read">The file couldn\'t be read.</string>
+    <string name="backup_cant_import">The backup couldn\'t be imported, so nothing was changed. Check that the device has free space and try again.</string>
     <string name="backup_not_a_backup">This isn\'t an Okapi backup, or it is damaged.</string>
     <string name="backup_too_new">A newer version of Okapi made this backup. Update Okapi to import it.</string>
     <string name="backup_too_large">This file is too large to be an Okapi backup.</string>

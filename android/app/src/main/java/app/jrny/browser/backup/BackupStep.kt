@@ -30,6 +30,9 @@ enum class BackupFailure {
     /** The chosen file couldn't be read. */
     CantRead,
 
+    /** The database refused the import, so nothing was imported. */
+    CantImport,
+
     /** It isn't an Okapi backup, or it is damaged. */
     NotABackup,
 

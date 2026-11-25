@@ -1,6 +1,8 @@
 package app.jrny.browser.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -94,19 +96,28 @@ fun SettingsPanel(
             onDismiss = { clearing = false },
         )
     }
-    // The password waits here while the person chooses where the backup goes.
+    // The password waits here, in memory only, while the person chooses where the backup goes.
     var exportPassword by remember { mutableStateOf<CharArray?>(null) }
-    var askingExport by remember { mutableStateOf(false) }
+    // These survive Android recreating the activity meanwhile; the password doesn't.
+    var askingExport by rememberSaveable { mutableStateOf(false) }
+    var exportEncrypted by rememberSaveable { mutableStateOf(false) }
+    // A place already chosen for a backup whose password was lost: the dialog asks again for it.
+    var exportTarget by rememberSaveable { mutableStateOf<Uri?>(null) }
     val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BACKUP_TYPE)) { target ->
         val password = exportPassword
-        if (target != null) {
-            askingExport = false
-            exportPassword = null
-            ui.backup.export(target, password)
-        } else {
+        exportPassword = null
+        when {
             // Back to the dialog, which still has what was typed.
-            password?.fill('\u0000')
-            exportPassword = null
+            target == null -> password?.fill('\u0000')
+            // Never written plain because the password was lost on the way.
+            exportEncrypted && password == null -> {
+                exportTarget = target
+                askingExport = true
+            }
+            else -> {
+                askingExport = false
+                ui.backup.export(target, password)
+            }
         }
     }
     val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { source ->
@@ -115,10 +126,21 @@ fun SettingsPanel(
     if (askingExport) {
         ExportBackupDialog(
             onExport = { password ->
-                exportPassword = password
-                saveBackup.launch(backupFileName())
+                val chosen = exportTarget
+                if (chosen != null) {
+                    exportTarget = null
+                    askingExport = false
+                    ui.backup.export(chosen, password)
+                } else {
+                    exportPassword = password
+                    exportEncrypted = password != null
+                    saveBackup.launch(backupFileName())
+                }
             },
-            onDismiss = { askingExport = false },
+            onDismiss = {
+                askingExport = false
+                exportTarget = null
+            },
         )
     }
     PanelFrame(

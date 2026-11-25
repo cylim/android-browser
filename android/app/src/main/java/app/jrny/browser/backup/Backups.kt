@@ -37,7 +37,7 @@ enum class ImportMode {
 }
 
 /** What an import took away: the Profiles it replaced, whose web data must go, and their shortcuts. */
-data class Imported(val replaced: List<ProfileId>, val shortcuts: List<String>)
+data class Restored(val replaced: List<ProfileId>, val shortcuts: List<String>)
 
 /**
  * Makes a [Backup] of what the app keeps, and brings one back (SPEC, "Backup"). Everything read
@@ -56,14 +56,14 @@ class Backups(
         return Backup(createdAt = now(), settings = settings.settings.value.toBackup(), profiles = rows.map { it.toBackup(active) })
     }
 
-    suspend fun restore(backup: Backup, mode: ImportMode): Imported {
+    suspend fun restore(backup: Backup, mode: ImportMode): Restored {
         val incoming = backup.profiles.withOneActive().map { it.toRows() }
         val outcome = dao.restore(incoming, replace = mode == ImportMode.Replace, keepVisits = HistoryRepository.MAX_VISITS)
         if (mode == ImportMode.Replace) {
             val restored = backup.settings.toSettings()
             settings.update { restored }
         }
-        return Imported(outcome.replaced.map { ProfileId(it.toString()) }, outcome.shortcuts)
+        return Restored(outcome.replaced.map { ProfileId(it.toString()) }, outcome.shortcuts)
     }
 
     private fun ProfileRows.toBackup(active: Long?): BackupProfile {

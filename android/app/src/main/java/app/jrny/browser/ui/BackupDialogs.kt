@@ -133,17 +133,27 @@ fun ExportBackupDialog(onExport: (password: CharArray?) -> Unit, onDismiss: () -
 }
 
 @Composable
-private fun PasswordField(value: String, onChange: (String) -> Unit, label: Int, tag: String, ime: ImeAction, error: String? = null) {
+private fun PasswordField(
+    value: String,
+    onChange: (String) -> Unit,
+    label: Int,
+    tag: String,
+    ime: ImeAction,
+    error: String? = null,
+    errorTag: String = "$tag-error",
+    autofill: ContentType = ContentType.NewPassword,
+    modifier: Modifier = Modifier.padding(top = 8.dp),
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(stringResource(label)) },
         singleLine = true,
         isError = error != null,
-        supportingText = error?.let { { Text(it, modifier = Modifier.testTag("$tag-error")) } },
+        supportingText = error?.let { { Text(it, modifier = Modifier.testTag(errorTag)) } },
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ime, autoCorrectEnabled = false),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).semantics { contentType = ContentType.NewPassword }.testTag(tag),
+        modifier = modifier.fillMaxWidth().semantics { contentType = autofill }.testTag(tag),
     )
 }
 
@@ -170,6 +180,7 @@ private val BackupFailure.message: Int
     get() = when (this) {
         BackupFailure.CantWrite -> R.string.backup_cant_write
         BackupFailure.CantRead -> R.string.backup_cant_read
+        BackupFailure.CantImport -> R.string.backup_cant_import
         BackupFailure.NotABackup -> R.string.backup_not_a_backup
         BackupFailure.TooNew -> R.string.backup_too_new
         BackupFailure.TooLarge -> R.string.backup_too_large
@@ -211,20 +222,16 @@ private fun UnlockDialog(wrong: Boolean, ui: BackupUi) {
         modifier = Modifier.testTag("backup-password-dialog"),
         title = { Text(stringResource(R.string.backup_needs_password)) },
         text = {
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text(stringResource(R.string.password)) },
-                singleLine = true,
-                isError = wrong,
-                supportingText = if (wrong) {
-                    { Text(stringResource(R.string.backup_wrong_password), modifier = Modifier.testTag("backup-wrong-password")) }
-                } else {
-                    null
-                },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, autoCorrectEnabled = false),
-                modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.Password }.testTag("backup-unlock-password"),
+            PasswordField(
+                password,
+                { password = it },
+                R.string.password,
+                "backup-unlock-password",
+                ImeAction.Done,
+                error = if (wrong) stringResource(R.string.backup_wrong_password) else null,
+                errorTag = "backup-wrong-password",
+                autofill = ContentType.Password,
+                modifier = Modifier,
             )
         },
         confirmButton = {

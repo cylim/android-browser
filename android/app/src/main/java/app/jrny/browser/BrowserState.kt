@@ -699,16 +699,18 @@ class BrowserState(
         scope.launch {
             // Its Home Screen Shortcuts stop working with it. Their ids go with its rows, so read them first.
             val shortcuts = shortcutRepository.idsOf(profile.id)
-            if (profileRepository.delete(profile.id)) forget(profile.id, shortcuts)
+            if (profileRepository.delete(profile.id)) {
+                HomeShortcuts.disable(context, shortcuts, context.getString(R.string.shortcut_profile_deleted))
+                forget(profile.id)
+            }
         }
     }
 
     /**
-     * Lets go of a Profile whose rows were just deleted: its [shortcuts] stop working, its Tabs
-     * and Private Tabs close, and its web data and site icons go.
+     * Lets go of a Profile whose rows were just deleted: its Tabs and Private Tabs close, and its
+     * web data and site icons go. Its Home Screen Shortcuts are the caller's to disable.
      */
-    private suspend fun forget(profile: ProfileId, shortcuts: List<String>) {
-        HomeShortcuts.disable(context, shortcuts, context.getString(R.string.shortcut_profile_deleted))
+    private suspend fun forget(profile: ProfileId) {
         live.entries.filter { it.value.saved.profileId == profile }.map { it.key }.forEach(::retire)
         // Its web data goes at once. The next cold start wipes it again, in case a page
         // that was still on screen wrote something meanwhile, and only then forgets it.
@@ -743,9 +745,8 @@ class BrowserState(
                 val bytes = withContext(Dispatchers.Default) { BackupFile.write(backup, password) }
                 withContext(Dispatchers.IO) { writeTo(target, bytes) }
                 BackupStep.Exported
-            } catch (_: IOException) {
-                BackupStep.Failed(BackupFailure.CantWrite)
-            } catch (_: SecurityException) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException || !e.isFileOrDatabaseError()) throw e
                 BackupStep.Failed(BackupFailure.CantWrite)
             } finally {
                 password?.fill('\u0000')
@@ -782,13 +783,20 @@ class BrowserState(
                 }
             } catch (e: BackupException) {
                 BackupStep.Failed(BackupFailure.of(e.problem))
-            } catch (_: IOException) {
-                BackupStep.Failed(BackupFailure.CantRead)
-            } catch (_: SecurityException) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException || !e.isFileOrDatabaseError()) throw e
                 BackupStep.Failed(BackupFailure.CantRead)
             }
         }
     }
+
+    /**
+     * What a file the person chose, or the database, can throw: a provider that is gone or
+     * refuses ([SecurityException], [IllegalArgumentException] for an address it doesn't know or
+     * a mode it doesn't support), a full or failing disk.
+     */
+    private fun Exception.isFileOrDatabaseError(): Boolean =
+        this is IOException || this is SecurityException || this is IllegalArgumentException || this is android.database.SQLException
 
     /** The file's bytes, up to one more than a backup can have, so a larger file reads as too large. */
     private fun readFrom(source: Uri): ByteArray {
@@ -832,11 +840,11 @@ class BrowserState(
             val imported = try {
                 backups.restore(backup, mode)
             } catch (_: android.database.SQLException) {
-                backupStep = BackupStep.Failed(BackupFailure.NotABackup)
+                backupStep = BackupStep.Failed(BackupFailure.CantImport)
                 return@launch
             }
             openedBackup = null
-            imported.replaced.forEach { forget(it, emptyList()) }
+            imported.replaced.forEach { forget(it) }
             HomeShortcuts.disable(context, imported.shortcuts, context.getString(R.string.shortcut_profile_deleted))
             backupStep = BackupStep.Imported(mode)
         }

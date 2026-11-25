@@ -98,14 +98,8 @@ abstract class BackupDao(private val database: RoomDatabase) {
     @Query("SELECT EXISTS(SELECT 1 FROM history WHERE profileId = :profileId AND url = :url AND visitedAt = :visitedAt)")
     protected abstract suspend fun hasVisit(profileId: Long, url: String, visitedAt: Long): Boolean
 
-    @Query(
-        "DELETE FROM history WHERE profileId = :profileId AND id NOT IN " +
-            "(SELECT id FROM history WHERE profileId = :profileId ORDER BY visitedAt DESC, id DESC LIMIT :keep)",
-    )
-    protected abstract suspend fun trimHistory(profileId: Long, keep: Int)
-
-    @Query("SELECT COALESCE(MAX(lastUsed), 0) FROM tabs")
-    protected abstract suspend fun maxLastUsed(): Long
+    @Query("SELECT COUNT(*) FROM history WHERE profileId = :profileId")
+    protected abstract suspend fun visitCount(profileId: Long): Int
 
     @Query(
         "SELECT 1 + MAX(" +
@@ -127,7 +121,8 @@ abstract class BackupDao(private val database: RoomDatabase) {
      * becomes the Active Profile, and every Profile that was here is deleted as a person deletes
      * one: its rows go at once and its web data is wiped by the caller.
      *
-     * A Profile keeps at most [keepVisits] visits. Returns what was replaced.
+     * A Profile keeps at most [keepVisits] visits: the newest incoming ones that fit beside
+     * those it has, which a merge never removes. Returns what was replaced.
      */
     @Transaction
     open suspend fun restore(incoming: List<ProfileRows>, replace: Boolean, keepVisits: Int): RestoreOutcome {
@@ -181,9 +176,11 @@ abstract class BackupDao(private val database: RoomDatabase) {
         }
 
         val bookmarkIds = mutableMapOf<Long, Long>()
+        // Only a bookmark added now can become an added Tab's Pinned Tab: one that was here stays as it is.
+        val added = mutableSetOf<Long>()
         rows.bookmarks.forEach { bookmark ->
             val id = bookmarkOf(profileId, bookmark.url) ?: run {
-                insertBookmark(
+                val inserted = insertBookmark(
                     bookmark.copy(
                         id = 0,
                         profileId = profileId,
@@ -191,15 +188,19 @@ abstract class BackupDao(private val database: RoomDatabase) {
                         position = places.getValue(false to bookmark.id),
                     ),
                 )
+                if (inserted > 0) added += inserted
                 bookmarkOf(profileId, bookmark.url)
             }
             if (id != null) bookmarkIds[bookmark.id] = id
         }
 
-        rows.history.forEach { visit ->
-            if (!target.merged || !hasVisit(profileId, visit.url, visit.visitedAt)) insertVisit(visit.copy(id = 0, profileId = profileId))
-        }
-        trimHistory(profileId, keepVisits)
+        val room = (keepVisits - visitCount(profileId)).coerceAtLeast(0)
+        rows.history
+            .filter { visit -> !target.merged || !hasVisit(profileId, visit.url, visit.visitedAt) }
+            .sortedByDescending { it.visitedAt }
+            .take(room)
+            .asReversed()
+            .forEach { insertVisit(it.copy(id = 0, profileId = profileId)) }
 
         val open = if (target.merged) tabs(profileId).mapNotNull { it.url }.toMutableSet() else mutableSetOf()
         var selected: Long? = null
@@ -207,7 +208,7 @@ abstract class BackupDao(private val database: RoomDatabase) {
             // An empty Tab adds nothing to a Profile that has Tabs.
             if (target.merged && (tab.url == null || tab.url in open)) return@forEach
             tab.url?.let(open::add)
-            val pinned = tab.bookmarkId?.let(bookmarkIds::get)?.takeUnless { isOpen(it) }
+            val pinned = tab.bookmarkId?.let(bookmarkIds::get)?.takeIf { it in added && !isOpen(it) }
             val id = insertTab(tab.copy(id = 0, profileId = profileId, lastUsed = 0, bookmarkId = pinned))
             if (!target.merged && tab.lastUsed > 0) selected = id
         }

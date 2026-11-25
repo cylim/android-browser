@@ -129,7 +129,7 @@ We hold no data about you, so there is nothing for us to give you or delete. You
 
 - The app has no server, so we have no copy of your data to lose.
 - Each Profile has its own web data store. A Move to another Profile carries only the page's address.
-- App data stays in the app's private storage, and backups and device transfers leave it out.
+- App data stays in the app's private storage, and Android's cloud backups and device transfers leave it out.
 - A backup file you export is encrypted with your password unless you choose otherwise.
 - Search suggestion requests use HTTPS and carry no cookies.
 - During a download, each redirect step receives only its own cookies, so one site's session cookies don't go to another site.
