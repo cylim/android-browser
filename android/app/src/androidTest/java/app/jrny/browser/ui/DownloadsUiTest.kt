@@ -85,7 +85,7 @@ class DownloadsUiTest {
                         },
                         removeDownload = { removed += it },
                     ),
-                    links = LinksUi(pageFileSaved = pageFileSaved),
+                    links = LinksUi(pageFileSaved = pageFileSaved, dismissPageFileSaved = { pageFileSaved = null }),
                 )
             }
         }
@@ -129,6 +129,32 @@ class DownloadsUiTest {
         compose.waitForIdle()
         compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
         compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.page_file_failed, "report.pdf")).assertExists()
+    }
+
+    @Test
+    fun theSameFileFailingTwiceSaysSoTwice() {
+        val failed = InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.page_file_failed, "report.pdf")
+        show(PHONE_PORTRAIT)
+        clickLink("f")
+        compose.onNodeWithTag("confirm-download").performClick()
+        compose.runOnUiThread { pageFileSaved = "report.pdf" to false }
+        compose.onNodeWithText(failed).assertExists()
+
+        // Tried again without closing the notice. The new save clears it, and fails the same way
+        // before the screen draws again.
+        clickLink("f")
+        compose.onNodeWithTag("confirm-download").performClick()
+        compose.runOnUiThread {
+            pageFileSaved = null
+            pageFileSaved = "report.pdf" to false
+        }
+        compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
+        compose.onNodeWithText(failed).assertExists()
+
+        // Closing it leaves nothing behind, not "Downloading".
+        compose.onNodeWithContentDescription(InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.dismiss)).performClick()
+        compose.onNodeWithTag("page-file-prompt").assertDoesNotExist()
+        compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
     }
 
     @Test

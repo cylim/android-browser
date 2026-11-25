@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import android.os.SystemClock
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -40,6 +42,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * What a page asks for, in the browser window (SPEC, "Pages"): a site's ask for the camera, a
@@ -228,6 +231,60 @@ class PageAsksUiTest {
         tapPage()
         compose.waitUntil(15_000) { exists("file-source-dialog") }
         compose.onNodeWithText("Cancel").performClick()
+    }
+
+    /** A page whose file field shows the name and the text of the file it gets, as its title. */
+    private fun fileField(): String = serve(
+        "<title>upload</title><input id=f type=file accept='image/*' style='position:fixed;inset:0;width:100%;height:100%'>" +
+            "<script>f.onchange = async () => { const file = f.files[0]; document.title = file ? 'got ' + file.name + ': ' + await file.text() : 'none' };" +
+            "f.oncancel = () => { document.title = 'none' }</script>",
+    )
+
+    /** A file in the app's own cache, as the camera app leaves a photo there. */
+    private fun cacheFile(folder: String, name: String, text: String): File =
+        File(File(instrumentation.targetContext.cacheDir, folder).apply { mkdirs() }, name).apply { writeText(text) }
+
+    @Test
+    fun aFileAnotherAppSharesReachesThePageWithItsName() {
+        // The picker hands over a content: address, which GeckoView can't read by itself.
+        val shared = cacheFile("captures", "note.txt", "hello upload")
+        val address = FileProvider.getUriForFile(instrumentation.targetContext, "${instrumentation.targetContext.packageName}.files", shared)
+        show()
+        load(fileField())
+        awaitTitle("upload")
+        tapPage()
+        compose.waitUntil(15_000) { exists("file-source-dialog") }
+        compose.runOnUiThread { tab.answerFileChooser(listOf(address)) }
+        awaitTitle("got note.txt: hello upload")
+    }
+
+    @Test
+    fun aPhotoTheCameraTookReachesThePage() {
+        val photo = cacheFile("captures", "photo-1.jpg", "a photo")
+        show()
+        load(fileField())
+        awaitTitle("upload")
+        tapPage()
+        compose.waitUntil(15_000) { exists("file-source-dialog") }
+        compose.runOnUiThread { tab.answerFileChooser(listOf(Uri.fromFile(photo))) }
+        awaitTitle("got photo-1.jpg: a photo")
+    }
+
+    @Test
+    fun aPickerAppCantHandThePageOkapisOwnFiles() {
+        // A file of the app's own data, as a picker app might name it.
+        val own = File(instrumentation.targetContext.filesDir, "secret.txt").apply { writeText("not for pages") }
+        try {
+            show()
+            load(fileField())
+            awaitTitle("upload")
+            tapPage()
+            compose.waitUntil(15_000) { exists("file-source-dialog") }
+            compose.runOnUiThread { tab.answerFileChooser(listOf(Uri.fromFile(own))) }
+            awaitTitle("none")
+        } finally {
+            own.delete()
+        }
     }
 
     @Test

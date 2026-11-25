@@ -291,11 +291,15 @@ class Tab(
      */
     private var pendingAsk: PermissionAsk? = null
 
-    /** Hands [files] to the page's file field, or none when the person cancelled. */
+    /**
+     * Hands [files] to the page's file field, or none when the person cancelled. A file shared by
+     * another app is copied first, off the main thread, so the page gets it a moment later.
+     */
     fun answerFileChooser(files: List<Uri>?) {
         val ask = fileChooser ?: return
         fileChooser = null
-        ask.answer(files)
+        // Cancelling can't wait: it is also how a closing Tab answers, after its scope has ended.
+        if (files.isNullOrEmpty()) ask.cancel() else scope.launch { ask.answer(files) }
     }
 
     /** The [httpAuth] ask has been answered. */

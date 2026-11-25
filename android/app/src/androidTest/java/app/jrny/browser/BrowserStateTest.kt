@@ -768,6 +768,20 @@ class BrowserStateTest {
     }
 
     @Test
+    fun aNewSaveForgetsTheLastOnesNotice() {
+        val browser = newBrowser()
+        val shown = active(browser).selected
+        val tab = show(browser, shown.id)
+        // A file with nothing to read: it can't be saved.
+        onMain { browser.saveDownload(shown, tab, DownloadRequest("data:text/plain", "report.txt", "text/plain", -1, source = DownloadSource.FromPage)) }
+        await("failed") { browser.pageFileSaved == SavedFileNotice(shown.id, "report.txt", saved = false) }
+        // The next save starts with no notice, so the last one's failure isn't taken for its own.
+        val next = DownloadRequest("data:text/plain;base64,aGk=", "report.txt", "text/plain", -1, source = DownloadSource.FromPage)
+        assertEquals(null, onMain { browser.saveDownload(shown, tab, next); browser.pageFileSaved })
+        await("saved") { browser.pageFileSaved == SavedFileNotice(shown.id, "report.txt", saved = true) }
+    }
+
+    @Test
     fun deletingAProfileEmptiesItsListOfDownloads() {
         val browser = newBrowser()
         val personal = active(browser).profile

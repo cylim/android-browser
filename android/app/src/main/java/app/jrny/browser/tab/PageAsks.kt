@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import app.jrny.browser.site.SiteOrigin
 import app.jrny.browser.site.SiteSetting
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession.PromptDelegate
@@ -85,9 +87,17 @@ class FileChooserAsk internal constructor(private val context: Context, private 
     /** True when the page takes several files. */
     val multiple: Boolean = field.type == PromptDelegate.FilePrompt.Type.MULTIPLE
 
-    fun answer(files: List<Uri>?) {
-        val chosen = files?.takeIf { it.isNotEmpty() }
-        if (chosen == null) return reply.dismiss()
+    /** Tells the page the person chose nothing. */
+    fun cancel() = reply.dismiss()
+
+    /**
+     * Hands the page [files]. Each goes as a file GeckoView can read ([UploadFiles]); copying one
+     * shared by another app takes as long as reading it. None of them readable counts as none chosen.
+     */
+    suspend fun answer(files: List<Uri>) {
+        val wanted = if (multiple) files else files.take(1)
+        val chosen = withContext(Dispatchers.IO) { wanted.mapNotNull { UploadFiles.readable(context, it) } }
+        if (chosen.isEmpty()) return reply.dismiss()
         reply.confirm { if (multiple) it.confirm(context, chosen.toTypedArray()) else it.confirm(context, chosen.first()) }
     }
 }

@@ -571,6 +571,9 @@ class BrowserState(
      * saved whole, then listed. A Private Tab's file is kept but never listed.
      */
     fun saveDownload(tab: SavedTab, live: Tab, request: DownloadRequest) {
+        // The screen hears of a result only when the notice changes, and the same file failing
+        // again would leave it as it was.
+        pageFileSaved = null
         when (val source = request.source) {
             is DownloadSource.Response -> {
                 val body = source.body ?: return

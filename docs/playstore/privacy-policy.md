@@ -36,7 +36,7 @@ Each Profile keeps its own:
 - history, up to its latest 5,000 visits
 - bookmarks, which are its Pinned Tabs, and its Folders
 - list of downloads
-- photos and videos you take with "Take photo" or "Record video" for a page's file field, kept in the app's cache until the app next starts, so the page can read them. This is the same in a Private Tab.
+- photos and videos you take with "Take photo" or "Record video" for a page's file field, and a copy of each file you choose for one, kept in the app's cache until the app next starts, so the page can read them. This is the same in a Private Tab.
 - site icons: the icon of each site the Profile has shown, as the site sent it while its page loaded
 - name, color and avatar
 

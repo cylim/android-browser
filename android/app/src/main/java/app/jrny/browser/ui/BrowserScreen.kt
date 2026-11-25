@@ -274,11 +274,6 @@ fun BrowserWindow(
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
     // The file whose download just started, named over the page with a way to the Downloads list.
     var downloading by remember(tab) { mutableStateOf<String?>(null) }
-    // A file that couldn't be saved after all says so, in place of "Downloading".
-    LaunchedEffect(links.pageFileSaved) {
-        val notice = links.pageFileSaved
-        if (notice != null && !notice.second && notice.first == downloading) downloading = null
-    }
     // The Site Rules and Site settings are reached from the settings, and Back leads there again.
     BackHandler(enabled = panel != null) { panel = if (panel == Panel.SiteRules || panel == Panel.SiteSettings) Panel.Settings else null }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
@@ -378,10 +373,13 @@ fun BrowserWindow(
                 pagePrompt = {
                     val started = downloading
                     val savedFile = links.pageFileSaved
+                    // A file that couldn't be saved after all says so, in place of "Downloading". Read
+                    // from the notice as it is, so the same file failing twice is told twice.
+                    val failed = savedFile != null && !savedFile.second && savedFile.first == started
                     val behind = links.openedBehind
                     val handoff = tab.handoff
                     val closed = links.justClosed
-                    if (started != null) {
+                    if (started != null && !failed) {
                         DownloadStartedPrompt(
                             started,
                             onShow = {
@@ -399,7 +397,10 @@ fun BrowserWindow(
                                 panel = Panel.Downloads
                                 links.dismissPageFileSaved()
                             }),
-                            onDismiss = links.dismissPageFileSaved,
+                            onDismiss = {
+                                links.dismissPageFileSaved()
+                                if (failed) downloading = null
+                            },
                         )
                     } else if (handoff != null) {
                         HandoffPrompt(
