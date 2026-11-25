@@ -169,6 +169,23 @@ class ProfilesUiTest {
         assertTrue("the dialog is only ${dialog.height}px tall", dialog.height >= 160 * window.resources.displayMetrics.density)
     }
 
+    /**
+     * Taps [tag], scrolled to first when it is in the dialog's scrolling part, once it has stopped
+     * moving. Typing opens the keyboard, and the dialog moves to make room for it; a tap sent
+     * meanwhile lands where the button was.
+     */
+    private fun clickWhenStill(tag: String, scroll: Boolean = false) {
+        val node = compose.onNodeWithTag(tag)
+        if (scroll) node.performScrollTo()
+        var last = node.fetchSemanticsNode().boundsInWindow
+        compose.waitUntil(5_000) {
+            Thread.sleep(150)
+            val now = node.fetchSemanticsNode().boundsInWindow
+            (now == last).also { last = now }
+        }
+        node.performClick()
+    }
+
     @Test
     fun theEditorCreatesAProfileWithItsNameColorAndIcon() {
         var saved: Pair<String, ProfileLook>? = null
@@ -178,10 +195,12 @@ class ProfilesUiTest {
             }
         }
         compose.onNodeWithTag("save-profile").assertIsNotEnabled()
-        compose.onNodeWithTag("profile-name-field").performTextReplacement("  School ")
+        // The look first: typing opens the keyboard, and the dialog moves to make room for it.
         compose.onNodeWithTag("color-Amber").performScrollTo().performClick()
         compose.onNodeWithTag("icon-Star").performScrollTo().performClick()
-        compose.onNodeWithTag("save-profile").assertIsEnabled().performClick()
+        compose.onNodeWithTag("profile-name-field").performTextReplacement("  School ")
+        compose.onNodeWithTag("save-profile").assertIsEnabled()
+        clickWhenStill("save-profile")
         assertEquals("School" to ProfileLook(ProfileColor.Amber, ProfileIcon.Star), saved)
     }
 
@@ -208,16 +227,16 @@ class ProfilesUiTest {
         // Any emoji can be typed. Only the first counts, and plain text is not one.
         compose.onNodeWithTag("profile-emoji-field").performScrollTo().performTextReplacement("🦊🐻")
         compose.onNodeWithTag("emoji-🚀").performScrollTo().assertIsNotSelected()
-        compose.onNodeWithTag("save-profile").performClick()
+        clickWhenStill("save-profile")
         assertEquals("🦊", saved?.second?.emoji)
         compose.onNodeWithTag("profile-emoji-field").performScrollTo().performTextReplacement("fox")
         compose.onNodeWithText("That isn't an emoji.", substring = true).assertExists()
-        compose.onNodeWithTag("save-profile").performClick()
+        clickWhenStill("save-profile")
         assertEquals("🦊", saved?.second?.emoji)
 
         // Choosing an icon gives the emoji up, and clears what was typed for one.
-        compose.onNodeWithTag("icon-Star").performScrollTo().performClick()
-        compose.onNodeWithTag("save-profile").performClick()
+        clickWhenStill("icon-Star", scroll = true)
+        clickWhenStill("save-profile")
         assertEquals("Work" to ProfileLook(ProfileColor.Teal, ProfileIcon.Star, null, ProfileTint.Strong), saved)
     }
 

@@ -1,13 +1,15 @@
 [versions]
-agp = "9.5.1"
+agp = "9.5.2"
 # AGP 9 compiles Kotlin itself. This pins the Kotlin version it uses, and the Compose
 # compiler plugin must match it.
 kotlin = "2.4.21"
 ksp = "2.3.14"
 room = "2.8.5"
-# Room's MigrationTestHelper needs 1.8. Lifecycle brings 1.7.3 into the app, and the test APK
-# shares the app's process and so its version, so the app carries 1.8.1 (backward compatible).
-kotlinx-serialization = "1.8.1"
+# Room's MigrationTestHelper needs 1.8 or later. Lifecycle brings 1.7.3 into the app, and the test
+# APK shares the app's process and so its version, so the app carries a newer one (backward compatible).
+kotlinx-serialization = "1.13.0"
+# Held at 2026.09.00: with 2026.11.01 (Compose 1.13), the page sometimes keeps the keyboard's
+# height after the keyboard has gone and is left with no room (StartPageUiTest's History tests).
 compose-bom = "2026.09.00"
 activity-compose = "1.13.0"
 core-ktx = "1.19.1"
@@ -15,7 +17,7 @@ core-ktx = "1.19.1"
 # A security release comes about every 4 weeks, and Okapi must follow each one.
 geckoview = "160.0.20261116130455"
 # Pull to refresh around the page's GeckoView (SPEC, "Pull to refresh").
-swiperefreshlayout = "1.1.0"
+swiperefreshlayout = "1.2.0"
 # Public Suffix List, through InternetDomainName: where a host's registrable domain starts.
 guava = "33.8.0-android"
 junit = "4.13.2"

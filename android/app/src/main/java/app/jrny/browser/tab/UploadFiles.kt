@@ -34,9 +34,14 @@ object UploadFiles {
 
     private fun inCaptures(context: Context, file: Uri): Boolean {
         val path = file.path ?: return false
-        val folder = File(context.cacheDir, CAPTURE_FOLDER).canonicalFile
-        val target = File(path).canonicalFile
-        return target.parentFile == folder && target.isFile
+        // A path that can't be resolved, such as one with a NUL in it, is no camera photo.
+        return try {
+            val folder = File(context.cacheDir, CAPTURE_FOLDER).canonicalFile
+            val target = File(path).canonicalFile
+            target.parentFile == folder && target.isFile
+        } catch (_: IOException) {
+            false
+        }
     }
 
     private fun copy(context: Context, file: Uri): Uri? {

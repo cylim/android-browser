@@ -68,7 +68,7 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 - While a Profile is active, the browser wears its color: the Sidebar, the Bottom Bar and the Tab Overview are tinted with it, and the browser's accents (the chosen option, switches, buttons, links in dialogs) take it. Switching Profiles glides from one color to the other.
 - Each Profile sets its own color (one of 12) and its color strength: soft, medium or strong. Strength changes the tint of the surfaces, never the text on them.
 - A Profile's avatar shows one of 8 icons or any one emoji. Choosing an emoji replaces the icon, and choosing an icon gives the emoji up.
-- "Compact rows" (Settings, for all Profiles) makes every row of the Tab list one line and 40dp tall: a Tab shows its title without its site.
+- "Compact rows" (Settings, for all Profiles) makes every row of the Tab list one line and 32dp tall, the "Pinned" and "Tabs" labels included: a Tab shows its title without its site, its site's mark is smaller and closer to the title, and the buttons in the rows are as low as the rows, their icons still in one column under the Sidebar's own buttons.
 - The app's own theme stays one setting for all Profiles: the device's, light or dark.
 
 ### Site icons

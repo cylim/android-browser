@@ -243,9 +243,7 @@ private fun Sidebar(tab: Tab, tabs: TabsUi, profiles: ProfilesUi, slots: WindowS
                 modifier = Modifier.weight(1f).imePadding(),
                 tabsHeader = {
                     SectionLabel(stringResource(R.string.tabs)) {
-                        IconButton(onClick = tabs.open, modifier = Modifier.testTag("new-tab")) {
-                            Icon(Icons.Filled.Add, stringResource(R.string.open_new_tab))
-                        }
+                        ListActionButton(Icons.Filled.Add, stringResource(R.string.open_new_tab), onClick = tabs.open, modifier = Modifier.testTag("new-tab"))
                     }
                 },
             )

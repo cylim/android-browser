@@ -494,9 +494,13 @@ class PinnedUiTest {
         fun height(tag: String) = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot().let { (it.bottom - it.top).value }
         // A tablet-sized window forced onto a phone's screen has pixels wider than 1dp.
         val pixel = 1.5f
-        assertEquals(40f, height("pinned-row-1"), pixel)
-        assertEquals(40f, height("folder-row-5"), pixel)
-        assertEquals(40f, height("tab-row-11"), pixel)
+        assertEquals(32f, height("pinned-row-1"), pixel)
+        assertEquals(32f, height("folder-row-5"), pixel)
+        assertEquals(32f, height("tab-row-11"), pixel)
+        // The site marks are smaller, and the section labels' buttons as low as the rows.
+        val mark = compose.onNode(hasTestTag("site-icon") and hasAnyAncestor(hasTestTag("tab-row-11")), useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(16f, (mark.bottom - mark.top).value, pixel)
+        assertEquals(32f, compose.onNodeWithTag("new-tab").getUnclippedBoundsInRoot().let { (it.bottom - it.top).value }, pixel)
         // A Tab says its title, and its site only with roomy rows.
         compose.onNodeWithText("News of the day").assertExists()
         compose.onNodeWithText("news.example.com").assertDoesNotExist()

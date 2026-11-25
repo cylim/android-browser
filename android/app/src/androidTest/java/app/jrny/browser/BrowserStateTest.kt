@@ -800,8 +800,9 @@ class BrowserStateTest {
     @Test
     fun wipingAProfilesWebDataDeletesItsCookies() {
         val cookie = "jrny_wipe=${System.nanoTime()}"
-        // A new address for each look, so each is a load of its own.
-        val echoes = (0 until 20).associate { "/echo$it" to "echo-cookies" }
+        // A new address for each look, so each is a load of its own: more than the 15 s wait can
+        // use, as each look takes at least the wait's 100 ms.
+        val echoes = (0 until 200).associate { "/echo$it" to "echo-cookies" }
         TestServer(echoes + ("/set" to "set-cookie:$cookie")).use { server ->
             val browser = newBrowser()
             val profile = active(browser).profile.id
@@ -1230,6 +1231,9 @@ class BrowserStateTest {
             onMain { browser.closeTab(first.id) }
             await("undo offered") { browser.justClosed?.tabId == first.id }
             await("listed") { browser.recentlyClosed.value?.second.orEmpty().size == 1 }
+            // The Tab list hears of the close after Undo is offered: until it does, the old list,
+            // which still has the Tab, would pass for it being back.
+            await("closed") { browser.active.value?.tabs?.none { it.id == first.id } == true }
             onMain { browser.undoClose() }
             await("back in its place") { browser.active.value?.tabs?.firstOrNull()?.id == first.id }
             assertEquals(first.id, active(browser).selected.id)
@@ -1252,6 +1256,7 @@ class BrowserStateTest {
 
             onMain { browser.closeTab(first.id) }
             await("listed") { browser.recentlyClosed.value?.second.orEmpty().size == 1 }
+            await("closed") { browser.active.value?.tabs?.none { it.id == first.id } == true }
             val closed = onMain { browser.recentlyClosed.value!!.second.single() }
             onMain { browser.reopenClosed(closed) }
             await("reopened") { browser.active.value?.tabs?.count { it.url == server.url("/page") } == 1 }

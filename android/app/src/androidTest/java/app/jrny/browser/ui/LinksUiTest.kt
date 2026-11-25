@@ -112,6 +112,20 @@ class LinksUiTest {
         }
     }
 
+    /**
+     * Holds the page until its link menu shows: a page that has only just loaded may not take
+     * touches yet, and a person would hold it again.
+     */
+    private fun holdForLinkMenu() {
+        repeat(4) {
+            if (!exists("link-menu")) {
+                holdPage()
+                runCatching { compose.waitUntil(3_000) { exists("link-menu") } }
+            }
+        }
+        compose.waitUntil(10_000) { exists("link-menu") }
+    }
+
     private val bigLink = "<title>links</title><a id=l href='https://example.com/next' style='display:block;position:fixed;inset:0'>next</a>"
 
     @Test
@@ -145,8 +159,7 @@ class LinksUiTest {
     fun holdingALinkOffersItsMenuAndOpenInNewTab() {
         loadServed(bigLink)
         show()
-        holdPage()
-        compose.waitUntil(10_000) { exists("link-menu") }
+        holdForLinkMenu()
         compose.onNodeWithText("https://example.com/next").assertExists()
         compose.onNodeWithTag("link-private-tab").assertExists()
         compose.onNodeWithTag("link-copy").assertExists()
@@ -159,8 +172,7 @@ class LinksUiTest {
     fun inAPrivateTabALinkOpensOnlyInPrivateTabs() {
         loadServed(bigLink)
         show(private = true)
-        holdPage()
-        compose.waitUntil(10_000) { exists("link-menu") }
+        holdForLinkMenu()
         compose.onNodeWithTag("link-private-tab").assertDoesNotExist()
         compose.onNodeWithTag("link-open-in").assertDoesNotExist()
         compose.onNodeWithTag("link-new-tab").assertExists()

@@ -1,6 +1,6 @@
 # Okapi privacy policy
 
-Effective date: 24 November 2026
+Effective date: 25 November 2026
 
 <!--
 This is the canonical text. website/public/privacy.html publishes the same policy. Change both
@@ -50,7 +50,7 @@ None of this is sent to us or to anyone else.
 
 ### Sites you open
 
-Okapi shows pages with GeckoView, Mozilla's web engine, which is part of the app. When you open a page, the engine requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details the engine sends, which name Firefox for Android. A site embedded in another site gets its own cookies there, so it can't use its cookies to follow you from site to site. This doesn't stop other ways of recognising a device, such as fingerprinting.
+Okapi shows pages with GeckoView, Mozilla's web engine, which is part of the app. When you open a page, the engine requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details the engine sends, which name Firefox for Android. A site embedded in another site gets its own cookies there, so it can't use its cookies to follow you from site to site. The exception is an embedded site that asks for its cookies, as an embedded sign-in does: Okapi gives it them, so it can recognise you on the site that embeds it. Clearing the Profile's cookies and site data takes that access back. None of this stops other ways of recognising a device, such as fingerprinting.
 
 A site can store cookies and other data in the Profile you opened it in. What a site does with your data is up to that site and its own privacy policy.
 
