@@ -40,7 +40,10 @@ enum class BackupFailure {
     TooNew,
 
     /** Larger than any backup Okapi makes. */
-    TooLarge;
+    TooLarge,
+
+    /** The backup would be larger than Okapi can import, so it wasn't saved. */
+    TooLargeToSave;
 
     companion object {
         fun of(problem: BackupProblem): BackupFailure = when (problem) {

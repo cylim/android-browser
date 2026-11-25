@@ -84,11 +84,12 @@ object BackupFile {
 
     /**
      * The file for [backup]: encrypted with [password], or plain JSON when [password] is null.
-     * [iterations] is for tests, which can't wait for the real work factor.
+     * [iterations] is for tests, which can't wait for the real work factor. Throws
+     * [BackupException] with [BackupProblem.TooLarge] for a file [read] would refuse.
      */
     fun write(backup: Backup, password: CharArray?, iterations: Int = ITERATIONS): ByteArray {
         val plain = json.encodeToString(Backup.serializer(), backup).toByteArray(Charsets.UTF_8)
-        if (password == null) return plain
+        if (password == null) return plain.also(::fitsTheLimit)
         val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
         val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
         val header = SealedBackup(SEALED_FORMAT, SEALED_VERSION, KDF, iterations, encode(salt), encode(nonce), data = "")
@@ -97,7 +98,12 @@ object BackupFile {
         cipher.updateAAD(header.associatedData())
         val sealed = header.copy(data = encode(cipher.doFinal(plain)))
         plain.fill(0)
-        return json.encodeToString(SealedBackup.serializer(), sealed).toByteArray(Charsets.UTF_8)
+        return json.encodeToString(SealedBackup.serializer(), sealed).toByteArray(Charsets.UTF_8).also(::fitsTheLimit)
+    }
+
+    /** No file is written that [read] would refuse: Base64 makes an encrypted one about a third larger. */
+    private fun fitsTheLimit(file: ByteArray) {
+        if (file.size > MAX_BYTES) throw BackupException(BackupProblem.TooLarge)
     }
 
     /** Reads [bytes] as a backup file. Throws [BackupException] when it isn't one this version can read. */
@@ -109,11 +115,11 @@ object BackupFile {
         val version = fields["version"]?.let { runCatching { it.jsonPrimitive.intOrNull }.getOrNull() } ?: throw BackupException(BackupProblem.NotABackup)
         return when (format) {
             Backup.FORMAT -> {
-                if (version > Backup.VERSION) throw BackupException(BackupProblem.TooNew)
+                checkVersion(version, Backup.VERSION)
                 OpenedBackup.Plain(decodeBackup(text))
             }
             SEALED_FORMAT -> {
-                if (version > SEALED_VERSION) throw BackupException(BackupProblem.TooNew)
+                checkVersion(version, SEALED_VERSION)
                 val sealed = decoding { json.decodeFromString(SealedBackup.serializer(), text) }
                 if (sealed.kdf != KDF || sealed.iterations !in 1..MAX_ITERATIONS) throw BackupException(BackupProblem.NotABackup)
                 OpenedBackup.Locked(sealed)
@@ -145,11 +151,17 @@ object BackupFile {
             val inner = OpenedBackup.Plain(decodeBackup(text))
             // What was inside must itself be a backup this version reads.
             if (inner.backup.format != Backup.FORMAT) throw BackupException(BackupProblem.NotABackup)
-            if (inner.backup.version > Backup.VERSION) throw BackupException(BackupProblem.TooNew)
+            checkVersion(inner.backup.version, Backup.VERSION)
             return inner.backup
         } finally {
             plain.fill(0)
         }
+    }
+
+    /** Versions start at 1: a later one than [known] is too new, and none below 1 exists. */
+    private fun checkVersion(version: Int, known: Int) {
+        if (version > known) throw BackupException(BackupProblem.TooNew)
+        if (version < 1) throw BackupException(BackupProblem.NotABackup)
     }
 
     private fun decodeBackup(text: String): Backup {

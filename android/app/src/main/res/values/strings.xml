@@ -372,6 +372,7 @@
     <string name="backup_not_a_backup">This isn\'t an Okapi backup, or it is damaged.</string>
     <string name="backup_too_new">A newer version of Okapi made this backup. Update Okapi to import it.</string>
     <string name="backup_too_large">This file is too large to be an Okapi backup.</string>
+    <string name="backup_too_large_to_save">This backup would be too large for Okapi to import again, so it wasn\'t saved. Clear some history and try again.</string>
     <string name="backup_needs_password">Enter the backup\'s password</string>
     <string name="backup_wrong_password">This password doesn\'t open the backup.</string>
     <string name="backup_open">Open</string>

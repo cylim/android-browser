@@ -185,6 +185,7 @@ private val BackupFailure.message: Int
         BackupFailure.NotABackup -> R.string.backup_not_a_backup
         BackupFailure.TooNew -> R.string.backup_too_new
         BackupFailure.TooLarge -> R.string.backup_too_large
+        BackupFailure.TooLargeToSave -> R.string.backup_too_large_to_save
     }
 
 /** Work that takes a moment: deriving the key takes about a second. It can't be dismissed. */

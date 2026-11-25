@@ -106,6 +106,25 @@ class BackupFileTest {
     }
 
     @Test
+    fun aVersionBelowOneIsNoBackup() {
+        listOf(0, -1).forEach { version ->
+            val plain = BackupFile.write(backup.copy(version = version), password = null)
+            assertEquals(BackupProblem.NotABackup, problemOf { BackupFile.read(plain) })
+            val sealed = BackupFile.write(backup.copy(version = version), "correct horse".toCharArray(), iterations)
+            val locked = BackupFile.read(sealed) as OpenedBackup.Locked
+            assertEquals(BackupProblem.NotABackup, problemOf { BackupFile.unlock(locked, "correct horse".toCharArray()) })
+        }
+    }
+
+    @Test
+    fun noFileIsWrittenThatReadingWouldRefuse() {
+        val longPage = "https://example.com/" + "a".repeat(2_000)
+        val huge = backup.copy(profiles = listOf(backup.profiles[0].copy(history = List(9_000) { BackupVisit(longPage, visitedAt = it.toLong()) })))
+        assertEquals(BackupProblem.TooLarge, problemOf { BackupFile.write(huge, password = null) })
+        assertEquals(BackupProblem.TooLarge, problemOf { BackupFile.write(huge, "correct horse".toCharArray(), iterations) })
+    }
+
+    @Test
     fun fieldsALaterVersionAddsAreIgnored() {
         val text = BackupFile.write(backup, password = null).toString(Charsets.UTF_8).replaceFirst("{", "{\"addedLater\":{\"x\":1},")
         assertEquals(OpenedBackup.Plain(backup), BackupFile.read(text.toByteArray()))

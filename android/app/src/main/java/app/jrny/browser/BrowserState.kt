@@ -745,6 +745,9 @@ class BrowserState(
                 val bytes = withContext(Dispatchers.Default) { BackupFile.write(backup, password) }
                 withContext(Dispatchers.IO) { writeTo(target, bytes) }
                 BackupStep.Exported
+            } catch (_: BackupException) {
+                // Only TooLarge: nothing else is thrown while writing.
+                BackupStep.Failed(BackupFailure.TooLargeToSave)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException || !e.isFileOrDatabaseError()) throw e
                 BackupStep.Failed(BackupFailure.CantWrite)
