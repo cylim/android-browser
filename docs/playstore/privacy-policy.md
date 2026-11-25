@@ -46,6 +46,10 @@ For all Profiles together, the app keeps your settings (search engine, Search su
 
 None of this is sent to us or to anyone else.
 
+### Backup files you make
+
+Settings → Export backup saves a copy of every Profile's name and look, bookmarks and Folders, history, open Tabs and Site settings, with your settings and Site Rules, to a file in a place you choose. Cookies, site storage, sign-ins, Private Tabs and downloaded files are never in it. The file is encrypted with a password you set (AES-256-GCM, with a key derived from the password by PBKDF2), unless you turn that off; then anyone who has the file can read it. Okapi sends the file nowhere itself. If you save it to a cloud drive, that drive's provider holds it, under their own terms. Import backup reads a file you choose, only when you ask.
+
 ## What leaves your device, and who receives it
 
 ### Sites you open
@@ -126,6 +130,7 @@ We hold no data about you, so there is nothing for us to give you or delete. You
 - The app has no server, so we have no copy of your data to lose.
 - Each Profile has its own web data store. A Move to another Profile carries only the page's address.
 - App data stays in the app's private storage, and backups and device transfers leave it out.
+- A backup file you export is encrypted with your password unless you choose otherwise.
 - Search suggestion requests use HTTPS and carry no cookies.
 - During a download, each redirect step receives only its own cookies, so one site's session cookies don't go to another site.
 - Release builds don't write addresses, page titles or cookies to the device log.

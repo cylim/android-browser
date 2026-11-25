@@ -341,4 +341,59 @@
     <string name="error_other_body">Something went wrong while loading %1$s.</string>
     <string name="error_try_again">Try again</string>
     <string name="error_go_back">Go back</string>
+    <string name="backup">Backup</string>
+    <string name="export_backup">Export backup</string>
+    <string name="export_backup_explanation">Every Profile\'s bookmarks, history, open Tabs and Site settings, and these settings, in one file. Cookies and sign-ins stay on this device.</string>
+    <string name="export_backup_body">Cookies, sign-ins, Private Tabs and downloaded files aren\'t included.</string>
+    <string name="import_backup">Import backup</string>
+    <string name="import_backup_explanation">Bring back a backup file. You choose whether it joins what is here or replaces it.</string>
+    <string name="backup_encrypt">Protect with a password</string>
+    <string name="backup_encrypt_explanation">Only this password opens the file. Okapi can\'t recover a forgotten one.</string>
+    <string name="backup_plain_warning">Without a password, anyone who has the file can read your history and bookmarks.</string>
+    <string name="backup_password_again">Password again</string>
+    <plurals name="backup_password_too_short">
+        <item quantity="one">At least %1$d character</item>
+        <item quantity="other">At least %1$d characters</item>
+    </plurals>
+    <string name="backup_passwords_differ">The passwords are different</string>
+    <string name="backup_choose_place">Choose where to save</string>
+    <string name="backup_exporting">Saving the backup…</string>
+    <string name="backup_reading">Opening the backup…</string>
+    <string name="backup_importing">Importing the backup…</string>
+    <string name="backup_exported">Backup saved</string>
+    <string name="backup_exported_body">Keep the file somewhere safe: it holds your history and bookmarks.</string>
+    <string name="backup_imported">Backup imported</string>
+    <string name="backup_merged_body">What the backup had and this device didn\'t is here now.</string>
+    <string name="backup_replaced_body">The backup\'s Profiles have replaced the ones that were here.</string>
+    <string name="backup_failed">Backup</string>
+    <string name="backup_cant_write">The backup couldn\'t be saved there.</string>
+    <string name="backup_cant_read">The file couldn\'t be read.</string>
+    <string name="backup_not_a_backup">This isn\'t an Okapi backup, or it is damaged.</string>
+    <string name="backup_too_new">A newer version of Okapi made this backup. Update Okapi to import it.</string>
+    <string name="backup_too_large">This file is too large to be an Okapi backup.</string>
+    <string name="backup_needs_password">Enter the backup\'s password</string>
+    <string name="backup_wrong_password">This password doesn\'t open the backup.</string>
+    <string name="backup_open">Open</string>
+    <plurals name="backup_profiles">
+        <item quantity="one">%1$d Profile: %2$s</item>
+        <item quantity="other">%1$d Profiles: %2$s</item>
+    </plurals>
+    <plurals name="backup_bookmarks">
+        <item quantity="one">%1$d bookmark</item>
+        <item quantity="other">%1$d bookmarks</item>
+    </plurals>
+    <plurals name="backup_visits">
+        <item quantity="one">%1$d visit</item>
+        <item quantity="other">%1$d visits</item>
+    </plurals>
+    <plurals name="backup_tabs">
+        <item quantity="one">%1$d open Tab</item>
+        <item quantity="other">%1$d open Tabs</item>
+    </plurals>
+    <string name="backup_merge">Merge</string>
+    <string name="backup_merge_explanation">Adds what isn\'t here yet. Nothing here is changed or removed. A Profile with the same name as one here joins it.</string>
+    <string name="backup_replace">Replace</string>
+    <string name="backup_replace_explanation">Deletes every Profile here and puts the backup\'s in their place, with its settings.</string>
+    <string name="backup_replace_warning">Every Account signed in on Okapi will be signed out, and the Tabs, history and bookmarks here will be deleted.</string>
+    <string name="backup_import">Import</string>
 </resources>

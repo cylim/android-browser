@@ -103,6 +103,16 @@ class SettingsUiTest {
     }
 
     @Test
+    fun theSettingsOfferABackupAndExportingAsksHowToProtectIt() {
+        show(TABLET_LANDSCAPE)
+        openSettings()
+        compose.onNodeWithTag("setting-import-backup").performScrollTo().assertExists()
+        compose.onNodeWithText("Bring back a backup file. You choose whether it joins what is here or replaces it.").assertExists()
+        compose.onNodeWithTag("setting-export-backup").performScrollTo().performClick()
+        compose.onNodeWithTag("export-backup-dialog").assertExists()
+    }
+
+    @Test
     fun theSettingsShowWhatIsSetAndChangeIt() {
         show(TABLET_LANDSCAPE)
         openSettings()

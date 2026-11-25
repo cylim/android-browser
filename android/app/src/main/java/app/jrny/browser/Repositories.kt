@@ -1,5 +1,6 @@
 package app.jrny.browser
 
+import app.jrny.browser.backup.Backups
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.DownloadRepository
 import app.jrny.browser.download.Downloader
@@ -25,6 +26,9 @@ class Repositories(database: JrnyDatabase) {
     val siteSettings = SiteSettingsRepository(database.siteSettings())
     val closedTabs = app.jrny.browser.tab.ClosedTabRepository(database.closedTabs())
     val shortcuts = app.jrny.browser.shortcut.ShortcutRepository(database.shortcuts())
+
+    /** Everything at once, for backups (SPEC, "Backup"). */
+    val backup = database.backup()
 }
 
 /** What a [BrowserState] works with besides the screen: what is stored, and the services around it. */
@@ -35,4 +39,7 @@ class BrowserServices(
     val settings: SettingsRepository,
     val searchSuggestions: SearchSuggestions,
     val siteIcons: SiteIconStore,
-)
+) {
+    /** Makes and restores backups of what [repositories] and [settings] keep. */
+    val backups = Backups(repositories.backup, settings)
+}

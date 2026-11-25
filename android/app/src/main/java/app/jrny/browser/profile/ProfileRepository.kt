@@ -82,6 +82,7 @@ class ProfileRepository(private val dao: ProfileDao) {
         /** The first Profile's id, kept from Milestone 1 (ADR 0004). */
         const val FIRST_ID = 1L
 
-        private const val EMOJI = "emoji:"
+        /** Before an emoji in the icon column. */
+        internal const val EMOJI = "emoji:"
     }
 }

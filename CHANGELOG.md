@@ -155,6 +155,11 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Protected video (DRM) plays, and a video without sound may play by itself.
 - The APK is much larger: about 95 MB to download. Okapi now ships each GeckoView security release itself.
 
+### Backup (not merged yet)
+
+- Settings → Export backup saves every Profile's bookmarks and Folders, history, open Tabs, Site Rules and Site settings, with the settings, to a file you choose. It is encrypted with a password unless you turn that off. Cookies and sign-ins are never in it.
+- Settings → Import backup brings a backup back. Merge adds only what is missing; Replace deletes the Profiles here and puts the backup's in their place.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.

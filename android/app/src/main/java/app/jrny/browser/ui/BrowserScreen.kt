@@ -140,7 +140,22 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     )
 
     val appSettings by browser.settings.collectAsState()
-    val settings = SettingsUi(appSettings, browser::updateSettings, pending, BuildConfig.VERSION_NAME, clearBrowsingData = { browser.clearBrowsingData(profile, it) })
+    val backup = BackupUi(
+        step = browser.backupStep,
+        export = browser::exportBackup,
+        open = browser::openBackup,
+        unlock = browser::unlockBackup,
+        import = browser::importBackup,
+        dismiss = browser::dismissBackup,
+    )
+    val settings = SettingsUi(
+        appSettings,
+        browser::updateSettings,
+        pending,
+        BuildConfig.VERSION_NAME,
+        clearBrowsingData = { browser.clearBrowsingData(profile, it) },
+        backup = backup,
+    )
 
     val rules by browser.siteRules.collectAsState()
     val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
@@ -203,6 +218,8 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
             siteSettings = siteSettings,
             links = links,
         )
+        // Outside the Settings panel: replacing every Profile can take the window elsewhere.
+        BackupStepDialog(backup)
 
         editing?.let { target ->
             val existing = target.profile

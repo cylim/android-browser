@@ -1,6 +1,17 @@
 package app.jrny.browser
 
 import android.content.Context
+import android.net.Uri
+import app.jrny.browser.backup.Backup
+import app.jrny.browser.backup.BackupException
+import app.jrny.browser.backup.BackupFailure
+import app.jrny.browser.backup.BackupFile
+import app.jrny.browser.backup.BackupProblem
+import app.jrny.browser.backup.BackupStep
+import app.jrny.browser.backup.ImportMode
+import app.jrny.browser.backup.OpenedBackup
+import app.jrny.browser.backup.summary
+import java.io.IOException
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -126,6 +137,7 @@ class BrowserState(
     private val siteSettingsRepository = repositories.siteSettings
     private val closedTabRepository = repositories.closedTabs
     private val shortcutRepository = repositories.shortcuts
+    private val backups = services.backups
 
     /** The icons of the sites each Profile has shown, for the Tab list. */
     val siteIcons = services.siteIcons
@@ -687,17 +699,156 @@ class BrowserState(
         scope.launch {
             // Its Home Screen Shortcuts stop working with it. Their ids go with its rows, so read them first.
             val shortcuts = shortcutRepository.idsOf(profile.id)
-            if (profileRepository.delete(profile.id)) {
-                HomeShortcuts.disable(context, shortcuts, context.getString(R.string.shortcut_profile_deleted))
-                live.entries.filter { it.value.saved.profileId == profile.id }.map { it.key }.forEach(::retire)
-                // Its web data goes at once. The next cold start wipes it again, in case a page
-                // that was still on screen wrote something meanwhile, and only then forgets it.
-                WebProfile.of(profile.id).clear(context)
-                // Its Private Tabs close with it.
-                privateTabs.closeAll(profile.id)?.let(::discard)
-                siteIcons.clear(profile.id)
+            if (profileRepository.delete(profile.id)) forget(profile.id, shortcuts)
+        }
+    }
+
+    /**
+     * Lets go of a Profile whose rows were just deleted: its [shortcuts] stop working, its Tabs
+     * and Private Tabs close, and its web data and site icons go.
+     */
+    private suspend fun forget(profile: ProfileId, shortcuts: List<String>) {
+        HomeShortcuts.disable(context, shortcuts, context.getString(R.string.shortcut_profile_deleted))
+        live.entries.filter { it.value.saved.profileId == profile }.map { it.key }.forEach(::retire)
+        // Its web data goes at once. The next cold start wipes it again, in case a page
+        // that was still on screen wrote something meanwhile, and only then forgets it.
+        WebProfile.of(profile).clear(context)
+        // Its Private Tabs close with it.
+        privateTabs.closeAll(profile)?.let(::discard)
+        siteIcons.clear(profile)
+    }
+
+    /** Where an export or import of a backup stands, or null when none is under way (SPEC, "Backup"). */
+    var backupStep: BackupStep? by mutableStateOf(null)
+        private set
+
+    /** The encrypted backup the person is asked the password of. */
+    private var lockedBackup: OpenedBackup.Locked? = null
+
+    /** The backup the person is choosing how to import. */
+    private var openedBackup: Backup? = null
+
+    private var backupWork: Job? = null
+
+    /**
+     * Writes a backup of every Profile and the settings to [target], a file the person chose:
+     * encrypted with [password], or plain JSON without one. The password is wiped once used.
+     */
+    fun exportBackup(target: Uri, password: CharArray?) {
+        backupWork?.cancel()
+        backupStep = BackupStep.Exporting
+        backupWork = scope.launch {
+            backupStep = try {
+                val backup = backups.snapshot()
+                val bytes = withContext(Dispatchers.Default) { BackupFile.write(backup, password) }
+                withContext(Dispatchers.IO) { writeTo(target, bytes) }
+                BackupStep.Exported
+            } catch (_: IOException) {
+                BackupStep.Failed(BackupFailure.CantWrite)
+            } catch (_: SecurityException) {
+                BackupStep.Failed(BackupFailure.CantWrite)
+            } finally {
+                password?.fill('\u0000')
             }
         }
+    }
+
+    private fun writeTo(target: Uri, bytes: ByteArray) {
+        val resolver = context.contentResolver
+        // "wt" empties a file that was there; a provider without it gets a new, empty file anyway.
+        val stream = try {
+            resolver.openOutputStream(target, "wt")
+        } catch (_: IllegalArgumentException) {
+            resolver.openOutputStream(target, "w")
+        } ?: throw IOException("No stream")
+        stream.use { it.write(bytes) }
+    }
+
+    /** Reads the backup file [source] the person chose, to import it. */
+    fun openBackup(source: Uri) {
+        backupWork?.cancel()
+        lockedBackup = null
+        openedBackup = null
+        backupStep = BackupStep.Reading
+        backupWork = scope.launch {
+            backupStep = try {
+                val bytes = withContext(Dispatchers.IO) { readFrom(source) }
+                when (val opened = withContext(Dispatchers.Default) { BackupFile.read(bytes) }) {
+                    is OpenedBackup.Plain -> ready(opened.backup)
+                    is OpenedBackup.Locked -> {
+                        lockedBackup = opened
+                        BackupStep.NeedsPassword()
+                    }
+                }
+            } catch (e: BackupException) {
+                BackupStep.Failed(BackupFailure.of(e.problem))
+            } catch (_: IOException) {
+                BackupStep.Failed(BackupFailure.CantRead)
+            } catch (_: SecurityException) {
+                BackupStep.Failed(BackupFailure.CantRead)
+            }
+        }
+    }
+
+    /** The file's bytes, up to one more than a backup can have, so a larger file reads as too large. */
+    private fun readFrom(source: Uri): ByteArray {
+        val stream = context.contentResolver.openInputStream(source) ?: throw IOException("No stream")
+        return stream.use { it.readNBytes(BackupFile.MAX_BYTES + 1) }
+    }
+
+    private fun ready(backup: Backup): BackupStep {
+        openedBackup = backup
+        return BackupStep.Ready(backup.summary)
+    }
+
+    /** Tries [password] on the encrypted backup the person chose. The password is wiped once used. */
+    fun unlockBackup(password: CharArray) {
+        val locked = lockedBackup ?: return
+        backupWork?.cancel()
+        backupStep = BackupStep.Reading
+        backupWork = scope.launch {
+            backupStep = try {
+                val backup = withContext(Dispatchers.Default) { BackupFile.unlock(locked, password) }
+                lockedBackup = null
+                ready(backup)
+            } catch (e: BackupException) {
+                if (e.problem == BackupProblem.WrongPassword) BackupStep.NeedsPassword(wrong = true) else BackupStep.Failed(BackupFailure.of(e.problem))
+            } finally {
+                password.fill('\u0000')
+            }
+        }
+    }
+
+    /**
+     * Imports the backup the person opened, as [mode] says. Replacing deletes every Profile that
+     * was here, as deleting one does: Accounts signed in to them are signed out.
+     */
+    fun importBackup(mode: ImportMode) {
+        val backup = openedBackup ?: return
+        backupWork?.cancel()
+        backupStep = BackupStep.Importing
+        backupWork = scope.launch {
+            // One transaction: when the database refuses it, nothing was imported.
+            val imported = try {
+                backups.restore(backup, mode)
+            } catch (_: android.database.SQLException) {
+                backupStep = BackupStep.Failed(BackupFailure.NotABackup)
+                return@launch
+            }
+            openedBackup = null
+            imported.replaced.forEach { forget(it, emptyList()) }
+            HomeShortcuts.disable(context, imported.shortcuts, context.getString(R.string.shortcut_profile_deleted))
+            backupStep = BackupStep.Imported(mode)
+        }
+    }
+
+    /** Closes what the window shows of a backup, and forgets a backup that was opened. */
+    fun dismissBackup() {
+        backupWork?.cancel()
+        backupWork = null
+        lockedBackup = null
+        openedBackup = null
+        backupStep = null
     }
 
     /**

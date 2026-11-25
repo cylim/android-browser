@@ -54,6 +54,7 @@ Added to v1 after Milestone 5:
   2. Links and files: links to other apps, `blob:` and `data:` downloads, the link and image menu, Share, Copy link, and Print.
   3. Page tools: Find in page, Desktop site, text size, dark pages, and pull to refresh.
   4. Tabs and data: Reopen closed Tab, Clear browsing data, and Add to Home screen.
+- Backup: export Okapi's own data to a file, encrypted by default, and import it by merging or replacing.
 
 ## Before the first release: GeckoView
 
