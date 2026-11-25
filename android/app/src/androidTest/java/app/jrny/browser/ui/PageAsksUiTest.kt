@@ -297,10 +297,13 @@ class PageAsksUiTest {
         show()
         load(
             serve(
-                "<title>video</title><canvas id=c width=$width height=$height></canvas>" +
+                // Named "video" once the video knows its size: a slow emulator can take longer
+                // than Okapi waits to measure it, and then the screen rightly turns to landscape.
+                "<title>loading</title><canvas id=c width=$width height=$height></canvas>" +
                     "<video id=v muted autoplay playsinline style='position:fixed;inset:0;width:100%;height:100%'></video>" +
                     "<script>var c=document.getElementById('c');(function draw(){c.getContext('2d').fillRect(0,0,$width,$height);requestAnimationFrame(draw)})();" +
                     "var v=document.getElementById('v');v.srcObject=c.captureStream();" +
+                    "v.onloadedmetadata=v.onresize=function(){if(v.videoWidth>0)document.title='video'};" +
                     "v.onclick=function(){v.requestFullscreen()}</script>",
             ),
         )
