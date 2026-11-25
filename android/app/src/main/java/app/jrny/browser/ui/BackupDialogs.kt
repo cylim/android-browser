@@ -93,13 +93,14 @@ fun ExportBackupDialog(onExport: (password: CharArray?) -> Unit, onDismiss: () -
                     Switch(checked = encrypt, onCheckedChange = null)
                 }
                 if (encrypt) {
-                    PasswordField(password, { password = it }, R.string.password, "backup-password", ImeAction.Next)
+                    PasswordField(password, { password = it }, R.string.password, "backup-password", ImeAction.Next, Modifier.padding(top = 8.dp))
                     PasswordField(
                         again,
                         { again = it },
                         R.string.backup_password_again,
                         "backup-password-again",
                         ImeAction.Done,
+                        Modifier.padding(top = 8.dp),
                         error = when {
                             password.isNotEmpty() && tooShort -> pluralStringResource(R.plurals.backup_password_too_short, BackupFile.MIN_PASSWORD_LENGTH, BackupFile.MIN_PASSWORD_LENGTH)
                             again.isNotEmpty() && differ -> stringResource(R.string.backup_passwords_differ)
@@ -139,10 +140,10 @@ private fun PasswordField(
     label: Int,
     tag: String,
     ime: ImeAction,
+    modifier: Modifier = Modifier,
     error: String? = null,
     errorTag: String = "$tag-error",
     autofill: ContentType = ContentType.NewPassword,
-    modifier: Modifier = Modifier.padding(top = 8.dp),
 ) {
     OutlinedTextField(
         value = value,
@@ -231,7 +232,6 @@ private fun UnlockDialog(wrong: Boolean, ui: BackupUi) {
                 error = if (wrong) stringResource(R.string.backup_wrong_password) else null,
                 errorTag = "backup-wrong-password",
                 autofill = ContentType.Password,
-                modifier = Modifier,
             )
         },
         confirmButton = {
