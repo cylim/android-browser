@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileId
@@ -25,7 +24,6 @@ import app.jrny.browser.tab.Tab
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -47,7 +45,6 @@ class PageMenuUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread {
             tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-page-menu")))
         }

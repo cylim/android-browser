@@ -1,6 +1,8 @@
 ---
-status: accepted
+status: superseded by 0006
 ---
+
+> Superseded on 2026-11-19 by [ADR 0006](0006-geckoview-as-engine.md): Okapi now renders pages with GeckoView. This record stays as the reason the first milestones used WebView.
 
 # Use Android System WebView as the rendering engine
 

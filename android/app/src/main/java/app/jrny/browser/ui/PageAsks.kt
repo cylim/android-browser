@@ -56,7 +56,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.key
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.jrny.browser.R
@@ -67,6 +67,7 @@ import app.jrny.browser.tab.FileTypes
 import app.jrny.browser.tab.HttpAuthAsk
 import app.jrny.browser.tab.PermissionAsk
 import app.jrny.browser.tab.Tab
+import app.jrny.browser.tab.UploadFiles
 import kotlinx.coroutines.delay
 import java.io.File
 
@@ -274,7 +275,7 @@ private fun FileChooserHost(tab: Tab) {
     // isn't offered again meanwhile, and the files go to that Tab even if another one is shown
     // by the time they come back.
     var started by remember { mutableStateOf<Pair<Tab, FileChooserAsk>?>(null) }
-    var capture by remember { mutableStateOf<Uri?>(null) }
+    var capture by remember { mutableStateOf<File?>(null) }
     // Only to the file field that asked: one the page has given up on gets nothing.
     val answer: (List<Uri>?) -> Unit = { files ->
         val (owner, asked) = started ?: (null to null)
@@ -286,12 +287,13 @@ private fun FileChooserHost(tab: Tab) {
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val made = capture
         capture = null
-        answer(if (result.resultCode == Activity.RESULT_OK && made != null) listOf(made) else null)
+        // Handed to the page as the file it is: GeckoView can't read the address the camera app wrote to.
+        answer(if (result.resultCode == Activity.RESULT_OK && made != null && made.length() > 0) listOf(Uri.fromFile(made)) else null)
     }
     val startCamera: (Capture) -> Unit = { kind ->
         val file = captureFile(context, kind)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        capture = uri
+        capture = file
         val intent = Intent(if (kind == Capture.Photo) MediaStore.ACTION_IMAGE_CAPTURE else MediaStore.ACTION_VIDEO_CAPTURE)
             .putExtra(MediaStore.EXTRA_OUTPUT, uri)
             .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -400,24 +402,24 @@ private fun pickedFiles(data: Intent?): List<Uri>? {
 
 /**
  * A new file in the app's cache for the camera app to write into. These files are removed the
- * next time the app starts ([clearCaptures]); the page may read its file any time before.
+ * next time the app starts ([clearPageFiles]); the page may read its file any time before.
  */
 private fun captureFile(context: Context, kind: Capture): File {
-    val folder = File(context.cacheDir, CAPTURE_FOLDER).apply { mkdirs() }
+    val folder = File(context.cacheDir, UploadFiles.CAPTURE_FOLDER).apply { mkdirs() }
     val name = if (kind == Capture.Photo) "photo-${System.currentTimeMillis()}.jpg" else "video-${System.currentTimeMillis()}.mp4"
     return File(folder, name)
 }
 
 /**
  * Removes the files made for pages and other apps before this start: photos and videos the camera
- * app took for file fields, and images handed to other apps by Copy image and Share image.
+ * app took for file fields, copies of files handed to file fields, and images handed to other apps
+ * by Copy image and Share image.
  */
 fun clearPageFiles(context: Context) {
-    File(context.cacheDir, CAPTURE_FOLDER).deleteRecursively()
+    File(context.cacheDir, UploadFiles.CAPTURE_FOLDER).deleteRecursively()
+    File(context.cacheDir, UploadFiles.COPY_FOLDER).deleteRecursively()
     File(context.cacheDir, Sharing.SHARED_FOLDER).deleteRecursively()
 }
-
-private const val CAPTURE_FOLDER = "captures"
 
 /**
  * Asks for the username and password a site wants before it sends the page (SPEC, "HTTP
@@ -474,7 +476,8 @@ private fun HttpAuthDialog(ask: HttpAuthAsk, onSignIn: (String, String) -> Unit,
 private const val MAX_REALM_LENGTH = 120
 
 /**
- * The Tab's fullscreen video over the whole window (SPEC, "Fullscreen video"). The screen turns
+ * The Tab's fullscreen video over the whole window (SPEC, "Fullscreen video"): the page's own
+ * session moves here from the layout, and the page shows its video across it. The screen turns
  * to match the video: a wide one shows in landscape, a tall one in portrait, and one that can't
  * be measured in landscape. Back ends fullscreen, and the orientation goes back to normal.
  */
@@ -484,18 +487,10 @@ fun FullscreenVideoHost(tab: Tab) {
     val activity = LocalActivity.current
     BackHandler { tab.exitFullscreen() }
     LaunchedEffect(video) {
-        // The page marks its fullscreen element a moment after WebView hands over the view, and
-        // the video may still be loading its size.
+        // The video may still be loading its size when the page goes fullscreen.
         repeat(MEASURE_ATTEMPTS) { attempt ->
             delay(MEASURE_INTERVAL_MS)
-            var size: Pair<Int, Int>? = null
-            var measured = false
-            tab.measureFullscreenVideo {
-                size = it
-                measured = true
-            }
-            while (!measured) delay(MEASURE_POLL_MS)
-            val found = size
+            val found = tab.measureFullscreenVideo()
             if (found != null || attempt == MEASURE_ATTEMPTS - 1) {
                 activity?.requestedOrientation = if (found != null && found.second > found.first) {
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
@@ -509,12 +504,10 @@ fun FullscreenVideoHost(tab: Tab) {
     DisposableEffect(video) {
         onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
     }
-    AndroidView(
-        factory = { video.view },
-        modifier = Modifier.fillMaxSize().background(Color.Black).testTag("fullscreen-video"),
-    )
+    key(tab.session) {
+        SessionHost(tab.session, Modifier.fillMaxSize().background(Color.Black).testTag("fullscreen-video"))
+    }
 }
 
 private const val MEASURE_ATTEMPTS = 4
 private const val MEASURE_INTERVAL_MS = 250L
-private const val MEASURE_POLL_MS = 20L

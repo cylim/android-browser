@@ -143,15 +143,25 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Settings → Clear browsing data clears the Active Profile's history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs or site icons, from all time. Checking cookies warns that the Profile's Accounts will be signed out.
 - Add to Home screen pins the page to the launcher with the site's icon and the Profile's badge. It opens in that Profile, whichever Profile is active, and stops working when the Profile is deleted.
 
+### GeckoView engine (not merged yet)
+
+- Pages render in GeckoView, Mozilla's Gecko engine, inside the app, instead of Android System WebView ([ADR 0006](docs/adr/0006-geckoview-as-engine.md)). Each Profile is a GeckoView session context with the same name as before. Sites see Firefox for Android, and no request carries the app's package name any more.
+- Deleting a Profile wipes its web data at once, as well as at the next cold start. Private Tabs keep their storage in memory, apart from site databases, which the engine keeps on disk encrypted until no Private Tab is open.
+- Page dialogs: alerts, questions, typed answers, list fields, date, time and color fields, "Leave this page?", and a page's own Share button.
+- Okapi's own error pages, with "Try again": no connection, no such site, a connection that isn't secure, a site that refused, and a dangerous site, which isn't opened.
+- Downloads come from the engine with the page's Profile, and are written to the Downloads folder by Okapi, with their progress on the list.
+- Dark pages no longer reload open pages, and darken a page only when it has no dark theme of its own.
+- Cookies follow Total Cookie Protection, so embedded sites can't follow you from site to site.
+- Protected video (DRM) plays, and a video without sound may play by itself.
+- The APK is much larger: about 95 MB to download. Okapi now ships each GeckoView security release itself.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
 - There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.
-- A site that only answers a real browser may refuse the download service. A page that drops a file it made in the same moment it offers it leaves nothing to save.
+- A download stops if Android ends the app while it runs.
 - Back/forward history isn't restored after Android kills the app.
-- On an Android System WebView too old to delete all of a store's browsing data, "cookies and site data" in Clear browsing data clears cookies and site storage but can leave service workers and Cache Storage behind. Updating Android System WebView fixes this.
 - A Move loses unsaved form input and pages reached by submitting a form.
-- A deleted Profile's web data stays on the device until the next cold start.
-- Sign-in with two Accounts at once is confirmed for Google. Microsoft, GitHub and Apple are untested.
-- Android System WebView sends the app's package name with every request (`X-Requested-With`), and this can't be turned off. A site could use it to block sign-in.
+- Sign-in with two Accounts at once is untested on GeckoView: Google, Microsoft, GitHub and Apple still need checking with real Accounts.
+- Site icons, dark pages and "Save image" need the engine's built-in Okapi extension, which runs in web pages only.
 - Not in v1: sync, extensions, a built-in password manager, content blocking and a lock per Profile.

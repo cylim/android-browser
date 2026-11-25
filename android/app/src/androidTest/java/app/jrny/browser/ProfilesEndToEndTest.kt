@@ -1,6 +1,5 @@
 package app.jrny.browser
 
-import android.annotation.SuppressLint
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -10,7 +9,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.tab.Tab
@@ -19,8 +17,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,17 +26,11 @@ import org.junit.runner.RunWith
  * shows (Bottom Bar on a phone, Sidebar on a landscape tablet): create a Profile, switch between
  * Profiles, check each keeps its own page and cookies, and delete it.
  */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class ProfilesEndToEndTest {
 
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
-
-    @Before
-    fun requireMultiProfile() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
-    }
 
     private fun browser(): BrowserState {
         var browser: BrowserState? = null

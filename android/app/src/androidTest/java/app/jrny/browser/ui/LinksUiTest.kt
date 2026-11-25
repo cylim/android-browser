@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.page
 import app.jrny.browser.TestServer
 import app.jrny.browser.profile.ProfileId
@@ -27,7 +26,6 @@ import app.jrny.browser.tab.TabId
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -51,7 +49,6 @@ class LinksUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread { tab = Tab(instrumentation.targetContext, WebProfile.of(ProfileId("test-links"))) }
     }
 
@@ -84,27 +81,49 @@ class LinksUiTest {
         compose.waitUntil(15_000) { !tab.isLoading && tab.title.isNotEmpty() }
     }
 
-    /** Holds the middle of the page, as a person would: a touch goes down, and the WebView sees a long press. */
+    /**
+     * Holds the middle of the page, as a person would: a touch goes down and stays, and GeckoView
+     * sees a long press. The touch goes to the page's view itself, so it lands whatever the test
+     * window's size.
+     */
     private fun holdPage() {
         compose.waitForIdle()
+        var x = 0f
+        var y = 0f
+        val down = SystemClock.uptimeMillis()
         compose.runOnUiThread {
-            val view = tab.webView
-            val down = SystemClock.uptimeMillis()
-            val event = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, view.width / 2f, view.height / 2f, 0)
+            val view = SessionViews.viewOf(tab.session)!!
+            x = view.width / 2f
+            y = view.height / 2f
+            val event = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0)
             event.source = InputDevice.SOURCE_TOUCHSCREEN
             view.dispatchTouchEvent(event)
             event.recycle()
         }
-        // WebView finds what is under the finger as the touch goes down.
-        Thread.sleep(300)
+        // Held for longer than a long press takes.
+        Thread.sleep(1_200)
         compose.runOnUiThread {
-            val view = tab.webView
-            view.performLongClick(view.width / 2f, view.height / 2f)
+            val view = SessionViews.viewOf(tab.session)!!
             val now = SystemClock.uptimeMillis()
-            val cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, view.width / 2f, view.height / 2f, 0)
-            view.dispatchTouchEvent(cancel)
-            cancel.recycle()
+            val up = MotionEvent.obtain(down, now, MotionEvent.ACTION_UP, x, y, 0)
+            up.source = InputDevice.SOURCE_TOUCHSCREEN
+            view.dispatchTouchEvent(up)
+            up.recycle()
         }
+    }
+
+    /**
+     * Holds the page until its link menu shows: a page that has only just loaded may not take
+     * touches yet, and a person would hold it again.
+     */
+    private fun holdForLinkMenu() {
+        repeat(4) {
+            if (!exists("link-menu")) {
+                holdPage()
+                runCatching { compose.waitUntil(3_000) { exists("link-menu") } }
+            }
+        }
+        compose.waitUntil(10_000) { exists("link-menu") }
     }
 
     private val bigLink = "<title>links</title><a id=l href='https://example.com/next' style='display:block;position:fixed;inset:0'>next</a>"
@@ -140,8 +159,7 @@ class LinksUiTest {
     fun holdingALinkOffersItsMenuAndOpenInNewTab() {
         loadServed(bigLink)
         show()
-        holdPage()
-        compose.waitUntil(10_000) { exists("link-menu") }
+        holdForLinkMenu()
         compose.onNodeWithText("https://example.com/next").assertExists()
         compose.onNodeWithTag("link-private-tab").assertExists()
         compose.onNodeWithTag("link-copy").assertExists()
@@ -154,15 +172,14 @@ class LinksUiTest {
     fun inAPrivateTabALinkOpensOnlyInPrivateTabs() {
         loadServed(bigLink)
         show(private = true)
-        holdPage()
-        compose.waitUntil(10_000) { exists("link-menu") }
+        holdForLinkMenu()
         compose.onNodeWithTag("link-private-tab").assertDoesNotExist()
         compose.onNodeWithTag("link-open-in").assertDoesNotExist()
         compose.onNodeWithTag("link-new-tab").assertExists()
     }
 
     @Test
-    fun holdingTextKeepsWebViewsOwnHandling() {
+    fun holdingTextKeepsTheEnginesOwnHandling() {
         loadServed("<title>text</title><p style='font-size:40px'>Just some words to select on this page</p>")
         show()
         holdPage()

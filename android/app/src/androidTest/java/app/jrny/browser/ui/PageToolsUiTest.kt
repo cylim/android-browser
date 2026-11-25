@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestServer
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -27,7 +26,6 @@ import app.jrny.browser.tab.Tab
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -47,7 +45,6 @@ class PageToolsUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread { tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-page-tools"))) }
         val started = TestServer(mapOf("/words" to "<title>words</title><p>okapi one</p><p>okapi two</p>"))
         server = started
@@ -89,10 +86,10 @@ class PageToolsUiTest {
         openFind()
         compose.onNodeWithTag("address").assertDoesNotExist()
         compose.onNodeWithTag("find-field").performTextInput("okapi")
-        compose.waitUntil(10_000) { tab.find?.total == 2 }
+        compose.waitUntil(10_000) { tab.findInPage.state?.total == 2 }
         compose.onNodeWithText("1 of 2").assertExists()
         compose.onNodeWithTag("find-next").performClick()
-        compose.waitUntil(10_000) { tab.find?.current == 2 }
+        compose.waitUntil(10_000) { tab.findInPage.state?.current == 2 }
 
         // Closing brings the address bar back.
         compose.onNodeWithTag("find-close").performClick()
@@ -110,7 +107,7 @@ class PageToolsUiTest {
         Espresso.closeSoftKeyboard()
         Espresso.pressBack()
         compose.waitUntil(5_000) { !exists("find-bar") }
-        assertEquals(null, tab.find)
+        assertEquals(null, tab.findInPage.state)
     }
 
     @Test

@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * One row per Profile. A deleted Profile stays as a row with [pendingDeletion] until its web data
- * is wiped at the next cold start (ADR 0001), then the row goes. The id is AUTOINCREMENT, so an id
+ * is wiped at the next cold start (ADR 0006), then the row goes. The id is AUTOINCREMENT, so an id
  * is never reused, even after a delete: it names the Profile's web data store (ADR 0004).
  *
  * The Active Profile is the live one with the highest [activation], a counter that grows each

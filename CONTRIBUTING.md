@@ -48,8 +48,8 @@ CI runs the same scan on every pull request, so a leak that gets past your machi
 You need:
 
 - JDK 21.
-- The Android SDK with platform 37 (`platforms;android-37.0`).
-- Two emulators or devices with Android 15 (API 35) or later and an up-to-date Android System WebView: a **phone** and a **tablet**. Every UI change is checked on both, because the app has a different layout for each (the Bottom Bar and the Sidebar). For Android 17 images, create the emulators with Command-line Tools 22 or later. Older `avdmanager` writes `target=android-0` into the emulator's `.ini` file, and the emulator then crashes in a loop:
+- The Android SDK with platform 37.2 (`platforms;android-37.2`), which GeckoView needs.
+- Two emulators or devices with Android 15 (API 35) or later: a **phone** and a **tablet**. Every UI change is checked on both, because the app has a different layout for each (the Bottom Bar and the Sidebar). For Android 17 images, create the emulators with Command-line Tools 22 or later. Older `avdmanager` writes `target=android-0` into the emulator's `.ini` file, and the emulator then crashes in a loop:
 
   ```sh
   sdkmanager --install "system-images;android-37.0;google_apis_playstore;x86_64" "emulator"
@@ -68,6 +68,8 @@ Point Gradle at your SDK. `local.properties` is gitignored:
 ```sh
 echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 ```
+
+The build includes GeckoView, the browser engine, for one ABI: `x86_64` by default, for emulators. For a phone or tablet, add `-PgeckoAbi=arm64-v8a` to any Gradle command. The first build downloads about 95 MB of GeckoView from Mozilla's Maven repository.
 
 Build, lint and run the unit tests, the same as CI:
 

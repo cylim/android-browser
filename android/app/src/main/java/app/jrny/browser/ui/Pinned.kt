@@ -131,14 +131,15 @@ sealed interface PinDialog {
 }
 
 /**
- * The label above a section of the Tab list ("Pinned", "Tabs"). Its text starts on the rows'
- * text line, and [action], a 48dp icon button, sits in the rows' close-button column.
+ * The label above a section of the Tab list ("Pinned", "Tabs"), as tall as a compact row when
+ * rows are compact. Its text starts where the rows' marks do, and [action], a [ListActionButton],
+ * sits in the rows' close-button column.
  */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier, action: @Composable () -> Unit = {}) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).padding(end = LIST_ICON_INSET),
+        modifier = modifier.fillMaxWidth().heightIn(min = if (LocalCompactTabs.current) COMPACT_ROW_HEIGHT else 48.dp),
     ) {
         Text(
             text,
@@ -216,19 +217,17 @@ fun PinnedRow(
                 .testTag("pinned-row-${bookmark.id}"),
         ) {
             ListRow(height = if (LocalCompactTabs.current) COMPACT_ROW_HEIGHT else PINNED_ROW_HEIGHT) {
-                SiteIcon(bookmark.url, Modifier.padding(start = LIST_TEXT_INSET + indent), dimmed = openTab == null)
+                SiteIcon(bookmark.url, Modifier.padding(start = LIST_TEXT_INSET + indent), size = listIconSize(), dimmed = openTab == null)
                 Text(
                     label,
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (openTab == null) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP, end = if (openTab == null) LIST_TEXT_INSET else 0.dp),
+                    modifier = Modifier.weight(1f).padding(start = listIconGap(), end = if (openTab == null) LIST_TEXT_INSET else 0.dp),
                 )
                 if (openTab != null) {
-                    IconButton(onClick = onClose, modifier = Modifier.padding(end = closeButtonInset()).testTag("close-pinned")) {
-                        Icon(Icons.Filled.Close, stringResource(R.string.close_tab_named, label))
-                    }
+                    CloseRowButton(stringResource(R.string.close_tab_named, label), onClose, Modifier.testTag("close-pinned"))
                 }
             }
         }
@@ -310,14 +309,14 @@ fun FolderRow(
                 if (folder.collapsed) JrnyIcons.Folder else JrnyIcons.FolderOpen,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = LIST_TEXT_INSET).size(SITE_ICON_SIZE),
+                modifier = Modifier.padding(start = LIST_TEXT_INSET).size(listIconSize()),
             )
             Text(
                 folder.name,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP),
+                modifier = Modifier.weight(1f).padding(start = listIconGap()),
             )
             // How many it holds, while they are hidden.
             if (folder.collapsed && folder.bookmarks.isNotEmpty()) {

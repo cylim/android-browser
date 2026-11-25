@@ -2,7 +2,6 @@ package app.jrny.browser.ui
 
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,10 +49,13 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import app.jrny.browser.R
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.tab.Tab
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
+import java.util.WeakHashMap
 
 /**
  * The Tab's page, with its popup on top while one is open, or the "page stopped working"
- * screen after the renderer died.
+ * screen after its content process died.
  */
 @Composable
 fun PageView(
@@ -67,15 +69,18 @@ fun PageView(
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     Box(modifier.testTag("page")) {
-        // A new WebView replaces a dead one (Tab.replaceDeadWebView), so key the view on it.
-        key(tab.webView) { WebViewHost(tab.webView, covered = covered, onPull = if (LocalPullToRefresh.current) tab::reload else null) }
+        // A new session replaces a dead one (Tab.replaceDeadSession), so key the view on it.
+        // While the page shows a video fullscreen, it is shown over the whole window instead.
+        if (tab.fullscreen == null) key(tab.session) {
+            SessionHost(tab.session, covered = covered, onPull = if (LocalPullToRefresh.current) tab::reload else null, atTop = { tab.atTop })
+        }
         // Floats over the page, and under a popup.
         overlay()
         tab.popup?.let { popup ->
             key(popup) {
                 Column(Modifier.fillMaxSize().testTag("popup")) {
                     PopupBar(tab.popupUrl.orEmpty(), onClose = tab::closePopup)
-                    WebViewHost(popup, Modifier.weight(1f))
+                    SessionHost(popup, Modifier.weight(1f))
                 }
             }
         }
@@ -162,29 +167,75 @@ fun PopupBar(address: String, onClose: () -> Unit) {
 val LocalPullToRefresh = staticCompositionLocalOf { false }
 
 /**
- * Hosts [webView]. With [onPull], it sits in a pull-to-refresh layout, which takes a pull only
- * while the page is scrolled to its very top.
+ * Which GeckoView shows each session. A session can be in one view at a time, and moves to a new
+ * one when the window switches layouts, so the view it leaves gives it up first.
+ */
+internal object SessionViews {
+    private val shown = WeakHashMap<GeckoSession, GeckoView>()
+
+    fun show(view: GeckoView, session: GeckoSession) {
+        if (view.session == session && shown[session] === view) return
+        shown[session]?.takeIf { it !== view && it.session == session }?.releaseSession()
+        if (view.session != null) release(view)
+        view.setSession(session)
+        session.setActive(true)
+        shown[session] = view
+    }
+
+    fun release(view: GeckoView) {
+        val session = view.session ?: return
+        view.releaseSession()
+        if (shown[session] === view) {
+            shown.remove(session)
+            session.setActive(false)
+        }
+    }
+
+    /** The view showing [session] now, or null. */
+    fun viewOf(session: GeckoSession): GeckoView? = shown[session]?.takeIf { it.session == session }
+}
+
+/** Gives the keyboard's focus to [tab]'s page, as after Go in the address field. */
+fun focusPage(tab: Tab) {
+    SessionViews.viewOf(tab.session)?.requestFocus()
+}
+
+/**
+ * Shows [session] in a GeckoView. With [onPull], it sits in a pull-to-refresh layout, which takes
+ * a pull only while the page is scrolled to its very top ([atTop]).
+ *
+ * The view draws into a TextureView, so it is clipped to the page's rounded corners and lies
+ * under whatever floats over the page, like any other view.
  */
 @Composable
-private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier, covered: Boolean = false, onPull: (() -> Unit)? = null) {
+internal fun SessionHost(
+    session: GeckoSession,
+    modifier: Modifier = Modifier,
+    covered: Boolean = false,
+    onPull: (() -> Unit)? = null,
+    atTop: () -> Boolean = { true },
+) {
     val accent = MaterialTheme.colorScheme.primary.toArgb()
+    val background = MaterialTheme.colorScheme.surface.toArgb()
     AndroidView(
         factory = { context ->
-            // The WebView outlives this composition (and moves between layouts), so detach it
-            // from any earlier parent.
-            (webView.parent as? ViewGroup)?.removeView(webView)
+            val view = GeckoView(context).apply {
+                setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
+                coverUntilFirstPaint(background)
+                tag = "page-view"
+            }
             SwipeRefreshLayout(context).apply {
-                addView(webView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                // A page scrolled down scrolls up first. WebView's own scroll position is the page's.
-                setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
-                // With nested scrolling off, the refresh layout decides by that scroll position alone.
-                webView.isNestedScrollingEnabled = false
+                addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                // A page scrolled down scrolls up first.
+                setOnChildScrollUpCallback { _, _ -> !atTop() }
             }
         },
-        // Hidden from a screen reader while covered. Set each time, as the WebView keeps it
-        // when it moves to another layout or is shown again later.
+        // Hidden from a screen reader while covered. Set each time, as the session can move to
+        // another layout or be shown again later.
         update = { layout ->
-            webView.importantForAccessibility =
+            val view = layout.geckoView()
+            SessionViews.show(view, session)
+            view.importantForAccessibility =
                 if (covered) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
             layout.isEnabled = onPull != null && !covered
             layout.setColorSchemeColors(accent)
@@ -194,11 +245,15 @@ private fun WebViewHost(webView: WebView, modifier: Modifier = Modifier, covered
                 layout.isRefreshing = false
             }
         },
+        onRelease = { layout -> SessionViews.release(layout.geckoView()) },
         // Out of the keyboard's focus order while covered. Only moving focus skips it: the page
         // can still be handed focus directly, as the address field does after Go.
         modifier = modifier.fillMaxSize().focusProperties { canFocus = !covered },
     )
 }
+
+/** The page's view in its pull-to-refresh layout, which also holds the refresh spinner. */
+private fun ViewGroup.geckoView(): GeckoView = (0 until childCount).map(::getChildAt).first { it is GeckoView } as GeckoView
 
 @Composable
 private fun CrashedPage(tab: Tab) {

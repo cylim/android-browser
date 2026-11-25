@@ -16,7 +16,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestPages.titled
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -26,7 +25,6 @@ import app.jrny.browser.tab.TabId
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -49,7 +47,6 @@ class PrivateTabsUiTest {
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread {
             tab = Tab(compose.activity, WebProfile.of(ProfileId("test-private-ui")))
             tab.load(titled("one"))

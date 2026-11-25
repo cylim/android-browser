@@ -1,16 +1,12 @@
 package app.jrny.browser
 
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.tab.SavedTab
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -19,17 +15,11 @@ import org.junit.runner.RunWith
  * The real app receiving links from another app (SPEC, "Incoming Links"): a web link opens as a
  * new Tab in the Active Profile and offers a Move; anything else is ignored.
  */
-@SuppressLint("RequiresFeature")
 @RunWith(AndroidJUnit4::class)
 class IncomingLinkTest {
 
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
-
-    @Before
-    fun requireMultiProfile() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
-    }
 
     private fun browser(): BrowserState {
         var browser: BrowserState? = null

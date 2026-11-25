@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -297,9 +298,7 @@ fun TabList(
         if (items.isNotEmpty()) {
             item(key = "pinned-label") {
                 SectionLabel(stringResource(R.string.pinned)) {
-                    IconButton(onClick = { dialog = PinDialog.NewFolder(null) }, modifier = Modifier.testTag("new-folder")) {
-                        Icon(JrnyIcons.NewFolder, stringResource(R.string.new_folder))
-                    }
+                    ListActionButton(JrnyIcons.NewFolder, stringResource(R.string.new_folder), onClick = { dialog = PinDialog.NewFolder(null) }, modifier = Modifier.testTag("new-folder"))
                 }
             }
             items.forEachIndexed { index, entry ->
@@ -402,20 +401,20 @@ private fun TabRow(
             ListRow(height = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT) {
                 if (tab.isPrivate) {
                     // The lock sits where another row's site mark does.
-                    Box(Modifier.padding(start = LIST_TEXT_INSET).size(SITE_ICON_SIZE), contentAlignment = Alignment.Center) {
+                    Box(Modifier.padding(start = LIST_TEXT_INSET).size(listIconSize()), contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Filled.Lock,
                             contentDescription = if (named) stringResource(R.string.private_tab) else null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp).testTag("private-tab-mark"),
+                            modifier = Modifier.size(if (compact) 12.dp else 16.dp).testTag("private-tab-mark"),
                         )
                     }
                 } else {
-                    SiteIcon(tab.url, Modifier.padding(start = LIST_TEXT_INSET))
+                    SiteIcon(tab.url, Modifier.padding(start = LIST_TEXT_INSET), size = listIconSize())
                 }
                 Column(
                     verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.weight(1f).padding(start = LIST_ICON_GAP).padding(vertical = if (compact) 0.dp else 8.dp),
+                    modifier = Modifier.weight(1f).padding(start = listIconGap()).padding(vertical = if (compact) 0.dp else 8.dp),
                 ) {
                     Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (!compact && named && tab.pageTitle != null && tab.displayHost.isNotEmpty()) {
@@ -428,9 +427,7 @@ private fun TabRow(
                         )
                     }
                 }
-                IconButton(onClick = onClose, modifier = Modifier.padding(end = closeButtonInset()).testTag("close-tab")) {
-                    Icon(Icons.Filled.Close, stringResource(R.string.close_tab_named, label))
-                }
+                CloseRowButton(stringResource(R.string.close_tab_named, label), onClose, Modifier.testTag("close-tab"))
             }
         }
         if (onPin != null) {
@@ -516,15 +513,55 @@ private val SWIPE_DISTANCE = 64.dp
 /** Height of a Tab row: its title and, under it, its site. */
 private val ROW_HEIGHT: Dp = 56.dp
 
-/** Height of every row of the Tab list with compact rows (SPEC, "Styling"): one line. */
-val COMPACT_ROW_HEIGHT: Dp = 40.dp
+/**
+ * Height of every row of the Tab list with compact rows (SPEC, "Styling"): one line, its section
+ * labels included.
+ */
+val COMPACT_ROW_HEIGHT: Dp = 32.dp
+
+/** A row's site mark, lock or Folder icon with compact rows. */
+private val COMPACT_ICON_SIZE: Dp = 16.dp
+
+/** Between a compact row's mark and its text. */
+private val COMPACT_ICON_GAP: Dp = 8.dp
+
+/** A compact row's buttons: as tall as the row. */
+private val COMPACT_BUTTON_SIZE: Dp = COMPACT_ROW_HEIGHT
+
+/** The icon in a compact row's button. */
+private val COMPACT_BUTTON_ICON: Dp = 18.dp
+
+/** The size of a row's mark: its site icon, the lock of a Private Tab, a Folder's icon. */
+@Composable
+fun listIconSize(): Dp = if (LocalCompactTabs.current) COMPACT_ICON_SIZE else SITE_ICON_SIZE
+
+/** Between a row's mark and its text. */
+@Composable
+fun listIconGap(): Dp = if (LocalCompactTabs.current) COMPACT_ICON_GAP else LIST_ICON_GAP
 
 /**
- * Where a row's close button ends. With compact rows the button is 40dp, not 48dp, and sits 4dp
- * further in, so its icon stays in the column of the 48dp buttons above and below the list.
+ * A button at the end of a row of the Tab list or of a section label. A 48dp slot that ends
+ * [LIST_ICON_INSET] from the row's end puts its icon's center 28dp in; a compact row's lower
+ * button sits further in by half the difference, so its icon stays in that column, under the
+ * Sidebar's own buttons.
  */
 @Composable
-fun closeButtonInset(): Dp = if (LocalCompactTabs.current) LIST_ICON_INSET + 4.dp else LIST_ICON_INSET
+fun ListActionButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    if (LocalCompactTabs.current) {
+        IconButton(onClick = onClick, modifier = modifier.padding(end = LIST_ICON_INSET + (48.dp - COMPACT_BUTTON_SIZE) / 2).size(COMPACT_BUTTON_SIZE)) {
+            Icon(icon, description, Modifier.size(COMPACT_BUTTON_ICON))
+        }
+    } else {
+        IconButton(onClick = onClick, modifier = modifier.padding(end = LIST_ICON_INSET)) {
+            Icon(icon, description)
+        }
+    }
+}
+
+/** A row's close button, in the column of [ListActionButton]s. */
+@Composable
+fun CloseRowButton(description: String, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    ListActionButton(Icons.Filled.Close, description, onClick, modifier)
 
 /** Whether the Tab list's rows take one line, as the person set it. */
 val LocalCompactTabs = compositionLocalOf { false }

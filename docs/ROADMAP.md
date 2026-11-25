@@ -55,10 +55,17 @@ Added to v1 after Milestone 5:
   3. Page tools: Find in page, Desktop site, text size, dark pages, and pull to refresh.
   4. Tabs and data: Reopen closed Tab, Clear browsing data, and Add to Home screen.
 
+## Before the first release: GeckoView
+
+- Pages render in GeckoView instead of Android System WebView ([ADR 0006](adr/0006-geckoview-as-engine.md)), with page dialogs, error pages and engine-built downloads.
+- Sign in with two Accounts each to Google, Microsoft (personal and work), GitHub and Apple, in two Profiles.
+- Capture and document what the engine itself sends over the network, for the privacy policy.
+
 ## Milestone 6: First public release
 
-- Signed release APK built by GitHub Actions and published on GitHub Releases.
-- Check that the build meets F-Droid's requirements.
+- Signed release APK built by GitHub Actions and published on GitHub Releases, for `arm64-v8a` (`-PgeckoAbi=arm64-v8a`).
+- Check that the build meets F-Droid's requirements. F-Droid usually builds GeckoView from source.
+- A routine for taking each GeckoView security release, about every 4 weeks.
 
 ## 0.2: Content blocking
 
@@ -66,6 +73,9 @@ Added to v1 after Milestone 5:
 - Keep the block lists up to date without contacting any service of ours, in line with [ADR 0002](adr/0002-no-proprietary-dependencies-or-telemetry.md).
 
 ## After 0.2
+
+- Web notifications, through GeckoView, without a Google push service.
+- Extensions, which GeckoView can run. They would see every Profile's Tabs, so the UI must say so.
 
 - Passkeys, after approval as a privileged browser.
 - Custom Tabs service.

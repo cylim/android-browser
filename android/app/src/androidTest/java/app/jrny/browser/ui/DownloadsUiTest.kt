@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.TestServer
+import app.jrny.browser.TestPages.runInPage
 import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadStatus
@@ -26,7 +26,6 @@ import app.jrny.browser.tab.Tab
 import app.jrny.browser.ui.theme.JrnyTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -52,10 +51,10 @@ class DownloadsUiTest {
     private val opened = mutableListOf<Download>()
     private val removed = mutableListOf<Download>()
     private var canOpen = true
+    private var pageFileSaved by mutableStateOf<Pair<String, Boolean>?>(null)
 
     @Before
     fun createTab() {
-        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE))
         compose.runOnUiThread {
             tab = Tab(InstrumentationRegistry.getInstrumentation().targetContext, WebProfile.of(ProfileId("test-downloads")))
             tab.load(server.url("/page"))
@@ -86,13 +85,14 @@ class DownloadsUiTest {
                         },
                         removeDownload = { removed += it },
                     ),
+                    links = LinksUi(pageFileSaved = pageFileSaved, dismissPageFileSaved = { pageFileSaved = null }),
                 )
             }
         }
     }
 
     private fun clickLink(id: String) {
-        compose.runOnUiThread { tab.webView.evaluateJavascript("document.getElementById('$id').click()", null) }
+        runInPage(tab, "document.getElementById('$id').click()")
         compose.waitUntil(10_000) { tab.download != null }
     }
 
@@ -118,6 +118,46 @@ class DownloadsUiTest {
     }
 
     @Test
+    fun aFileThatCantBeSavedAfterAllSaysSoInPlaceOfDownloading() {
+        show(PHONE_PORTRAIT)
+        clickLink("f")
+        compose.onNodeWithTag("confirm-download").performClick()
+        compose.onNodeWithText("Downloading report.pdf").assertExists()
+
+        // The Downloads folder refused the file.
+        compose.runOnUiThread { pageFileSaved = "report.pdf" to false }
+        compose.waitForIdle()
+        compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.page_file_failed, "report.pdf")).assertExists()
+    }
+
+    @Test
+    fun theSameFileFailingTwiceSaysSoTwice() {
+        val failed = InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.page_file_failed, "report.pdf")
+        show(PHONE_PORTRAIT)
+        clickLink("f")
+        compose.onNodeWithTag("confirm-download").performClick()
+        compose.runOnUiThread { pageFileSaved = "report.pdf" to false }
+        compose.onNodeWithText(failed).assertExists()
+
+        // Tried again without closing the notice. The new save clears it, and fails the same way
+        // before the screen draws again.
+        clickLink("f")
+        compose.onNodeWithTag("confirm-download").performClick()
+        compose.runOnUiThread {
+            pageFileSaved = null
+            pageFileSaved = "report.pdf" to false
+        }
+        compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
+        compose.onNodeWithText(failed).assertExists()
+
+        // Closing it leaves nothing behind, not "Downloading".
+        compose.onNodeWithContentDescription(InstrumentationRegistry.getInstrumentation().targetContext.getString(app.jrny.browser.R.string.dismiss)).performClick()
+        compose.onNodeWithTag("page-file-prompt").assertDoesNotExist()
+        compose.onNodeWithText("Downloading report.pdf").assertDoesNotExist()
+    }
+
+    @Test
     fun cancellingStartsNothing() {
         show(TABLET_LANDSCAPE)
         clickLink("f")
@@ -129,9 +169,10 @@ class DownloadsUiTest {
     }
 
     @Test
-    fun aFileMadeByThePageItselfCantBeDownloadedYetAndSaysSo() {
+    fun aFileWithNothingToReadCantBeDownloadedAndSaysSo() {
         var dismissed = 0
-        val made = DownloadRequest("blob:https://example.com/1b2c", "", "made-here.txt", "text/plain", -1)
+        // An offer whose response had no body.
+        val made = DownloadRequest("blob:https://example.com/1b2c", "made-here.txt", "text/plain", -1)
         compose.setContent {
             JrnyTheme { DownloadDialog(made, onDownload = { started += made }, onDismiss = { dismissed++ }) }
         }

@@ -1,21 +1,24 @@
 package app.jrny.browser
 
-import android.annotation.SuppressLint
 import android.app.Application
-import androidx.webkit.ProfileStore
-import androidx.webkit.WebViewFeature
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.Downloader
 import app.jrny.browser.icons.SiteIconStore
 import java.io.File
 import app.jrny.browser.download.SystemDownloader
+import app.jrny.browser.engine.Engine
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.settings.HttpSearchSuggestions
 import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.ui.clearPageFiles
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class JrnyApplication : Application() {
 
@@ -38,25 +41,30 @@ class JrnyApplication : Application() {
     }
 
     /**
-     * Before any activity, and so before any WebView loads a Profile: creates the first Profile on
-     * first launch, and wipes the web data of Profiles deleted since the last cold start. WebView
-     * can only delete a Profile that this process hasn't loaded yet (ADR 0001). The database is
-     * tiny, so blocking here costs a few milliseconds.
+     * Before any activity, in the app's own process: starts the browser engine and creates the
+     * first Profile on first launch. GeckoView's content processes start the Application too, and
+     * do none of this. The database is tiny, so blocking here costs a few milliseconds. The web
+     * data of Profiles deleted since the last cold start is wiped once the engine has started.
      */
-    @SuppressLint("RequiresFeature") // Checked first.
+    private companion object {
+        /** How long a Profile's wipe gets to finish before the Profile is forgotten. A wipe takes well under a second. */
+        const val WIPE_SETTLE_MS = 10_000L
+    }
+
     override fun onCreate() {
         super.onCreate()
+        if (!Engine.isMainProcess(this)) return
         // Photos and videos made for pages' file fields, and images shared or copied, last until the
         // next start (SPEC, "File upload" and "Link and image menu").
         clearPageFiles(this)
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
-        // Whatever Private Tabs left on disk goes before anything loads (SPEC, "Private Tabs").
-        WebProfile.wipePrivateStores()
-        runBlocking {
-            repositories.profiles.ensureFirstProfile(getString(R.string.first_profile_name))
+        Engine.runtime(this)
+        runBlocking { repositories.profiles.ensureFirstProfile(getString(R.string.first_profile_name)) }
+        MainScope().launch {
             ProfileCleanup(repositories.profiles) { id ->
-                // False only when there's no such store on disk, which is fine: nothing to wipe.
-                ProfileStore.getInstance().deleteProfile(WebProfile.of(id).name)
+                suspendCancellableCoroutine { handed -> WebProfile.of(id).clear(this@JrnyApplication) { handed.resume(Unit) } }
+                // GeckoView gives no word when the wipe is done. The Profile is forgotten only
+                // once it has had time to finish; if the app ends sooner, the next start wipes again.
+                delay(WIPE_SETTLE_MS)
             }.run()
         }
     }

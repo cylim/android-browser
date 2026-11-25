@@ -71,16 +71,7 @@
         android:theme="@style/Theme.Jrny">
 
         <!--
-            No telemetry (ADR 0002): Android System WebView can upload usage and diagnostic data
-            to Google for each app that uses it, if the person has agreed to it in the system's
-            settings. This opts the app's WebViews out, whatever the person chose there.
-        -->
-        <meta-data
-            android:name="android.webkit.WebView.MetricsOptOut"
-            android:value="true" />
-
-        <!--
-            configChanges: rotation, resizing and dark mode must not recreate the Tab's WebView.
+            configChanges: rotation, resizing and dark mode must not recreate the window and its pages.
             singleTask: one browser window, so a link from another app opens a Tab in it
             (onNewIntent) instead of starting a second copy of the activity.
         -->

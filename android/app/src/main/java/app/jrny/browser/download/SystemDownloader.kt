@@ -5,32 +5,93 @@ import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.net.toUri
+import java.io.InputStream
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
- * Downloads with Android's own download service. It keeps going when the app is closed, shows
- * its own progress notification, and saves into the device's shared Downloads folder, which
- * needs no storage permission.
+ * Saves files into the device's shared Downloads folder, through MediaStore, which needs no
+ * storage permission for the app's own files.
+ *
+ * A file a page offers comes as GeckoView's response, fetched with the page's Profile, so the
+ * file arrives as the page would get it. Okapi writes it out in the background ([receive]) while
+ * the file is marked pending, so no other app sees half of it. The writing belongs to the app's
+ * process: if Android ends the process meanwhile, the file is left unfinished and is reported as
+ * failed.
+ *
+ * Downloads Android's own download service made for earlier versions are still shown, opened
+ * and removed through it.
  */
 class SystemDownloader(private val context: Context) : Downloader {
 
     private val manager: DownloadManager get() = context.getSystemService(DownloadManager::class.java)
 
-    override fun start(request: DownloadRequest, cookies: String?): Long {
-        val download = DownloadManager.Request(request.url.toUri())
-            .setTitle(request.fileName)
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, request.fileName)
-        if (request.mimeType.isNotBlank()) download.setMimeType(request.mimeType)
-        if (request.userAgent.isNotBlank()) download.addRequestHeader("User-Agent", request.userAgent)
-        if (!request.referrer.isNullOrBlank()) download.addRequestHeader("Referer", request.referrer)
-        // The Profile's cookies for this address, so a file behind that Profile's sign-in downloads
-        // as the page would get it. The address is the one the redirects end at (resolve): the
-        // download service would pass this header on to wherever a redirect leads.
-        if (!cookies.isNullOrBlank()) download.addRequestHeader("Cookie", cookies)
-        return manager.enqueue(download)
+    /** How far each file being written has got. */
+    private class Writing(val size: Long) {
+        @Volatile var written = 0L
+        @Volatile var cancelled = false
+    }
+
+    private val writing = ConcurrentHashMap<String, Writing>()
+    private val failed = ConcurrentHashMap.newKeySet<String>()
+    private val writer = Executors.newCachedThreadPool()
+
+    override fun receive(fileName: String, mimeType: String, size: Long, body: InputStream): String? {
+        val resolver = context.contentResolver
+        val file = newPendingFile(fileName, mimeType)
+        if (file == null) {
+            runCatching { body.close() }
+            return null
+        }
+        val address = file.toString()
+        val progress = Writing(size)
+        writing[address] = progress
+        writer.execute {
+            try {
+                // The response is closed however this ends, even if the file can't be opened.
+                val done = try {
+                    body.use { input ->
+                        resolver.openOutputStream(file)?.use { out ->
+                            val buffer = ByteArray(BUFFER)
+                            while (!progress.cancelled) {
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                out.write(buffer, 0, read)
+                                progress.written += read
+                            }
+                        } != null
+                    } && !progress.cancelled && runCatching { finish(file) }.isSuccess
+                } catch (_: Exception) {
+                    false
+                }
+                if (!done) {
+                    runCatching { resolver.delete(file, null, null) }
+                    if (!progress.cancelled) failed += address
+                }
+            } finally {
+                writing.remove(address)
+            }
+        }
+        return address
+    }
+
+    override fun cancelSaved(fileUri: String) {
+        val progress = writing[fileUri]
+        if (progress != null) {
+            progress.cancelled = true
+            return
+        }
+        // Nothing writes it any more: a file the app left unfinished when it ended. Finished files stay.
+        val columns = arrayOf(MediaStore.Downloads.IS_PENDING)
+        val unfinished = runCatching {
+            context.contentResolver.query(fileUri.toUri(), columns, null, null, null)?.use { it.moveToFirst() && it.getInt(0) == 1 }
+        }.getOrNull() == true
+        if (unfinished) runCatching { context.contentResolver.delete(fileUri.toUri(), null, null) }
+        failed -= fileUri
     }
 
     override fun statuses(ids: List<Long>): Map<Long, DownloadStatus> {
@@ -54,19 +115,12 @@ class SystemDownloader(private val context: Context) : Downloader {
         return ids.associateWith { found[it] ?: DownloadStatus.Gone }
     }
 
-    /** Saves into the shared Downloads folder through MediaStore, which needs no permission for the app's own files. */
     override fun save(fileName: String, mimeType: String, file: java.io.File): String? {
         val resolver = context.contentResolver
-        val details = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            if (mimeType.isNotBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
-        val saved = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) ?: return null
+        val saved = newPendingFile(fileName, mimeType) ?: return null
         return try {
             resolver.openOutputStream(saved)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: error("No stream")
-            resolver.update(saved, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+            finish(saved)
             saved.toString()
         } catch (_: Exception) {
             resolver.delete(saved, null, null)
@@ -74,10 +128,39 @@ class SystemDownloader(private val context: Context) : Downloader {
         }
     }
 
-    override fun savedStatus(fileUri: String): DownloadStatus =
-        context.contentResolver.query(fileUri.toUri(), arrayOf(MediaStore.Downloads.SIZE), null, null, null)?.use { rows ->
-            if (rows.moveToFirst()) DownloadStatus.Done(rows.getLong(0)) else null
-        } ?: DownloadStatus.Gone
+    /** A new file in Downloads, marked pending so no other app sees it until [finish], or null. */
+    private fun newPendingFile(fileName: String, mimeType: String): Uri? {
+        val details = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            if (mimeType.isNotBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        return runCatching { context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, details) }.getOrNull()
+    }
+
+    /** Shows [file], now written in full, to other apps. */
+    private fun finish(file: Uri) {
+        context.contentResolver.update(file, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+    }
+
+    override fun savedStatus(fileUri: String): DownloadStatus {
+        writing[fileUri]?.let { progress ->
+            return DownloadStatus.Running(if (progress.size > 0) (progress.written.toFloat() / progress.size).coerceIn(0f, 1f) else null)
+        }
+        if (fileUri in failed) return DownloadStatus.Failed
+        val columns = arrayOf(MediaStore.Downloads.SIZE, MediaStore.Downloads.IS_PENDING)
+        return runCatching {
+            context.contentResolver.query(fileUri.toUri(), columns, null, null, null)?.use { rows ->
+                when {
+                    !rows.moveToFirst() -> null
+                    // Left unfinished when the app's process ended.
+                    rows.getInt(1) == 1 -> DownloadStatus.Failed
+                    else -> DownloadStatus.Done(rows.getLong(0))
+                }
+            }
+        }.getOrNull() ?: DownloadStatus.Gone
+    }
 
     override fun open(download: Download): Boolean {
         val saved = download.fileUri
@@ -97,6 +180,7 @@ class SystemDownloader(private val context: Context) : Downloader {
         manager.remove(downloadId)
     }
 
-    override fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String =
-        DownloadRedirects.resolve(url, userAgent, cookiesFor)
+    private companion object {
+        const val BUFFER = 64 * 1024
+    }
 }

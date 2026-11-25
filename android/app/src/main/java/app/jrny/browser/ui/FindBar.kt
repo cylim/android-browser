@@ -43,7 +43,7 @@ import app.jrny.browser.tab.Tab
  */
 @Composable
 fun FindBar(tab: Tab, shape: Shape, modifier: Modifier = Modifier) {
-    val state = tab.find ?: return
+    val state = tab.findInPage.state ?: return
     var text by remember { mutableStateOf(state.query) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -54,13 +54,13 @@ fun FindBar(tab: Tab, shape: Shape, modifier: Modifier = Modifier) {
                 value = text,
                 onValueChange = {
                     text = it
-                    tab.find(it)
+                    tab.findInPage.find(it)
                 },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { tab.findNext(forward = true) }),
+                keyboardActions = KeyboardActions(onSearch = { tab.findInPage.next(forward = true) }),
                 decorationBox = { field ->
                     if (text.isEmpty()) {
                         Text(hint, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -77,13 +77,13 @@ fun FindBar(tab: Tab, shape: Shape, modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(horizontal = 8.dp).testTag("find-count"),
                 )
             }
-            IconButton(onClick = { tab.findNext(forward = false) }, enabled = state.total > 0, modifier = Modifier.testTag("find-previous")) {
+            IconButton(onClick = { tab.findInPage.next(forward = false) }, enabled = state.total > 0, modifier = Modifier.testTag("find-previous")) {
                 Icon(Icons.Filled.KeyboardArrowUp, stringResource(R.string.find_previous))
             }
-            IconButton(onClick = { tab.findNext(forward = true) }, enabled = state.total > 0, modifier = Modifier.testTag("find-next")) {
+            IconButton(onClick = { tab.findInPage.next(forward = true) }, enabled = state.total > 0, modifier = Modifier.testTag("find-next")) {
                 Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.find_next))
             }
-            IconButton(onClick = tab::closeFind, modifier = Modifier.testTag("find-close")) {
+            IconButton(onClick = tab.findInPage::close, modifier = Modifier.testTag("find-close")) {
                 Icon(Icons.Filled.Close, stringResource(R.string.close_find))
             }
         }

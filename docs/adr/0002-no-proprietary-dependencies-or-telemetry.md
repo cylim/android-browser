@@ -10,4 +10,5 @@ Okapi, a browser by JRNY, ships no analytics, crash-reporting SDKs, Google Play 
 
 - Release signing keys exist only in encrypted GitHub Actions secrets and on the maintainer's machine. They are never in the repository.
 - Any future feature that needs a hosted service (for example, sync) needs a new ADR.
-- Safe Browsing is not affected. It is built into the system WebView, so the app needs no key of its own.
+- Safe Browsing is not affected. It is built into GeckoView, with Mozilla's own key for Google's lists, so the app needs no key of its own ([ADR 0006](0006-geckoview-as-engine.md)).
+- GeckoView declares Google's proprietary `play-services-fido` library for passkeys. The build leaves it out.

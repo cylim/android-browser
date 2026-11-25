@@ -34,7 +34,7 @@ Store text always pairs Okapi with JRNY. Play search mixes results for "Okapi br
 
 The short and full descriptions open with the name and the maker. The full description's first sentence, "Okapi, a browser by JRNY, signs you in to the same site with two different accounts at once", says what the app is, who makes it and the separate-accounts point. Then it lists what Okapi does that a plain WebView wrapper doesn't: Move, Open in Profile, Site Rules for Incoming Links, Pinned Tabs and Folders, Private Tabs. This answers the Spam policy's rule against apps that repeat what other apps already do. That first sentence also states the app's purpose plainly, a browser, as the Misrepresentation policy asks.
 
-The description says "Android System WebView" only as a fact about the engine. Don't add wording that suggests a link with Google or Chromium.
+The description names GeckoView or Gecko only as a fact about the engine. Don't add wording that suggests a link with Mozilla or Firefox.
 
 ### Graphics
 

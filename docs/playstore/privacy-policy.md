@@ -1,6 +1,6 @@
 # Okapi privacy policy
 
-Effective date: 18 November 2026
+Effective date: 25 November 2026
 
 <!--
 This is the canonical text. website/public/privacy.html publishes the same policy. Change both
@@ -15,7 +15,7 @@ TODO(owner): Before you enter this policy's address in Play Console:
 
 This policy covers Okapi by JRNY, the Android app with the application ID `app.jrny.browser`. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.
 
-In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, and to Google through Android System WebView.
+In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, and to Google's Safe Browsing service through the app's web engine.
 
 ## Who makes Okapi
 
@@ -36,7 +36,7 @@ Each Profile keeps its own:
 - history, up to its latest 5,000 visits
 - bookmarks, which are its Pinned Tabs, and its Folders
 - list of downloads
-- photos and videos you take with "Take photo" or "Record video" for a page's file field, kept in the app's cache until the app next starts, so the page can read them. This is the same in a Private Tab.
+- photos and videos you take with "Take photo" or "Record video" for a page's file field, and a copy of each file you choose for one, kept in the app's cache until the app next starts, so the page can read them. This is the same in a Private Tab.
 - site icons: the icon of each site the Profile has shown, as the site sent it while its page loaded
 - name, color and avatar
 
@@ -50,15 +50,7 @@ None of this is sent to us or to anyone else.
 
 ### Sites you open
 
-Okapi shows pages with Android System WebView, the web engine built into Android. When you open a page, WebView requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details that WebView sends. WebView also sends the app's ID, `app.jrny.browser`, in an `X-Requested-With` header with every request. Okapi doesn't turn this header off.
-
-<!--
-TODO(owner): androidx.webkit 1.18.0, which the app uses, has WebSettingsCompat.setRequestedWithHeaderOriginAllowList
-(feature REQUESTED_WITH_HEADER_ALLOW_LIST). ADR 0001 and the engine research found the header can't be removed,
-but nobody has tested this API in Okapi. Test it on the installed WebView. If an empty allow-list stops the
-header, either use it and rewrite this paragraph, or keep this wording. Change privacy.html, ADR 0001, CHANGELOG.md
-and the listing's known limits to match.
--->
+Okapi shows pages with GeckoView, Mozilla's web engine, which is part of the app. When you open a page, the engine requests it from that site's server, as any browser does. The site receives your IP address, the address you asked for, the Profile's cookies for that site and the browser details the engine sends, which name Firefox for Android. A site embedded in another site gets its own cookies there, so it can't use its cookies to follow you from site to site. The exception is an embedded site that asks for its cookies, as an embedded sign-in does: Okapi gives it them, so it can recognise you on the site that embeds it. Clearing the Profile's cookies and site data takes that access back. None of this stops other ways of recognising a device, such as fingerprinting.
 
 A site can store cookies and other data in the Profile you opened it in. What a site does with your data is up to that site and its own privacy policy.
 
@@ -85,23 +77,25 @@ With Search suggestions off, the address field still suggests pages from the Pro
 
 ### Google Safe Browsing
 
-Android System WebView checks the addresses of pages with Google Safe Browsing, and warns you before a page known to be dangerous opens. Google runs the service. WebView makes the checks, not Okapi, and the app never sees them. Safe Browsing is on by default. To turn it off, turn off Safe Browsing in Settings. The change also applies to pages that are already open.
+The engine downloads Google Safe Browsing's lists of dangerous sites and checks the addresses of pages against them on your device, and warns you before a page known to be dangerous opens. When an address matches an entry, the engine sends Google a short part of a hash of the address to confirm it, not the address itself. Google runs the service; the engine uses Mozilla's access to it. Safe Browsing is on by default. To turn it off, turn off Safe Browsing in Settings. The change also applies to pages that are already open.
 
-### Android's download service
+### The engine's own updates
 
-A page can only offer a file. Nothing downloads until you agree. Then:
+<!--
+TODO(owner): capture what GeckoView requests by itself on a fresh install with no page open (Mozilla's
+Remote Settings for certificate revocation and blocklists, Safe Browsing list updates, anything else), and
+describe each here: who receives it and what it contains. ADR 0006 and ROADMAP.md track this.
+-->
 
-1. The app asks the file's address whether it redirects somewhere else, one step at a time, for up to 5 steps. Each address gets only the Profile's cookies for that address.
-2. The app gives the last address to Android's download service, with the Profile's cookies for that address, the browser's user agent and the address of the page you came from.
-3. The download service, which is part of Android, fetches the file from that site and saves it to your device's Downloads folder.
+GeckoView keeps some security data current by itself, such as lists of revoked certificates. Okapi sets up no telemetry and no crash reporting in the engine, so the engine sends Mozilla no usage statistics or crash reports.
 
-The site that serves the file receives what is listed under "Sites you open". Downloads is a shared folder, so other apps that can read your files can read the files you download. When you open a finished file, Android gives it to the app that you choose.
+### Downloads
 
-### Android System WebView's own reports
+A page can only offer a file. Nothing is saved until you agree. The engine asks the site for the file as the page would, with the Profile's cookies for that site, and the site receives what is listed under "Sites you open". Once you agree, Okapi saves the file to your device's Downloads folder. Downloads is a shared folder, so other apps that can read your files can read the files you download. When you open a finished file, Android gives it to the app that you choose.
 
-Google makes Android System WebView and updates it through Google Play, separately from Okapi. If your device shares usage and diagnostics data with Google, WebView can send Google crash reports and usage statistics, such as system information, feature use, performance and memory use. Google's WebView documentation says that these reports don't contain the addresses of the pages you visit. Google handles them under its own privacy policy.
+### Protected video (DRM)
 
-Okapi tells WebView not to send usage statistics, whatever your device's setting is. Crash reports still follow your device's setting. To stop them, turn off usage and diagnostics sharing with Google in your device's settings. Where that setting is depends on the device.
+Some streaming sites protect their videos against copying (DRM). The engine plays them through Android's own DRM system (Widevine on most devices), without asking first. To play such a video, your device's DRM system asks the site's licence server for a key. The request carries information about your device's DRM system, which the site and its DRM provider can use to tell devices apart. The first time a video needs it, Android may also ask Google to set up the DRM system on your device. Pages without protected video send none of this.
 
 ## Private Tabs
 
@@ -114,7 +108,7 @@ Each Profile can open Private Tabs. Private Tabs:
 - never send text to the search engine for suggestions
 - don't keep site icons
 
-When the last Private Tab of a Profile closes, the app clears its cookies and site storage. The rest of the temporary store is deleted the next time the app starts fresh. A file you download in a Private Tab is saved to your Downloads folder, but isn't added to the Profile's list of downloads.
+Their cookies and site storage are kept in memory, and are cleared when the last Private Tab of the Profile closes. Site databases (IndexedDB) are the one exception: the engine writes them to disk encrypted, with a key it holds only in memory, and deletes them once no Private Tab is open. If Android ends the app first, the key goes with it, so what is left can't be read. A file you download in a Private Tab is saved to your Downloads folder, but isn't added to the Profile's list of downloads.
 
 Private Tabs don't hide you from the sites you open, from your network or from Safe Browsing. Sites still receive what is listed under "Sites you open".
 
@@ -141,7 +135,7 @@ We hold no data about you, so there is nothing for us to give you or delete. You
 
 - There is no JRNY account. You don't sign in to the app itself.
 - It shows no ads of its own.
-- It has no analytics and no crash reporting of its own, and it tells WebView not to send usage statistics.
+- It has no analytics and no crash reporting, and sets up neither in its engine.
 - It contains no Google Play Services or Firebase libraries.
 - It sends none of your data to us, and we don't sell data.
 - It asks Android for internet access. It asks for the camera, the microphone or your location only when a site you allowed wants them, and passes them to that site alone. It also asks for the camera when you choose "Take photo" or "Record video" for a page's file field, because Android lets it start the camera app only then. Okapi never uses or keeps them itself, and doesn't ask for your contacts.

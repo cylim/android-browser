@@ -1,56 +1,58 @@
 package app.jrny.browser
 
 import app.jrny.browser.download.Download
-import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadStatus
 import app.jrny.browser.download.Downloader
 
-/** A [Downloader] that fetches nothing and records what it was asked. */
+/** A [Downloader] that keeps files in memory and records what it was asked. */
 class FakeDownloader : Downloader {
-    class Started(val id: Long, val request: DownloadRequest, val cookies: String?)
+    /** A file a page offered, as it arrived: its name, type, the size the site gave, and its bytes. */
+    class Received(val address: String, val fileName: String, val mimeType: String, val size: Long, val bytes: ByteArray)
 
-    val started = java.util.Collections.synchronizedList(mutableListOf<Started>())
-    val cancelled = java.util.Collections.synchronizedList(mutableListOf<Long>())
+    val received = java.util.Collections.synchronizedList(mutableListOf<Received>())
+    val cancelled = java.util.Collections.synchronizedList(mutableListOf<String>())
     val opened = java.util.Collections.synchronizedList(mutableListOf<Download>())
-    val status = java.util.concurrent.ConcurrentHashMap<Long, DownloadStatus>()
+
+    /** Where a file stands, when a test wants other than [DownloadStatus.Done]. */
+    val status = java.util.concurrent.ConcurrentHashMap<String, DownloadStatus>()
     var canOpen = true
 
-    /** Where an address "redirects" to. Addresses not listed here don't redirect. */
-    val redirects = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val next = java.util.concurrent.atomic.AtomicLong(1)
 
-    override fun resolve(url: String, userAgent: String, cookiesFor: (String) -> String?): String = redirects[url] ?: url
-
-    // Counted apart from the list: two downloads started at the same moment must not share an id.
-    private val nextId = java.util.concurrent.atomic.AtomicLong(100)
-
-    override fun start(request: DownloadRequest, cookies: String?): Long {
-        val id = nextId.getAndIncrement()
-        started += Started(id, request, cookies)
-        status[id] = DownloadStatus.Running(null)
-        return id
+    override fun receive(fileName: String, mimeType: String, size: Long, body: java.io.InputStream): String {
+        val address = "content://test/received/${next.getAndIncrement()}/$fileName"
+        val bytes = body.use { it.readBytes() }
+        received += Received(address, fileName, mimeType, size, bytes)
+        return address
     }
 
-    override fun statuses(ids: List<Long>): Map<Long, DownloadStatus> = ids.associateWith { status[it] ?: DownloadStatus.Gone }
+    /** Downloads of Android's download service: none here. */
+    override fun statuses(ids: List<Long>): Map<Long, DownloadStatus> = ids.associateWith { DownloadStatus.Gone }
+
+    override fun cancel(downloadId: Long) {}
 
     override fun open(download: Download): Boolean {
         opened += download
         return canOpen
     }
 
-    /** Files saved as a page's own, by their address. */
+    /** Files saved whole ("Save image"), by their address. */
     val saved = java.util.concurrent.ConcurrentHashMap<String, Pair<String, ByteArray>>()
 
     override fun save(fileName: String, mimeType: String, file: java.io.File): String {
-        val address = "content://test/${saved.size + 1}/$fileName"
+        val address = "content://test/saved/${next.getAndIncrement()}/$fileName"
         saved[address] = mimeType to file.readBytes()
         return address
     }
 
-    override fun savedStatus(fileUri: String): DownloadStatus =
-        saved[fileUri]?.let { DownloadStatus.Done(it.second.size.toLong()) } ?: DownloadStatus.Gone
+    override fun savedStatus(fileUri: String): DownloadStatus {
+        status[fileUri]?.let { return it }
+        saved[fileUri]?.let { return DownloadStatus.Done(it.second.size.toLong()) }
+        return received.firstOrNull { it.address == fileUri }?.let { DownloadStatus.Done(it.bytes.size.toLong()) } ?: DownloadStatus.Gone
+    }
 
-    override fun cancel(downloadId: Long) {
-        cancelled += downloadId
-        status.remove(downloadId)
+    override fun cancelSaved(fileUri: String) {
+        cancelled += fileUri
+        status.remove(fileUri)
     }
 }

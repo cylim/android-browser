@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    A browser has to load the http:// pages people ask for, such as a router, a NAS or an intranet
-    site. Android blocks cleartext traffic by default, and WebView follows that policy. Typed
-    addresses still default to https:// (AddressInput), and certificates are checked as usual.
+    Okapi's own connections, which are search suggestions only, all over https://. Pages don't go
+    through it: GeckoView has its own network stack, which loads http:// pages people ask for (a
+    router, a NAS, an intranet site) and checks certificates against Mozilla's list (ADR 0006).
+    Android still lets http:// to the device itself through, which tests use.
 -->
-<network-security-config xmlns:tools="http://schemas.android.com/tools">
-    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

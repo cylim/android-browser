@@ -9,7 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The cold-start wipe of deleted Profiles, with a fake for WebView's ProfileStore. */
+/** The cold-start wipe of deleted Profiles, with a fake for GeckoView's wipe. */
 @RunWith(AndroidJUnit4::class)
 class ProfileCleanupTest {
 

@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.jrny.browser.BrowserState
@@ -128,15 +130,7 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         deleteVisit = browser::deleteVisit,
         clearHistory = { browser.clearHistory(profile) },
         downloads = downloads,
-        startDownload = {
-            val shown = current.selected
-            when {
-                // A file the page made itself is saved by Okapi, from the page.
-                it.fromPage -> browser.savePageFile(shown, browser.tabFor(shown), it)
-                shown.isPrivate -> browser.startPrivateDownload(shown, it)
-                else -> browser.startDownload(profile, it)
-            }
-        },
+        startDownload = { browser.saveDownload(current.selected, browser.tabFor(current.selected), it) },
         downloadStatuses = browser::downloadStatuses,
         openDownload = browser::openDownload,
         removeDownload = browser::removeDownload,
@@ -155,10 +149,11 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         openInNewTab = { browser.openInNewTab(current.selected, it) },
         openInPrivateTab = { browser.openInPrivateTab(profile, it) },
         openInProfile = browser::openLinkInProfile,
-        fetchImage = { browser.fetchImage(current.selected, browser.tabFor(current.selected), it) },
+        fetchImage = { browser.fetchImage(browser.tabFor(current.selected), it) },
         openedBehind = browser.openedBehind?.takeIf { it.profileId == profile.id },
         dismissOpenedBehind = browser::dismissOpenedBehind,
-        pageFileSaved = browser.pageFileSaved,
+        // Only in the Tab the file came from.
+        pageFileSaved = browser.pageFileSaved?.takeIf { it.tab == current.selected.id }?.let { it.fileName to it.saved },
         dismissPageFileSaved = browser::dismissPageFileSaved,
         setDesktopSite = { on -> browser.setDesktopSite(current.selected, browser.tabFor(current.selected), on) },
         addToHomeScreen = if (current.selected.isPrivate || !HomeShortcuts.supported(LocalContext.current)) {
@@ -264,7 +259,7 @@ fun BrowserWindow(
         if (tab.popup != null) tab.closePopup() else tab.goBack()
     }
     // Find in page closes before anything else on the page.
-    BackHandler(enabled = tab.find != null) { tab.closeFind() }
+    BackHandler(enabled = tab.findInPage.state != null) { tab.findInPage.close() }
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
     // The Profile picker for Move or Open in Profile, opened from the page menu or the Incoming
     // Link prompt. It belongs to the Tab it was opened for: if another Tab is shown meanwhile
@@ -316,7 +311,7 @@ fun BrowserWindow(
             suggestions = emptyList()
             // As after Go: the page takes the focus, and the keyboard closes.
             focusManager.clearFocus(force = true)
-            tab.webView.requestFocus()
+            focusPage(tab)
         }
     }
     // Leaving the Start Page gives up an address being typed, and the keyboard closes.
@@ -364,13 +359,13 @@ fun BrowserWindow(
                         onSetDefaultBrowser = onSetDefaultBrowser,
                         onFind = {
                             draft.value = null
-                            tab.openFind()
+                            tab.findInPage.open()
                         },
                         onDesktopSite = links.setDesktopSite,
                         onAddToHome = links.addToHomeScreen,
                     )
                 },
-                findBar = if (tab.find != null) {
+                findBar = if (tab.findInPage.state != null) {
                     { modifier, shape -> FindBar(tab, shape, modifier) }
                 } else {
                     null
@@ -378,10 +373,13 @@ fun BrowserWindow(
                 pagePrompt = {
                     val started = downloading
                     val savedFile = links.pageFileSaved
+                    // A file that couldn't be saved after all says so, in place of "Downloading". Read
+                    // from the notice as it is, so the same file failing twice is told twice.
+                    val failed = savedFile != null && !savedFile.second && savedFile.first == started
                     val behind = links.openedBehind
                     val handoff = tab.handoff
                     val closed = links.justClosed
-                    if (started != null) {
+                    if (started != null && !failed) {
                         DownloadStartedPrompt(
                             started,
                             onShow = {
@@ -399,7 +397,10 @@ fun BrowserWindow(
                                 panel = Panel.Downloads
                                 links.dismissPageFileSaved()
                             }),
-                            onDismiss = links.dismissPageFileSaved,
+                            onDismiss = {
+                                links.dismissPageFileSaved()
+                                if (failed) downloading = null
+                            },
                         )
                     } else if (handoff != null) {
                         HandoffPrompt(
@@ -465,7 +466,7 @@ fun BrowserWindow(
                     null
                 },
                 // A Tab without a web page shows the Start Page in the page's place. A dead
-                // renderer's message and a popup come first, though neither is likely there.
+                // dead page's message and a popup come first, though neither is likely there.
                 startPage = if (StartPage.shows(tab.url) && !tab.crashed && tab.popup == null) {
                     { padding, insets ->
                         StartPage(
@@ -556,6 +557,8 @@ fun BrowserWindow(
 
     // What the page asks for: permissions, files and a sign-in.
     PageAsks(tab, profiles.active.name, private, onRemember = siteSettings.rememberPermission)
+    // What its scripts and form fields ask: alerts, questions, lists, dates and colors.
+    PagePrompts(tab)
 
     // A page can only offer a file. It downloads once the person agrees.
     tab.download?.let { request ->
@@ -563,16 +566,20 @@ fun BrowserWindow(
             request,
             onDownload = {
                 library.startDownload(request)
-                // A Private Tab's download isn't on the list, so there is nothing to show there.
-                // A file the page made says once it is saved.
-                if (!private && request.fromWeb) downloading = request.fileName
-                // The page keeps its copy of a file it made until Okapi has read it.
-                tab.dismissDownload(kept = request.fromPage)
+                // A file saved in the background is named over the page, with a way to the list.
+                // A Private Tab's files aren't on the list, and a file fetched from the page is
+                // saved first: both say so once saved instead (BrowserState.saveDownload).
+                if (!private && request.savedInBackground) downloading = request.fileName
+                // Its response is now Okapi's to read.
+                tab.dismissDownload(kept = true)
             },
             onDismiss = tab::dismissDownload,
         )
     }
 
+    // Holding a link or an image is felt, as the menu opens.
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(tab.pressed) { if (tab.pressed != null) haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
     tab.pressed?.let { item ->
         LinkMenu(
             item,

@@ -1,72 +1,68 @@
 package app.jrny.browser.tab
 
-import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.os.Message
-import android.view.HapticFeedbackConstants
-import android.view.View
-import android.view.ContextThemeWrapper
-import android.view.ViewGroup
-import android.webkit.WebSettings
-import android.webkit.ConsoleMessage
-import android.webkit.GeolocationPermissions
-import android.webkit.HttpAuthHandler
-import android.webkit.PermissionRequest
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.webkit.UserAgentMetadata
-import androidx.webkit.WebSettingsCompat
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
-import app.jrny.browser.R
+import androidx.core.net.toUri
 import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
-import app.jrny.browser.download.PageFiles
+import app.jrny.browser.download.DownloadSource
+import app.jrny.browser.engine.Engine
+import app.jrny.browser.engine.PageBridge
+import app.jrny.browser.engine.PageFile
 import app.jrny.browser.handoff.AppLink
 import app.jrny.browser.handoff.HandoffRules
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.site.SiteOrigin
 import app.jrny.browser.site.SiteSetting
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSession.ContentDelegate
+import org.mozilla.geckoview.GeckoSession.NavigationDelegate
+import org.mozilla.geckoview.GeckoSession.PermissionDelegate
+import org.mozilla.geckoview.GeckoSession.ProgressDelegate
+import org.mozilla.geckoview.GeckoSession.PromptDelegate
+import org.mozilla.geckoview.GeckoSession.PromptDelegate.PromptResponse
+import org.mozilla.geckoview.GeckoSession.ScrollDelegate
+import org.mozilla.geckoview.GeckoSessionSettings
+import org.mozilla.geckoview.PanZoomController
+import org.mozilla.geckoview.ScreenLength
+import org.mozilla.geckoview.WebRequestError
+import org.mozilla.geckoview.WebResponse
 
 /**
- * A single open page, owned by exactly one Profile. It owns a WebView bound to the Profile's
- * [WebProfile], and exposes the page's state as Compose state.
+ * A single open page, owned by exactly one Profile. It owns a GeckoSession in the Profile's
+ * session context ([WebProfile]), and exposes the page's state as Compose state.
  *
- * A WebView's profile can't change after it is first used, so a Tab never changes Profile.
- * Moving a page to another Profile creates a new Tab (ADR 0003).
+ * A session's context can't change once it is open, so a Tab never changes Profile. Moving a
+ * page to another Profile creates a new Tab (ADR 0003).
  *
- * Create, use and destroy a Tab on the main thread, and only when `WebViewFeature.MULTI_PROFILE`
- * is supported (MainActivity checks). [onPageChanged] runs whenever [url] or [title] changes, even
- * while nothing is drawn, so the Tab can be saved. [onVisited] runs for each page the person
- * goes to, for the history: not for a reload, Back or Forward, and not for a saved page coming
- * back. [onPageSeen] follows for the same page, once it has a title and again when it has
- * finished loading, with the title it has then (none, for a page that never names itself). A page
- * that only passes the person on to another one, a redirect's stop, is never reported as seen.
+ * Create, use and destroy a Tab on the main thread. [onPageChanged] runs whenever [url] or
+ * [title] changes, even while nothing is drawn, so the Tab can be saved. [onVisited] runs for
+ * each page the person goes to, for the history: not for a reload, Back or Forward, and not for a
+ * saved page coming back. [onPageSeen] follows for the same page, once it has a title and again
+ * when it has finished loading, with the title it has then (none, for a page that never names
+ * itself). A page that only passes the person on to another one, a redirect's stop, is never
+ * reported as seen.
  */
-@SuppressLint("RequiresFeature")
 class Tab(
     private val context: Context,
     val profile: WebProfile,
     private val onPageChanged: (Tab) -> Unit = {},
     private val onVisited: (url: String) -> Unit = {},
     private val onPageSeen: (url: String, title: String) -> Unit = { _, _ -> },
-    safeBrowsing: Boolean = true,
     /** The page at [url] has shown its site's icon. */
     private val onIcon: (url: String, icon: Bitmap) -> Unit = { _, _ -> },
     /**
@@ -81,28 +77,21 @@ class Tab(
     private val onHandoff: (Tab, AppLink, tapped: Boolean) -> Unit = { tab, link, _ -> tab.offerHandoff(link) },
     /** Whether the Tab's Profile asks [SiteOrigin] for its desktop version (SPEC, "Desktop site"). */
     private val desktopFor: (SiteOrigin) -> Boolean = { false },
-    /** How large page text is, in percent (SPEC, "Text size"). */
-    textZoom: Int = 100,
     /** Whether pages are shown dark, darkened when they have no dark theme of their own (SPEC, "Dark pages"). */
     darkPages: Boolean = false,
 ) {
-    /** How large page text is, in percent. It reaches pages that are already open. */
-    var textZoom: Int = textZoom
-        set(value) {
-            field = value
-            webView.settings.textZoom = value
-            popup?.settings?.textZoom = value
-        }
+    private val runtime = Engine.runtime(context)
+    private val main = Handler(Looper.getMainLooper())
 
-    /**
-     * Whether pages are shown dark. WebView takes this from the theme of the context it was made
-     * with, so a change gives the Tab a new WebView, which loads the page again.
-     */
+    /** Work for the Tab's page that waits on it, such as scrolling a restored page back. Ends with the Tab. */
+    private val scope = MainScope()
+
+    /** Whether pages are shown dark. It reaches the page that is open at once. */
     var darkPages: Boolean = darkPages
         set(value) {
-            if (field == value) return
             field = value
-            rebuildWebView()
+            bridge.dark = value
+            popupBridge?.dark = value
         }
 
     /** The Desktop site choices a Private Tab made: it keeps them only here. A normal Tab follows its Profile's. */
@@ -124,91 +113,62 @@ class Tab(
 
     /**
      * The site's choice may have changed (it was set, reset, or has just been read at start): the
-     * page loads again with the agent its site wants now, if that isn't the one it was loaded with.
+     * page loads again as its site wants it now, if that isn't how it was loaded.
      */
     fun desktopChoicesChanged() {
         val shown = url ?: return
         val desktop = wantsDesktop(SiteOrigin.of(shown))
-        if (desktop == desktopSite && UserAgents.isDesktop(webView.settings.userAgentString) == desktop) return
-        applyUserAgent(webView, desktop)
-        if (!crashed) webView.reload()
+        if (desktop == desktopSite && isDesktop(session) == desktop) return
+        applyMode(session, desktop)
+        if (!crashed && WebAddress.isWebAddress(shown)) session.reload()
     }
 
     private fun wantsDesktop(origin: SiteOrigin?): Boolean = origin != null && (desktopHere[origin] ?: desktopFor(origin))
 
-    /** Sends the desktop user agent, or WebView's own, from the next request on. */
-    private fun applyUserAgent(view: WebView, desktop: Boolean) {
-        if (view == webView) desktopSite = desktop
-        val settings = view.settings
-        if (UserAgents.isDesktop(settings.userAgentString) == desktop) return
-        settings.userAgentString = if (desktop) UserAgents.desktop(WebSettings.getDefaultUserAgent(context)) else null
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
-            val metadata = WebSettingsCompat.getUserAgentMetadata(settings)
-            WebSettingsCompat.setUserAgentMetadata(
-                settings,
-                UserAgentMetadata.Builder(metadata).setMobile(!desktop).setPlatform(if (desktop) "Linux" else "Android").build(),
-            )
-        }
+    private fun isDesktop(of: GeckoSession) = of.settings.userAgentMode == GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+
+    /** Asks for desktop pages, with a desktop user agent and width, or mobile ones, from the next load on. */
+    private fun applyMode(of: GeckoSession, desktop: Boolean) {
+        if (of == session) desktopSite = desktop
+        if (isDesktop(of) == desktop) return
+        of.settings.userAgentMode = if (desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+        of.settings.viewportMode = if (desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
     }
 
-    /** What Find in page is looking for and has found, or null while it is closed (SPEC, "Find in page"). */
-    var find: FindState? by mutableStateOf(null)
+    /** Find in page, in whichever session shows the Tab's page (SPEC, "Find in page"). */
+    val findInPage = FindInPage { session }
+
+    /** What the page's own scripts ask the person: an alert, a question, a list to choose from. */
+    var prompt: PagePrompt? by mutableStateOf(null)
         private set
 
-    /** Opens Find in page, empty. */
-    fun openFind() {
-        if (find == null) find = FindState("", 0, 0)
+    /** The shown [prompt] has been answered. */
+    fun closePrompt() {
+        prompt = null
     }
 
-    /** Looks for [text] in the page and highlights every match. */
-    fun find(text: String) {
-        find = FindState(text, 0, 0)
-        if (text.isEmpty()) webView.clearMatches() else webView.findAllAsync(text)
-    }
+    /** Talks to the page's content script: its icon, dark pages, files it can fetch. */
+    private var bridge: PageBridge = newBridge()
 
-    /** Moves to the next match, or the one before with [forward] false. */
-    fun findNext(forward: Boolean) {
-        if (find?.query.isNullOrEmpty()) return
-        webView.findNext(forward)
-    }
-
-    /** Closes Find in page and clears its highlights. */
-    fun closeFind() {
-        if (find == null) return
-        find = null
-        webView.clearMatches()
-    }
-    /**
-     * Whether WebView checks pages against Safe Browsing and warns before a dangerous one
-     * (SPEC, "Browsing features"). It follows the app's setting, also for pages already open.
-     */
-    var safeBrowsing: Boolean = safeBrowsing
-        set(value) {
-            field = value
-            applySafeBrowsing(webView)
-            popup?.let(::applySafeBrowsing)
-        }
-
-    private fun applySafeBrowsing(view: WebView) {
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
-            WebSettingsCompat.setSafeBrowsingEnabled(view.settings, safeBrowsing)
-        }
-    }
-
+    private var popupBridge: PageBridge? = null
 
     /**
-     * The WebView showing this Tab. It is replaced with a new one if the renderer dies, so
+     * The session showing this Tab. It is replaced with a new one if its content process dies, so
      * observe it rather than keeping a reference.
      */
-    var webView: WebView by mutableStateOf(newWebView(popup = false))
+    var session: GeckoSession by mutableStateOf(newPageSession().also { open(it, bridge) })
         private set
 
     /**
      * A window the page opened with `window.open`, such as a "Sign in with Google" popup. It
-     * shows over the page in the same Profile, and closes with Back or `window.close()`.
+     * shows over the page in the same Profile, and closes with Back or `window.close()`. It is
+     * set once GeckoView has opened it, so it can be shown.
      */
-    var popup: WebView? by mutableStateOf(null)
+    var popup: GeckoSession? by mutableStateOf(null)
         private set
+
+    /** The popup GeckoView is opening, until it is open and becomes [popup]. */
+    private var openingPopup: GeckoSession? = null
 
     /**
      * The [popup]'s own address, which the browser shows above it. Without it, a popup could put
@@ -218,8 +178,8 @@ class Tab(
         private set
 
     /**
-     * A file the page offers for download, until the person has answered. Nothing is fetched
-     * before they agree.
+     * A file the page offers for download, until the person has answered. Only the response's
+     * headers have arrived: nothing of the file is read before they agree.
      */
     var download: DownloadRequest? by mutableStateOf(null)
         private set
@@ -239,7 +199,7 @@ class Tab(
     var httpAuth: HttpAuthAsk? by mutableStateOf(null)
         private set
 
-    /** The page's video, shown fullscreen until [exitFullscreen] or the page ends it. */
+    /** The page shows a video fullscreen, until [exitFullscreen] or the page ends it. */
     var fullscreen: FullscreenVideo? by mutableStateOf(null)
         private set
 
@@ -254,10 +214,7 @@ class Tab(
         handoff = link
     }
 
-    /**
-     * The page that opened the offered link. WebView can report that this page started only
-     * after the page has already opened the link, so only another page's start ends the offer.
-     */
+    /** The page that opened the offered link: only another page's start ends the offer. */
     private var handoffPage: String? = null
 
     fun dismissHandoff() {
@@ -274,46 +231,29 @@ class Tab(
 
     /**
      * Offers the file at [url] for download, as if the page had: the person agrees first. Used for
-     * "Save image". A `blob:` image is copied in the page first, as a page's own file is.
+     * "Save image": the image is then fetched from the page, as the page would fetch it.
      */
     fun offerFile(url: String, mimeType: String = "") {
-        val view = webView
         val name = DownloadRequest.safeFileName(URLUtil.guessFileName(url, null, mimeType.ifBlank { null }))
-        val copy = if (url.startsWith("blob:", ignoreCase = true)) keepPageCopy(view, url) else null
-        val referrer = shownPage(view)?.takeIf { WebAddress.isWebAddress(it) }?.substringBefore('#')
-        download = DownloadRequest(url, view.settings.userAgentString.orEmpty(), name, mimeType, -1, referrer, copy)
+        val page = loadedUrl?.takeIf { WebAddress.isWebAddress(it) }?.substringBefore('#')
+        download?.let(::discard)
+        download = DownloadRequest(url, name, mimeType, -1, page, DownloadSource.FromPage)
     }
 
     /**
-     * Runs [script] in the page and gives its result as JSON, or null when the page has gone.
-     * Call it on the main thread.
+     * Runs [script] in the page's content script world, which sees the page's DOM, and gives its
+     * result as JSON, or null when there is no page. Debug builds only, for tests. Call it on the
+     * main thread.
      */
-    suspend fun evaluate(script: String): String? {
-        val view = webView
-        return suspendCancellableCoroutine { done -> view.evaluateJavascript(script) { done.resume(it) } }
-    }
+    suspend fun evaluate(script: String): String? = bridge.evaluate(script)
 
-    /**
-     * A file the page made has no name of its own: WebView passes on none. The link that offered
-     * it may name it (`<a download="name">`), and then the offer takes that name.
-     */
-    private fun takeNameFromPage(view: WebView, url: String) {
-        view.evaluateJavascript(PageFiles.nameOf(url)) { result ->
-            val named = result?.let { runCatching { org.json.JSONArray("[$it]").optString(0) }.getOrNull() }?.takeIf { it.isNotBlank() && it != "null" }
-                ?: return@evaluateJavascript
-            val offered = download?.takeIf { it.url == url } ?: return@evaluateJavascript
-            download = offered.copy(fileName = DownloadRequest.safeFileName(named))
-        }
-    }
+    /** Runs [script] in the [popup]'s page, as [evaluate] does in the Tab's. Null without a popup. */
+    suspend fun evaluateInPopup(script: String): String? = popupBridge?.evaluate(script)
 
-    /** Makes the page keep its own copy of the `blob:` file at [url], and returns the copy's name. */
-    private fun keepPageCopy(view: WebView, url: String): String {
-        val name = PageFiles.newCopyName()
-        view.evaluateJavascript(PageFiles.keep(url, name), null)
-        return name
-    }
+    /** Fetches [url] as the page would, with the Tab's Profile, or null when it can't be had. */
+    suspend fun fetchFromPage(url: String): PageFile? = bridge.fetch(url)
 
-    /** What WebView asked with, so the page can withdraw [permissionAsk]: a request, or a location origin. */
+    /** What the page asked with, so it can withdraw [permissionAsk]. */
     private var permissionSource: Any? = null
 
     /**
@@ -347,15 +287,19 @@ class Tab(
     /**
      * The ask the owner is deciding, from when the page made it until it is answered or shown. It
      * holds the Tab's one place for an ask while the owner reads the Profile's Site settings, so a
-     * second ask meanwhile is refused, and a withdrawal reaches it.
+     * second ask meanwhile is refused.
      */
     private var pendingAsk: PermissionAsk? = null
 
-    /** Hands [files] to the page's file field, or none when the person cancelled. */
+    /**
+     * Hands [files] to the page's file field, or none when the person cancelled. A file shared by
+     * another app is copied first, off the main thread, so the page gets it a moment later.
+     */
     fun answerFileChooser(files: List<Uri>?) {
         val ask = fileChooser ?: return
         fileChooser = null
-        ask.answer(files)
+        // Cancelling can't wait: it is also how a closing Tab answers, after its scope has ended.
+        if (files.isNullOrEmpty()) ask.cancel() else scope.launch { ask.answer(files) }
     }
 
     /** The [httpAuth] ask has been answered. */
@@ -374,20 +318,26 @@ class Tab(
      * Measures the video that is fullscreen: its width and height, or null when it can't be told,
      * as when it plays inside a frame of another site.
      */
-    fun measureFullscreenVideo(result: (Pair<Int, Int>?) -> Unit) {
-        webView.evaluateJavascript(MEASURE_FULLSCREEN_VIDEO) { value ->
-            val numbers = value?.trim('[', ']', '"')?.split(',')?.mapNotNull { it.trim().toIntOrNull() }
-            result(numbers?.takeIf { it.size == 2 && it[0] > 0 && it[1] > 0 }?.let { it[0] to it[1] })
-        }
-    }
+    suspend fun measureFullscreenVideo(): Pair<Int, Int>? = bridge.measureFullscreenVideo()
+
+    /**
+     * True while the Tab shows something the person must answer, or is about to: a page dialog, a
+     * site's ask, a sign-in, a file field or a download offer. One shows at a time (SPEC, "Page
+     * dialogs"), so anything else the page asks meanwhile is refused.
+     */
+    private val asking: Boolean
+        get() = prompt != null || permissionAsk != null || pendingAsk?.open == true || fileChooser != null || httpAuth != null || download != null
 
     /** Refuses or drops whatever the page is waiting on, when the page or the Tab goes away. */
     private fun endAsks() {
         permissionAsk?.deny()
+        pendingAsk?.deny()
         closePermissionAsk()
         answerFileChooser(null)
         httpAuth?.cancel()
         closeHttpAuth()
+        prompt?.dismiss()
+        prompt = null
         exitFullscreen()
         handoff = null
         pressed = null
@@ -407,7 +357,7 @@ class Tab(
         private set
     var canGoForward by mutableStateOf(false)
         private set
-    /** True after the page's renderer stopped. [reload] loads the page again. */
+    /** True after the page's content process stopped. [reload] loads the page again. */
     var crashed by mutableStateOf(false)
         private set
 
@@ -417,21 +367,24 @@ class Tab(
     /** The site's host for display, without a leading `www.`, or empty for a non-web page. */
     val displayHost: String get() = displayHost(url)
 
+    /** How far the page is scrolled down, in pixels, as GeckoView last said. */
+    private var pageScrollY = 0
+
     /**
      * The page's vertical scroll position, in pixels, to save with the Tab. While a restored page
      * is still loading, or waits for a reload after a crash, it's the position the page goes back
      * to, so saving the Tab in that moment doesn't lose it.
      */
     val scrollY: Int
-        get() = if (restoreScrollY > 0) restoreScrollY else webView.scrollY
+        get() = if (restoreScrollY > 0) restoreScrollY else pageScrollY
+
+    /** True while the page is scrolled to its very top, so a pull down can reload it. */
+    val atTop: Boolean get() = pageScrollY <= 0
 
     /** Where to scroll once the page being restored has loaded and is laid out, or 0. */
     private var restoreScrollY = 0
 
-    /**
-     * True once the restored page has loaded. The restore ends when the next page starts. Until
-     * then a failure, in whatever order WebView reports it, still brings back the saved title.
-     */
+    /** True once the restored page has loaded. The restore ends when the next page starts. */
     private var restoreDone = false
 
     /** True from [restore] until the restored page has loaded: that load is not a new visit. */
@@ -443,13 +396,13 @@ class Tab(
      */
     private var restoringTitle: String? = null
 
-    /** True once the page's own load failed. WebView then shows its error page, whose title isn't the page's. */
+    /** True once the page's own load failed, while Okapi's error page shows in its place. */
     private var loadFailed = false
 
     /** Loads [address] in the Tab. A popup over the page closes, so the new page is what shows. */
     fun load(address: String) {
         closePopup()
-        applyUserAgent(webView, wantsDesktop(SiteOrigin.of(address)))
+        applyMode(session, wantsDesktop(SiteOrigin.of(address)))
         crashed = false
         restoreScrollY = 0
         restoreDone = false
@@ -458,7 +411,7 @@ class Tab(
         addressRequested = true
         url = address
         onPageChanged(this)
-        webView.loadUrl(address)
+        loadInto(session, address)
     }
 
     /**
@@ -475,15 +428,17 @@ class Tab(
     }
 
     fun goBack() {
-        if (!webView.canGoBack()) return
+        if (!canGoBack) return
         historyStep = true
-        webView.goBack()
+        historyStepDirection = -1
+        session.goBack()
     }
 
     fun goForward() {
-        if (!webView.canGoForward()) return
+        if (!canGoForward) return
         historyStep = true
-        webView.goForward()
+        historyStepDirection = 1
+        session.goForward()
     }
 
     /**
@@ -501,118 +456,181 @@ class Tab(
     /** True from [load] until its page arrives: the address came from the person, not from a link on the page. */
     private var addressRequested = false
 
+    /** True from [reload] until the page arrives again. */
+    private var reloading = false
+
+    /** The page that has just stopped loading, reported as seen unless another page starts first. */
+    private var pendingSeen: Runnable? = null
+
+    /** True when the page loading next is one the person tapped a link to. */
+    private var nextLoadByPerson = false
+
+    /** True while a new session loads the empty page it starts with, which no one asked for. */
+    private var loadingOwnBlank = false
+
+    /** The title the Tab had when the page now loading started, for when it turns out to be a file. */
+    private var titleBeforeStart: String? = null
+
+    /** The Tab's back/forward list, with each page's title, as GeckoView last told it. */
+    private var history: GeckoSession.HistoryDelegate.HistoryList? = null
+
+    /**
+     * The title of the page Back or Forward goes to. A page that comes back from the back-forward
+     * cache doesn't name itself again.
+     */
+    private fun historyStepTitle(): String? {
+        if (!historyStep) return null
+        val list = history ?: return null
+        val target = list.currentIndex + historyStepDirection
+        return list.getOrNull(target)?.title?.takeIf { it.isNotBlank() }
+    }
+
+    /** -1 for Back, 1 for Forward, while [historyStep]. */
+    private var historyStepDirection = 0
+
     fun reload() {
         val address = url
         if (crashed && address != null) {
-            // The new WebView loads the page afresh, like a saved page coming back: it keeps its
+            // The new session loads the page afresh, like a saved page coming back: it keeps its
             // title, scrolls back to where the old one was, and is no new visit.
             restore(address, title, restoreScrollY)
+        } else if (loadFailed && address != null && WebAddress.isWebAddress(address)) {
+            // The error page is what's loaded: the page itself is asked for again.
+            loadInto(session, address)
         } else {
-            webView.reload()
+            reloading = true
+            session.reload()
         }
     }
 
-    fun stop() = webView.stopLoading()
+    fun stop() = session.stop()
 
     /**
-     * Ends the [download] offer, after the person has answered it. When they declined, the page's
-     * copy of a file it made goes too; [kept] leaves it for Okapi to read.
+     * Loads [address], which the person or Okapi asked for. GeckoView refuses a `data:` page at
+     * the top of a Tab unless the load says it may: only pages can't open one by themselves.
      */
+    private fun loadInto(target: GeckoSession, address: String) {
+        // A load still on its way, such as a restored page, must not arrive after this one.
+        target.stop()
+        val flags = if (address.startsWith("data:", ignoreCase = true)) GeckoSession.LOAD_FLAGS_FORCE_ALLOW_DATA_URI else GeckoSession.LOAD_FLAGS_NONE
+        target.load(GeckoSession.Loader().uri(address).flags(flags))
+    }
+
+    /** Ends the [download] offer, after the person has answered it. Declining closes its response. */
     fun dismissDownload(kept: Boolean = false) {
         val offered = download ?: return
         download = null
-        if (!kept) offered.pageCopy?.let { webView.evaluateJavascript(PageFiles.drop(it), null) }
+        if (!kept) discard(offered)
+    }
+
+    private fun discard(request: DownloadRequest) {
+        (request.source as? DownloadSource.Response)?.discard()
     }
 
     /** Closes the [popup], if one is open. */
     fun closePopup() {
-        val view = popup ?: return
+        val window = popup ?: openingPopup ?: return
         popup = null
+        openingPopup = null
         popupUrl = null
-        (view.parent as? ViewGroup)?.removeView(view)
-        view.destroy()
+        popupBridge?.detach()
+        popupBridge = null
+        if (window.isOpen) window.close()
     }
 
-    /** Frees the WebViews. The Tab can't be used afterwards. */
+    /** Frees the sessions. The Tab can't be used afterwards. */
     fun destroy() {
+        scope.cancel()
+        pendingSeen?.let(main::removeCallbacks)
         endAsks()
-        find = null
+        download?.let(::discard)
+        download = null
+        findInPage.close()
         allowedOnce.clear()
         closePopup()
-        // WebView must leave the view hierarchy before destroy().
-        (webView.parent as? ViewGroup)?.removeView(webView)
-        webView.stopLoading()
-        webView.destroy()
+        bridge.detach()
+        session.stop()
+        session.close()
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun newWebView(popup: Boolean): WebView {
-        // WebView shows pages dark when the theme of its context is dark.
-        val view = WebView(if (darkPages) ContextThemeWrapper(context, R.style.Theme_Jrny_DarkPages) else context)
-        // Must be the first call on a new WebView: the profile is fixed once the WebView is used.
-        WebViewCompat.setProfile(view, profile.name)
-        with(view.settings) {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            // Pages can't read the app's files or content providers.
-            allowFileAccess = false
-            allowContentAccess = false
-            // Pinch zoom without the on-screen +/- buttons.
-            builtInZoomControls = true
-            displayZoomControls = false
-            loadWithOverviewMode = true
-            useWideViewPort = true
-            // The page may open one popup (onCreateWindow). A popup's own window.open loads in
-            // the popup. Without a tap, window.open stays blocked
-            // (javaScriptCanOpenWindowsAutomatically is false by default).
-            setSupportMultipleWindows(!popup)
+    /** Asks the page to print, through Android's print dialog, which can also save a PDF. */
+    fun print(then: (java.io.InputStream?) -> Unit) {
+        session.saveAsPdf().accept({ then(it) }, { then(null) })
+    }
+
+    private fun newBridge() = PageBridge(onIcon = { page, icon ->
+        // The page's own, not an error page's.
+        if (!loadFailed && page == loadedUrl) onIcon(page, icon)
+    }).also { it.dark = darkPages }
+
+    /** A session for the Tab's page, which reports its loading, scrolling and history. */
+    private fun newPageSession(): GeckoSession = newSession(PageNavigation(), PageContent()).apply {
+        progressDelegate = PageProgress()
+        scrollDelegate = PageScroll()
+        historyDelegate = object : GeckoSession.HistoryDelegate {
+            override fun onHistoryStateChange(session: GeckoSession, historyList: GeckoSession.HistoryDelegate.HistoryList) {
+                if (session == this@Tab.session) history = historyList
+            }
         }
-        applySafeBrowsing(view)
-        view.settings.textZoom = textZoom
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, darkPages)
+    }
+
+    /** A session for a popup the page opens. */
+    private fun newPopupSession(): GeckoSession = newSession(PopupNavigation(), PopupContent())
+
+    private fun newSession(navigation: NavigationDelegate, content: ContentDelegate): GeckoSession {
+        val settings = GeckoSessionSettings.Builder()
+            // The Profile's own store (ADR 0004), in memory only for a Private Tab.
+            .contextId(profile.name)
+            .usePrivateMode(profile.isPrivate)
+            .useTrackingProtection(false)
+            .build()
+        return GeckoSession(settings).apply {
+            navigationDelegate = navigation
+            contentDelegate = content
+            promptDelegate = Prompts()
+            permissionDelegate = Permissions()
         }
-        // A desktop width for pages that ask for the device's, while the Tab asks for desktop sites.
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(view, UserAgents.DESKTOP_VIEWPORT_SCRIPT, setOf("*"))
-        }
-        if (!popup) view.setFindListener { active, matches, _ -> find?.let { find = it.copy(current = if (matches == 0) 0 else active + 1, total = matches) } }
-        // Sign-in flows rely on third-party cookies (the Milestone 0 spike signed in with them on).
-        profile.cookieManager.setAcceptThirdPartyCookies(view, true)
-        view.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-            val suggested = DownloadRequest.suggestedFileName(contentDisposition) ?: URLUtil.guessFileName(url, contentDisposition, mimeType)
-            val name = DownloadRequest.safeFileName(suggested)
-            // The page the link was on, as a page's own request for the file would say: only a
-            // web page, without its fragment, which never leaves the browser. An address the
-            // person typed, or one another app sent, was linked from nowhere.
-            val referrer = shownPage(view)?.takeIf { !addressRequested && WebAddress.isWebAddress(it) && it != url }?.substringBefore('#')
-            // A file the page made itself may be dropped by the page at once: it keeps a copy
-            // until the person answers.
-            val copy = if (url.startsWith("blob:", ignoreCase = true)) keepPageCopy(view, url) else null
-            offerDownload(view, DownloadRequest(url, userAgent.orEmpty(), name, mimeType.orEmpty(), contentLength, referrer, copy))
-            if (!WebAddress.isWebAddress(url)) takeNameFromPage(view, url)
-        }
-        if (!popup) view.setOnLongClickListener { longPress(view) }
-        view.webViewClient = if (popup) PopupViewClient() else PageViewClient()
-        view.webChromeClient = if (popup) PopupChromeClient() else PageChromeClient()
-        return view
+    }
+
+    /** True for the Tab's own session and its open popup: the pages the person can see. */
+    private fun shows(session: GeckoSession): Boolean = session == this.session || session == popup
+
+    /**
+     * The site [session] shows, for display. A popup that has no address of its own yet shows what
+     * its opener wrote into it, so it counts as the opener's site.
+     */
+    private fun siteOf(session: GeckoSession): String =
+        if (session == popup) displayHost(popupUrl).ifEmpty { displayHost } else displayHost
+
+    private fun open(session: GeckoSession, bridge: PageBridge) {
+        session.open(runtime)
+        bridge.attach(session)
     }
 
     /**
-     * Scrolls the restored page to [scrollY] once it's ready to draw. When the load finishes the
-     * page may not be laid out yet, and scrolling then does nothing.
+     * Scrolls the restored page to [scrollY] once it has loaded. The page may not be laid out yet
+     * when GeckoView says it has stopped loading, so it tries again a moment later.
      */
-    private fun scrollWhenLaidOut(view: WebView, scrollY: Int) {
-        view.postVisualStateCallback(
-            0,
-            object : WebView.VisualStateCallback() {
-                override fun onComplete(requestId: Long) {
-                    if (view != webView || !restoreDone || restoreScrollY != scrollY) return
-                    view.scrollTo(0, scrollY)
+    private fun scrollWhenLaidOut(scrollY: Int) {
+        val target = session
+        val page = bridge
+        fun attempt(left: Int) {
+            if (target != session || !restoreDone || restoreScrollY != scrollY) return
+            scope.launch {
+                // The page scrolls itself, in CSS pixels, as GeckoView reports the position.
+                // GeckoView's own scrollTo counts screen pixels, so it is only for a page the
+                // content script can't reach.
+                if (!page.scrollTo(scrollY)) {
+                    target.panZoomController.scrollTo(ScreenLength.zero(), ScreenLength.fromPixels(scrollY.toDouble()), PanZoomController.SCROLL_BEHAVIOR_AUTO)
+                }
+                if (left > 0) {
+                    main.postDelayed({ if (pageScrollY < scrollY) attempt(left - 1) else restoreScrollY = 0 }, SCROLL_RETRY_MS)
+                } else {
                     restoreScrollY = 0
                 }
-            },
-        )
+            }
+        }
+        main.postDelayed({ attempt(SCROLL_RETRIES) }, SCROLL_RETRY_MS)
     }
 
     /**
@@ -620,142 +638,200 @@ class Tab(
      * page before, so its address and loading state go back to that page. A popup that only
      * started a download has nothing to show, and closes.
      */
-    private fun offerDownload(view: WebView, request: DownloadRequest) {
-        when (view) {
-            webView -> {
+    private fun offerDownload(from: GeckoSession, response: WebResponse) {
+        val request = downloadRequest(response)
+        when (from) {
+            session -> {
+                // The page before is still what shows, with its title.
+                titleBeforeStart?.let { title = it }
                 isLoading = false
                 pageStarting = false
                 addressRequested = false
-                url = shownPage(view)
-                updateHistory()
+                url = loadedUrl
                 onPageChanged(this)
             }
-            popup -> closePopup()
-            else -> return
+            popup, openingPopup -> closePopup()
+            else -> return discard(request)
         }
+        // A file the page sends while another question is open is dropped: one at a time. The
+        // person can't have tapped it meanwhile, so the page sent it by itself.
+        if (asking && download == null) return discard(request)
+        download?.let(::discard)
         download = request
     }
 
-    /**
-     * The address of the page [view] really shows: the last one that loaded. `WebView.getUrl` is
-     * no use here, because while a load is on its way it already gives the address being loaded.
-     */
-    private fun shownPage(view: WebView): String? = view.copyBackForwardList().currentItem?.url
-
-    private fun updateHistory() {
-        canGoBack = webView.canGoBack()
-        canGoForward = webView.canGoForward()
+    private fun downloadRequest(response: WebResponse): DownloadRequest {
+        // The page the link was on: only a web page, without its fragment.
+        val page = loadedUrl?.takeIf { !addressRequested && WebAddress.isWebAddress(it) }?.substringBefore('#')
+        return DownloadRequest.of(response, page)
     }
 
     /**
-     * WebView runs one renderer process for every Tab in every Profile. When it dies (a crash,
-     * or Android reclaiming memory), a dead WebView can't be used again, and the app would crash
-     * without this. The Tab gets a fresh WebView and waits for the person to reload, so a page
-     * that crashes the renderer doesn't crash it in a loop.
+     * The content process stopped (a crash, or Android reclaiming memory). The session can't be
+     * used again. The Tab gets a fresh one and waits for the person to reload, so a page that
+     * crashes doesn't crash it in a loop.
      */
-    /**
-     * Gives the Tab a new WebView that loads the page again where it was, after a change only a
-     * new WebView can take (SPEC, "Dark pages"). Back/forward history is lost, as after a kill.
-     */
-    private fun rebuildWebView() {
-        val old = webView
-        val address = url
-        val savedTitle = title
-        val position = scrollY
-        endAsks()
-        closeFind()
-        closePopup()
-        (old.parent as? ViewGroup)?.removeView(old)
-        old.stopLoading()
-        old.destroy()
-        webView = newWebView(popup = false)
-        canGoBack = false
-        canGoForward = false
-        isLoading = false
-        if (address != null && !crashed) restore(address, savedTitle, position)
-    }
-
-    private fun replaceDeadWebView(dead: WebView) {
-        if (dead != webView) return
+    private fun replaceDeadSession(dead: GeckoSession) {
+        if (dead != session) return
         restoreScrollY = scrollY
         endAsks()
         closePopup()
-        (dead.parent as? ViewGroup)?.removeView(dead)
-        dead.destroy()
-        webView = newWebView(popup = false)
+        bridge.detach()
+        bridge = newBridge()
+        history = null
+        val fresh = newPageSession()
+        open(fresh, bridge)
+        applyMode(fresh, desktopSite)
+        session = fresh
         crashed = true
         isLoading = false
         canGoBack = false
         canGoForward = false
     }
 
+    /** Only these load as a Tab's page. Anything else is handed to another app, or dropped. */
+    private fun loadsHere(uri: String): Boolean {
+        val scheme = schemeOf(uri)
+        return WebAddress.isWebScheme(scheme) || scheme == "data" || scheme == "blob" || uri == "about:blank"
+    }
+
     /**
-     * Only web pages load in a Tab. A link for another app, opened by the page itself rather than
-     * one of its frames, goes to the owner to hand over (SPEC, "Links to other apps"). Anything
-     * else is dropped.
+     * Decides a page's load: a web page loads, asking its site for the desktop or mobile version
+     * as the Profile wants; a link for another app, opened by the page itself, goes to the owner
+     * to hand over (SPEC, "Links to other apps"). Anything else is dropped.
      */
-    private fun isBlocked(view: WebView, request: WebResourceRequest): Boolean {
-        val scheme = request.url.scheme
-        if (WebAddress.isWebScheme(scheme)) return switchesUserAgent(view, request)
-        if (request.isForMainFrame && HandoffRules.isForAnotherApp(scheme)) {
-            AppLink.of(request.url.toString())?.let {
-                handoffPage = view.url
-                onHandoff(this, it, request.hasGesture())
+    private fun decideLoad(from: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
+        // GeckoView asks once more, with no address, while it turns a response into a download.
+        if (request.uri.isBlank()) return GeckoResult.allow()
+        if (loadsHere(request.uri)) {
+            // A load into a new window is the popup's, which gets its own mode once it opens.
+            if (request.target == NavigationDelegate.TARGET_WINDOW_NEW) return GeckoResult.allow()
+            if (from == session && !request.isRedirect) nextLoadByPerson = request.hasUserGesture
+            // The Tab's page and its popup alike.
+            if (WebAddress.isWebAddress(request.uri)) applyMode(from, wantsDesktop(SiteOrigin.of(request.uri)))
+            return GeckoResult.allow()
+        }
+        val scheme = schemeOf(request.uri)
+        if (HandoffRules.isForAnotherApp(scheme)) {
+            AppLink.of(request.uri)?.let {
+                handoffPage = loadedUrl
+                onHandoff(this, it, request.hasUserGesture)
             }
         }
-        return true
+        return GeckoResult.deny()
     }
 
-    /**
-     * A page on a site that wants the other user agent than the Tab sends now: the Tab switches,
-     * and asks for the page again with it. Only a plain GET in the page itself is asked again; a
-     * form's POST keeps the agent it has, so nothing is sent twice.
-     */
-    private fun switchesUserAgent(view: WebView, request: WebResourceRequest): Boolean {
-        if (view != webView || !request.isForMainFrame || request.method != "GET") return false
-        val desktop = wantsDesktop(SiteOrigin.of(request.url.toString()))
-        if (UserAgents.isDesktop(view.settings.userAgentString) == desktop) {
-            desktopSite = desktop
-            return false
-        }
-        applyUserAgent(view, desktop)
-        val address = request.url.toString()
-        Handler(Looper.getMainLooper()).post { if (view == webView) view.loadUrl(address) }
-        return true
-    }
+    /** Navigation of the Tab's page. */
+    private inner class PageNavigation : NavigationDelegate {
+        override fun onLoadRequest(session: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> =
+            decideLoad(session, request)
 
-    /**
-     * Holding a link or an image opens its menu. Anything else keeps WebView's own handling, such
-     * as selecting text. An image that is also a link asks WebView for the link's address first.
-     */
-    private fun longPress(view: WebView): Boolean {
-        if (view != webView) return false
-        val hit = view.hitTestResult
-        val extra = hit.extra?.takeIf { it.isNotBlank() }
-        when (hit.type) {
-            WebView.HitTestResult.SRC_ANCHOR_TYPE -> pressed = PressedItem(link = extra ?: return false, image = null)
-            WebView.HitTestResult.IMAGE_TYPE -> pressed = PressedItem(link = null, image = extra ?: return false)
-            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
-                val reply = Handler(Looper.getMainLooper()) { message ->
-                    if (view == webView) pressed = PressedItem(link = message.data.getString("url")?.takeIf { it.isNotBlank() }, image = extra)
-                    true
-                }.obtainMessage()
-                view.requestFocusNodeHref(reply)
+        override fun onSubframeLoadRequest(session: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> =
+            if (loadsHere(request.uri) || request.uri.startsWith("about:")) GeckoResult.allow() else GeckoResult.deny()
+
+        override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
+            if (session != this@Tab.session || url == null || !loadsHere(url)) return
+            // Okapi's error page shows in the failed page's place: the address stays the page's.
+            if (ErrorPages.isErrorPage(url) || (loadFailed && url == "about:blank")) return
+            // A new session starts at an empty page of its own, which no one went to.
+            if (url == "about:blank" && this@Tab.url != "about:blank") return
+            if (loadFailed) {
+                // GeckoView names the failed page itself while the error page shows. No visit.
+                this@Tab.url = url
+                pageStarting = false
+                return onPageChanged(this@Tab)
             }
-            else -> return false
+            // Also comes for a move within the page (history.pushState), which starts no new page.
+            val newPage = pageStarting
+            val isReload = reloading || (newPage && url == loadedUrl)
+            reloading = false
+            this@Tab.url = url
+            loadedUrl = url
+            pageStarting = false
+            addressRequested = false
+            onPageChanged(this@Tab)
+            val step = historyStep
+            historyStep = false
+            if (!isReload && !restoring && !step) {
+                onVisited(url)
+                // A move within the page keeps the page's title, and nothing else will report it.
+                // A new page's title can come before its address does: it is reported now.
+                if (title.isNotBlank()) onPageSeen(url, title)
+            }
         }
-        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        return true
+
+        override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+            if (session == this@Tab.session) this@Tab.canGoBack = canGoBack
+        }
+
+        override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+            if (session == this@Tab.session) this@Tab.canGoForward = canGoForward
+        }
+
+        override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+            if (session != this@Tab.session) return null
+            closePopup()
+            // Same Profile as the page, so the popup sees the page's sign-ins.
+            val window = newPopupSession()
+            // As its site wants it, or as the page that wrote into it, when it has no address yet.
+            applyMode(window, SiteOrigin.of(uri)?.let(::wantsDesktop) ?: desktopSite)
+            openingPopup = window
+            popupUrl = uri.ifBlank { "about:blank" }
+            val windowBridge = newBridge()
+            popupBridge = windowBridge
+            // GeckoView opens the session itself once it has it, and only then can it be shown.
+            fun shownWhenOpen(left: Int) {
+                if (openingPopup != window) return
+                if (window.isOpen) {
+                    openingPopup = null
+                    popup = window
+                    windowBridge.attach(window)
+                } else if (left > 0) {
+                    main.postDelayed({ shownWhenOpen(left - 1) }, POPUP_OPEN_POLL_MS)
+                } else {
+                    closePopup()
+                }
+            }
+            main.post { shownWhenOpen(POPUP_OPEN_POLLS) }
+            return GeckoResult.fromValue(window)
+        }
+
+        override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
+            if (session != this@Tab.session || uri == null) return null
+            // The page didn't load. Keep the title it was saved with, or none, so the Tab shows its site.
+            loadFailed = true
+            title = restoringTitle.orEmpty()
+            pageStarting = false
+            url = uri
+            onPageChanged(this@Tab)
+            return GeckoResult.fromValue(ErrorPages.page(context, uri, error, darkPages))
+        }
     }
 
-    /** Navigation callbacks for the Tab's page. */
-    private inner class PageViewClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(view, request)
-
-        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-            if (view != webView) return
+    /** Loading of the Tab's page. */
+    private inner class PageProgress : ProgressDelegate {
+        override fun onPageStart(session: GeckoSession, url: String) {
+            // A link for another app that was refused, or Okapi's error page, isn't a page start.
+            if (session != this@Tab.session || ErrorPages.isErrorPage(url) || !loadsHere(url)) return
+            // A new session's own empty page, which no one asked for: it isn't the Tab's page.
+            loadingOwnBlank = url == "about:blank" && this@Tab.url != "about:blank"
+            if (loadingOwnBlank) return
             isLoading = true
+            progress = 0
             loadFailed = false
+            // The page before was seen, unless it sent the person on by itself: the person asked
+            // for this one, or tapped a link to it.
+            pendingSeen?.let { seen ->
+                main.removeCallbacks(seen)
+                if (addressRequested || nextLoadByPerson) seen.run()
+            }
+            pendingSeen = null
+            nextLoadByPerson = false
+            // A new page starts without a title, not with the one of the page before. A reload
+            // and a saved page coming back keep theirs. Cleared here, not when the page arrives:
+            // GeckoView can report the new page's title before its address.
+            titleBeforeStart = title
+            if (!reloading && url != loadedUrl && !restoring) title = historyStepTitle().orEmpty()
             pageStarting = true
             if (restoreDone) {
                 // The restored page had loaded, and this is the next page.
@@ -763,81 +839,128 @@ class Tab(
                 restoringTitle = null
                 restoreDone = false
             }
-            this@Tab.url = url
+            if (url != "about:blank") this@Tab.url = url
             // Find in page belongs to the page it was opened on.
-            if (find != null && url != loadedUrl) closeFind()
+            if (url != loadedUrl) findInPage.close()
             // An offer to open another app belongs to the page that made it.
             if (url != handoffPage) handoff = null
             // A grant for once ends when the page leaves its site.
             val origin = SiteOrigin.of(url)
             if (origin != pageOrigin) allowedOnce.clear()
             pageOrigin = origin
-            updateHistory()
             onPageChanged(this@Tab)
         }
 
-        override fun onReceivedHttpAuthRequest(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
-            askForSignIn(view, handler, host, realm)
+        override fun onProgressChange(session: GeckoSession, progress: Int) {
+            if (session == this@Tab.session) this@Tab.progress = progress
         }
 
-        override fun onPageFinished(view: WebView, url: String) {
-            if (view != webView) return
+        override fun onPageStop(session: GeckoSession, success: Boolean) {
+            if (session != this@Tab.session) return
+            if (loadingOwnBlank) {
+                loadingOwnBlank = false
+                return
+            }
             isLoading = false
-            this@Tab.url = view.url ?: url
-            updateHistory()
+            pageStarting = false
+            // The address was a file, not a page: the Tab goes back to the page it shows.
+            if (download != null && url == download?.url) {
+                url = loadedUrl
+                addressRequested = false
+            }
             onPageChanged(this@Tab)
-            if (!loadFailed) loadedUrl?.let { onPageSeen(it, title) }
+            if (loadFailed) return
+            // Seen once it has stayed a moment: a page whose script sends the person on as it loads
+            // is a redirect's stop, and the next page starting cancels this.
+            loadedUrl?.let { page ->
+                val seen = Runnable { if (loadedUrl == page && !pageStarting) onPageSeen(page, title) }
+                pendingSeen = seen
+                main.postDelayed(seen, REDIRECT_GRACE_MS)
+            }
             // A page that failed keeps its saved title and position for a reload.
-            if (!loadFailed && !restoreDone && restoring) {
+            if (!restoreDone && restoring) {
                 restoreDone = true
                 restoring = false
-                if (restoreScrollY > 0) scrollWhenLaidOut(view, restoreScrollY)
+                if (restoreScrollY > 0) scrollWhenLaidOut(restoreScrollY)
             }
-        }
-
-        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-            if (view != webView || !request.isForMainFrame) return
-            // The page didn't load. Keep the title it was saved with, or none, so the Tab shows
-            // its site, instead of the error page's "Webpage not available".
-            loadFailed = true
-            title = restoringTitle.orEmpty()
-            onPageChanged(this@Tab)
-        }
-
-        override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-            if (view != webView) return
-            // Also fires for same-document navigations (history.pushState), which don't start a page load.
-            this@Tab.url = url
-            loadedUrl = url
-            updateHistory()
-            // A new page starts without a title, not with the one of the page before. A reload,
-            // a saved page coming back and a move within the page keep theirs.
-            val newPage = pageStarting
-            pageStarting = false
-            addressRequested = false
-            if (newPage && !isReload && !restoring) title = ""
-            onPageChanged(this@Tab)
-            val step = historyStep
-            historyStep = false
-            if (!isReload && !restoring && !step) {
-                onVisited(url)
-                // A move within the page (a new address, the same document) keeps the page's
-                // title, and nothing else will report it.
-                if (!newPage && title.isNotBlank()) onPageSeen(url, title)
-            }
-        }
-
-        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-            replaceDeadWebView(view)
-            return true
         }
     }
 
-    /** Asks the person to sign in to [host], for the page or its popup. An earlier ask is cancelled. */
-    private fun askForSignIn(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
-        if (view != webView && view != popup) return handler.cancel()
-        httpAuth?.cancel()
-        httpAuth = HttpAuthAsk(host, realm.orEmpty(), handler)
+    private inner class PageScroll : ScrollDelegate {
+        override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
+            if (session == this@Tab.session) pageScrollY = scrollY
+        }
+    }
+
+    /** The Tab's page: its title, files, the link menu, fullscreen and crashes. */
+    private inner class PageContent : ContentDelegate {
+        override fun onTitleChange(session: GeckoSession, title: String?) {
+            if (session != this@Tab.session || loadFailed) return
+            // A restored page keeps its saved title until it has one of its own.
+            if (restoringTitle != null && title.isNullOrBlank()) return
+            this@Tab.title = title.orEmpty()
+            onPageChanged(this@Tab)
+            // Before the new page has arrived, its address isn't known yet: it is reported then.
+            if (!title.isNullOrBlank() && !pageStarting) loadedUrl?.let { onPageSeen(it, title) }
+        }
+
+        override fun onExternalResponse(session: GeckoSession, response: WebResponse) = offerDownload(session, response)
+
+        override fun onContextMenu(session: GeckoSession, screenX: Int, screenY: Int, element: ContentDelegate.ContextElement) {
+            if (session != this@Tab.session) return
+            // Holding a link or an image opens its menu; anything else keeps GeckoView's own
+            // handling, such as selecting text.
+            val link = element.linkUri?.takeIf { it.isNotBlank() }
+            val image = element.srcUri?.takeIf { it.isNotBlank() && element.type == ContentDelegate.ContextElement.TYPE_IMAGE }
+            if (link == null && image == null) return
+            pressed = PressedItem(link = link, image = image)
+        }
+
+        override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+            if (session != this@Tab.session) return
+            fullscreen = if (fullScreen) fullscreen ?: FullscreenVideo { session.exitFullScreen() } else null
+        }
+
+        override fun onCrash(session: GeckoSession) = replaceDeadSession(session)
+
+        override fun onKill(session: GeckoSession) = replaceDeadSession(session)
+    }
+
+    /** Navigation of a popup: its address, and a popup of its own loads in it. */
+    private inner class PopupNavigation : NavigationDelegate {
+        override fun onLoadRequest(session: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
+            if (request.target == NavigationDelegate.TARGET_WINDOW_NEW && loadsHere(request.uri)) {
+                main.post { if (session == popup) session.loadUri(request.uri) }
+                return GeckoResult.deny()
+            }
+            return decideLoad(session, request)
+        }
+
+        override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
+            if ((session == popup || session == openingPopup) && url != null && !ErrorPages.isErrorPage(url)) popupUrl = url
+        }
+
+        override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? = null
+
+        override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? =
+            uri?.let { GeckoResult.fromValue(ErrorPages.page(context, it, error, darkPages)) }
+    }
+
+    /** Lets a popup close itself with `window.close()`, as sign-in popups do when they finish. */
+    private inner class PopupContent : ContentDelegate {
+        override fun onCloseRequest(session: GeckoSession) {
+            if (session == popup || session == openingPopup) closePopup()
+        }
+
+        override fun onExternalResponse(session: GeckoSession, response: WebResponse) = offerDownload(session, response)
+
+        override fun onCrash(session: GeckoSession) {
+            if (session == popup) closePopup()
+        }
+
+        override fun onKill(session: GeckoSession) {
+            if (session == popup) closePopup()
+        }
     }
 
     /**
@@ -845,153 +968,183 @@ class Tab(
      * refused: one question at a time.
      */
     private fun raise(ask: PermissionAsk, source: Any) {
-        if (permissionAsk != null || pendingAsk?.open == true) return ask.deny()
+        if (asking) return ask.deny()
         permissionSource = source
         pendingAsk = ask
         onPermissionAsk(this, ask)
     }
 
-    /** The page withdrew the ask that [source] made. */
-    private fun withdraw(source: Any?) {
-        if (source == null || source != permissionSource) return
-        pendingAsk?.withdraw()
-        permissionAsk?.withdraw()
-        closePermissionAsk()
-    }
-
-    /** Page callbacks shared by the page and its popup. */
-    private open inner class QuietChromeClient : WebChromeClient() {
+    /** What the page and its popup ask to use. */
+    private inner class Permissions : PermissionDelegate {
         /**
-         * Keeps page console output out of the system log. WebView would otherwise log every
-         * message with the page's address (SPEC, "Data protection"). Debug builds can read the
-         * console through chrome://inspect.
+         * GeckoView asks for Android's own permissions before it asks about the site. Okapi asks
+         * Android only once the person allowed the site, so it says yes here and asks later.
          */
-        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean = true
+        override fun onAndroidPermissionsRequest(session: GeckoSession, permissions: Array<out String>?, callback: PermissionDelegate.Callback) =
+            callback.grant()
 
-        override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
-            // One at a time. False tells WebView nothing was shown, and it answers the page itself.
-            if (fileChooser != null || (view != webView && view != popup)) return false
-            fileChooser = FileChooserAsk(callback, params)
-            return true
+        override fun onContentPermissionRequest(session: GeckoSession, perm: PermissionDelegate.ContentPermission): GeckoResult<Int> {
+            val answer = GeckoResult<Int>()
+            val allow = PermissionDelegate.ContentPermission.VALUE_ALLOW
+            val deny = PermissionDelegate.ContentPermission.VALUE_DENY
+            when (perm.permission) {
+                PermissionDelegate.PERMISSION_GEOLOCATION -> {
+                    val site = SiteOrigin.of(perm.uri)
+                    if (site == null || !shows(session)) {
+                        answer.complete(deny)
+                    } else {
+                        // GeckoView never remembers the answer: Site settings do.
+                        val ask = PermissionAsk(
+                            site,
+                            setOf(SiteSetting.Location),
+                            onGrant = { answer.complete(allow); forget(perm) },
+                            onDeny = { answer.complete(deny); forget(perm) },
+                        )
+                        raise(ask, perm)
+                    }
+                }
+                // A video with sound waits for a tap; one without plays.
+                PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> answer.complete(allow)
+                // Protected video (DRM), as on streaming sites.
+                PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS -> answer.complete(allow)
+                // An embedded sign-in asking for its own cookies under Total Cookie Protection.
+                PermissionDelegate.PERMISSION_STORAGE_ACCESS -> answer.complete(allow)
+                else -> answer.complete(deny)
+            }
+            return answer
+        }
+
+        override fun onMediaPermissionRequest(
+            session: GeckoSession,
+            uri: String,
+            video: Array<out PermissionDelegate.MediaSource>?,
+            audio: Array<out PermissionDelegate.MediaSource>?,
+            callback: PermissionDelegate.MediaCallback,
+        ) {
+            // The camera and microphone are passed on. Sharing the screen isn't supported.
+            val camera = video?.firstOrNull { it.source == PermissionDelegate.MediaSource.SOURCE_CAMERA }
+            val microphone = audio?.firstOrNull { it.source == PermissionDelegate.MediaSource.SOURCE_MICROPHONE }
+            val origin = SiteOrigin.of(uri)
+            val asked = (video != null && camera == null) || (audio != null && microphone == null)
+            if (origin == null || asked || (camera == null && microphone == null) || !shows(session)) {
+                return callback.reject()
+            }
+            val wanted = buildSet {
+                if (camera != null) add(SiteSetting.Camera)
+                if (microphone != null) add(SiteSetting.Microphone)
+            }
+            raise(PermissionAsk(origin, wanted, onGrant = { callback.grant(camera, microphone) }, onDeny = callback::reject), callback)
+        }
+
+        /** The answer was for this request only: the next one asks again. */
+        private fun forget(perm: PermissionDelegate.ContentPermission) {
+            main.post { runCatching { runtime.storageController.setPermission(perm, PermissionDelegate.ContentPermission.VALUE_PROMPT) } }
         }
     }
 
-    /** Progress, title and popups for the Tab's page. */
-    private inner class PageChromeClient : QuietChromeClient() {
-        override fun onProgressChanged(view: WebView, newProgress: Int) {
-            if (view == webView) progress = newProgress
+    /** What the page's scripts and forms ask the person, for the page and its popup. */
+    private inner class Prompts : PromptDelegate {
+        private fun <P : PromptDelegate.BasePrompt> show(session: GeckoSession, prompt: P, make: (PromptAnswer<P>) -> PagePrompt): GeckoResult<PromptResponse> {
+            val answer = PromptAnswer(prompt)
+            // One at a time, and only from a page that is shown.
+            if (asking || !shows(session)) {
+                answer.dismiss()
+                return answer.result
+            }
+            val shown = make(answer)
+            shown.site = siteOf(session)
+            prompt.delegate = object : PromptDelegate.PromptInstanceDelegate {
+                override fun onPromptDismiss(prompt: PromptDelegate.BasePrompt) {
+                    if (this@Tab.prompt === shown) this@Tab.prompt = null
+                }
+            }
+            this@Tab.prompt = shown
+            return answer.result
         }
 
-        override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
-            // The page's own, not a popup's, and not an error page's.
-            if (view != webView || loadFailed || icon == null) return
-            loadedUrl?.let { onIcon(it, icon) }
+        override fun onAlertPrompt(session: GeckoSession, prompt: PromptDelegate.AlertPrompt) = show(session, prompt) { PagePrompt.Alert(it) }
+
+        override fun onButtonPrompt(session: GeckoSession, prompt: PromptDelegate.ButtonPrompt) = show(session, prompt) { PagePrompt.Confirm(it) }
+
+        override fun onTextPrompt(session: GeckoSession, prompt: PromptDelegate.TextPrompt) = show(session, prompt) { PagePrompt.Text(it) }
+
+        override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = show(session, prompt) { PagePrompt.LeavePage(it) }
+
+        override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = show(session, prompt) { PagePrompt.Resend(it) }
+
+        override fun onChoicePrompt(session: GeckoSession, prompt: PromptDelegate.ChoicePrompt) = show(session, prompt) { PagePrompt.Choice(it) }
+
+        override fun onDateTimePrompt(session: GeckoSession, prompt: PromptDelegate.DateTimePrompt) = show(session, prompt) { PagePrompt.DateTime(it) }
+
+        override fun onColorPrompt(session: GeckoSession, prompt: PromptDelegate.ColorPrompt) = show(session, prompt) { PagePrompt.Color(it) }
+
+        /** A popup the page opened without a tap stays blocked. */
+        override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt): GeckoResult<PromptResponse> =
+            GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
+
+        /** The page's own Share button, through Android's share sheet. */
+        override fun onSharePrompt(session: GeckoSession, prompt: PromptDelegate.SharePrompt): GeckoResult<PromptResponse> {
+            val text = listOfNotNull(prompt.text?.takeIf { it.isNotBlank() }, prompt.uri?.takeIf { it.isNotBlank() }).joinToString(" ")
+            if (text.isEmpty()) return GeckoResult.fromValue(prompt.confirm(PromptDelegate.SharePrompt.Result.FAILURE))
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_TEXT, text)
+                .apply { prompt.title?.takeIf { it.isNotBlank() }?.let { putExtra(Intent.EXTRA_TITLE, it) } }
+            return try {
+                context.startActivity(Intent.createChooser(send, null))
+                GeckoResult.fromValue(prompt.confirm(PromptDelegate.SharePrompt.Result.SUCCESS))
+            } catch (_: ActivityNotFoundException) {
+                GeckoResult.fromValue(prompt.confirm(PromptDelegate.SharePrompt.Result.FAILURE))
+            }
         }
 
-        override fun onReceivedTitle(view: WebView, title: String?) {
-            if (view != webView || loadFailed) return
-            // A restored page keeps its saved title until it has one of its own.
-            if (restoringTitle != null && title.isNullOrBlank()) return
-            this@Tab.title = title.orEmpty()
-            onPageChanged(this@Tab)
-            if (!title.isNullOrBlank()) loadedUrl?.let { onPageSeen(it, title) }
+        override fun onFilePrompt(session: GeckoSession, prompt: PromptDelegate.FilePrompt): GeckoResult<PromptResponse> {
+            val answer = PromptAnswer(prompt)
+            // One at a time, files only (not a folder), and only from a page that is shown.
+            if (asking || prompt.type == PromptDelegate.FilePrompt.Type.FOLDER || !shows(session)) {
+                answer.dismiss()
+            } else {
+                fileChooser = FileChooserAsk(context, answer)
+            }
+            return answer.result
         }
 
-        override fun onPermissionRequest(request: PermissionRequest) {
-            val known = request.resources.filter { it in MEDIA_RESOURCES }
-            val origin = SiteOrigin.of(request.origin?.toString())
-            // Only the camera and microphone are passed on. Anything else is refused, as WebView
-            // would without this.
-            if (known.isEmpty() || origin == null) return request.deny()
-            val wanted = known.map { if (it == PermissionRequest.RESOURCE_VIDEO_CAPTURE) SiteSetting.Camera else SiteSetting.Microphone }.toSet()
-            raise(PermissionAsk(origin, wanted, onGrant = { request.grant(known.toTypedArray()) }, onDeny = request::deny), request)
-        }
-
-        override fun onPermissionRequestCanceled(request: PermissionRequest) = withdraw(request)
-
-        override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
-            val site = SiteOrigin.of(origin) ?: return callback.invoke(origin, false, false)
-            // WebView never remembers the answer (retain = false): Site settings do.
-            val ask = PermissionAsk(
-                site,
-                setOf(SiteSetting.Location),
-                onGrant = { callback.invoke(origin, true, false) },
-                onDeny = { callback.invoke(origin, false, false) },
-            )
-            raise(ask, origin)
-        }
-
-        override fun onGeolocationPermissionsHidePrompt() = withdraw(permissionSource as? String)
-
-        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-            if (fullscreen != null) return callback.onCustomViewHidden()
-            fullscreen = FullscreenVideo(view, callback)
-        }
-
-        override fun onHideCustomView() {
-            fullscreen = null
-        }
-
-        override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
-            if (view != webView) return false
-            closePopup()
-            // Same Profile as the page, so the popup sees the page's sign-ins (spike result).
-            val window = newWebView(popup = true)
-            popup = window
-            // A new window starts at about:blank, which reports no page start. Its real address
-            // replaces this as soon as it loads.
-            popupUrl = "about:blank"
-            (resultMsg.obj as WebView.WebViewTransport).webView = window
-            resultMsg.sendToTarget()
-            return true
-        }
-    }
-
-    /** Navigation callbacks for a popup. */
-    private inner class PopupViewClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = isBlocked(view, request)
-
-        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-            if (view == popup) popupUrl = url
-        }
-
-        override fun onReceivedHttpAuthRequest(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
-            askForSignIn(view, handler, host, realm)
-        }
-
-        override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-            // Also catches redirects and same-document navigations inside the popup.
-            if (view == popup) popupUrl = url
-        }
-
-        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-            if (view == popup) closePopup()
-            return true
-        }
-    }
-
-    /** Lets a popup close itself with `window.close()`, as sign-in popups do when they finish. */
-    private inner class PopupChromeClient : QuietChromeClient() {
-        override fun onCloseWindow(window: WebView) {
-            if (window == popup) closePopup()
+        override fun onAuthPrompt(session: GeckoSession, prompt: PromptDelegate.AuthPrompt): GeckoResult<PromptResponse> {
+            val answer = PromptAnswer(prompt)
+            // Only from a page that is shown, and not over another question. A new sign-in
+            // replaces the one before.
+            if (!shows(session) || (asking && httpAuth == null)) {
+                answer.dismiss()
+                return answer.result
+            }
+            httpAuth?.cancel()
+            val asker = prompt.authOptions.uri.orEmpty()
+            val host = asker.toUri().host.orEmpty().ifEmpty { asker }
+            // The site's own words, its realm, are the part of the message in quotes.
+            val realm = REALM.find(prompt.message.orEmpty())?.groupValues?.get(1).orEmpty()
+            httpAuth = HttpAuthAsk(host, realm, answer)
+            return answer.result
         }
     }
 
     private companion object {
-        val MEDIA_RESOURCES = setOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE, PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+        /** The scheme of any address, `mailto:` and `data:` too, lowercased. */
+        fun schemeOf(uri: String): String? = runCatching { uri.toUri().scheme?.lowercase() }.getOrNull()
 
-        /**
-         * The size of the video in the fullscreen element, or of the first video inside it, as
-         * `[width,height]`, or null. A video in another site's frame can't be seen from here.
-         */
-        const val MEASURE_FULLSCREEN_VIDEO =
-            "(function(){var e=document.fullscreenElement||document.webkitFullscreenElement;if(!e)return null;" +
-                "var v=e.tagName==='VIDEO'?e:e.querySelector('video');return v?[v.videoWidth,v.videoHeight]:null})()"
+        const val SCROLL_RETRIES = 5
+
+        /** How long a page has to stay, after it stops loading, to count as seen and not a redirect's stop. */
+        const val REDIRECT_GRACE_MS = 500L
+        const val SCROLL_RETRY_MS = 150L
+        const val POPUP_OPEN_POLLS = 100
+        const val POPUP_OPEN_POLL_MS = 20L
+
+        /** The realm in GeckoView's sign-in message: “…”. */
+        val REALM = Regex("[“\"]([^”\"]*)[”\"]")
     }
 }
 
-/** What Find in page looks for, and which of its matches is the current one (1-based, 0 for none) of [total]. */
-data class FindState(val query: String, val current: Int, val total: Int)
+private typealias Uri = android.net.Uri
 
 /** What the person is holding on the page: a link, an image, or an image that is a link. */
 data class PressedItem(val link: String?, val image: String?)
