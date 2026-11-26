@@ -1429,8 +1429,10 @@ class BrowserStateTest {
         val personal = active(browser).profile
         val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
         val shortcut = runBlocking { repositories.shortcuts.add(work.id, "https://example.com/work", "Work page") }!!
-        // Personal is the Active Profile; the shortcut still opens in Work.
-        assertEquals(personal.id, active(browser).profile.id)
+        // A new Profile becomes the Active Profile, so Personal is made active again: the shortcut
+        // still opens in Work. Read before the database said so, Personal only seemed active.
+        runBlocking { profiles.activate(personal.id) }
+        await("personal active") { browser.active.value?.profile?.id == personal.id }
         assertTrue(runBlocking { browser.openShortcut(shortcut.id) })
         await("work active") { browser.active.value?.profile?.id == work.id }
         await("page open") { browser.active.value?.selected?.url == "https://example.com/work" }
