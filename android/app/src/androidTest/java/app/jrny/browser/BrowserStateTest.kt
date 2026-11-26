@@ -7,6 +7,10 @@ import app.jrny.browser.TestPages.await
 import app.jrny.browser.TestPages.onMain
 import app.jrny.browser.TestPages.runInPage
 import app.jrny.browser.TestPages.titled
+import app.jrny.browser.backup.BackupFailure
+import app.jrny.browser.backup.BackupStep
+import app.jrny.browser.backup.BackupSummary
+import app.jrny.browser.backup.ImportMode
 import app.jrny.browser.data.JrnyDatabase
 import app.jrny.browser.download.Download
 import app.jrny.browser.download.DownloadRequest
@@ -143,6 +147,55 @@ class BrowserStateTest {
     private fun awaitSaved(browser: BrowserState, id: TabId, url: String, title: String) {
         await("tab $id saved") {
             browser.active.value?.tabs?.any { it.id == id && it.url == url && it.title == title } == true
+        }
+    }
+
+    @Test
+    fun anEncryptedBackupOpensOnlyWithItsPasswordAndReplacingDeletesTheProfilesHere() {
+        val browser = newBrowser()
+        val first = active(browser).profile
+        runBlocking { repositories.bookmarks.add(first.id, "https://kept.example/", "Kept") }
+        val file = java.io.File(context.cacheDir, "test-backup-${System.nanoTime()}.json")
+        val uri = android.net.Uri.fromFile(file)
+        try {
+            onMain { browser.exportBackup(uri, "correct horse".toCharArray()) }
+            await("exported", BACKUP_WAIT_MS) { browser.backupStep == BackupStep.Exported }
+            assertFalse(file.readText().contains("kept.example"))
+
+            onMain {
+                browser.dismissBackup()
+                browser.openBackup(uri)
+            }
+            await("asked for the password", BACKUP_WAIT_MS) { browser.backupStep == BackupStep.NeedsPassword() }
+            onMain { browser.unlockBackup("wrong horse".toCharArray()) }
+            await("told it's wrong", BACKUP_WAIT_MS) { browser.backupStep == BackupStep.NeedsPassword(wrong = true) }
+            onMain { browser.unlockBackup("correct horse".toCharArray()) }
+            await("opened", BACKUP_WAIT_MS) { browser.backupStep is BackupStep.Ready }
+            assertEquals(BackupSummary(listOf("Personal"), bookmarks = 1, visits = 0, tabs = 0), (onMain { browser.backupStep } as BackupStep.Ready).summary)
+
+            onMain { browser.importBackup(ImportMode.Replace) }
+            await("imported", BACKUP_WAIT_MS) { browser.backupStep == BackupStep.Imported(ImportMode.Replace) }
+            // The same Profile again, under a new id; the one that was here waits for its web data to go.
+            await("replaced") { browser.active.value?.profile?.let { it.name == "Personal" && it.id != first.id } == true }
+            assertEquals(listOf(first.id), runBlocking { profiles.pendingDeletion() })
+            val restored = active(browser).profile
+            assertEquals(listOf("https://kept.example/"), runBlocking { repositories.bookmarks.bookmarks(restored.id).first().map { it.url } })
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun aFileThatIsNotABackupIsTold() {
+        val browser = newBrowser()
+        val file = java.io.File(context.cacheDir, "test-not-backup-${System.nanoTime()}.json").apply { writeText("{\"hello\":1}") }
+        try {
+            onMain { browser.openBackup(android.net.Uri.fromFile(file)) }
+            await("told") { browser.backupStep == BackupStep.Failed(BackupFailure.NotABackup) }
+            onMain { browser.importBackup(ImportMode.Replace) }
+            assertEquals(BackupStep.Failed(BackupFailure.NotABackup), onMain { browser.backupStep })
+        } finally {
+            file.delete()
         }
     }
 
@@ -1355,4 +1408,8 @@ class BrowserStateTest {
         }
     }
 
+    private companion object {
+        /** Deriving the backup's key takes the real work factor here: a few seconds on an emulator. */
+        const val BACKUP_WAIT_MS = 60_000L
+    }
 }

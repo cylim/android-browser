@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // GeckoView ships one AAR per ABI. x86_64 runs on the emulators (locally and in CI); build for a
@@ -54,8 +55,8 @@ dependencies {
     implementation(libs.guava)
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
-    // See the version catalog: Room's migration tests need this version in the app.
-    implementation(libs.kotlinx.serialization.core)
+    // Backup files (SPEC, "Backup").
+    implementation(libs.kotlinx.serialization.json)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

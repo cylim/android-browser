@@ -5,8 +5,7 @@ agp = "9.5.2"
 kotlin = "2.4.21"
 ksp = "2.3.14"
 room = "2.8.5"
-# Room's MigrationTestHelper needs 1.8 or later. Lifecycle brings 1.7.3 into the app, and the test
-# APK shares the app's process and so its version, so the app carries a newer one (backward compatible).
+# Backup files are JSON (SPEC, "Backup"). Room's MigrationTestHelper also needs 1.8 or later.
 kotlinx-serialization = "1.13.0"
 # Held at 2026.09.00: with 2026.11.01 (Compose 1.13), the page sometimes keeps the keyboard's
 # height after the keyboard has gone and is left with no room (StartPageUiTest's History tests).
@@ -36,7 +35,7 @@ guava = { module = "com.google.guava:guava", version.ref = "guava" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
-kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
@@ -53,3 +52,4 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

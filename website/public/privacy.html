@@ -100,6 +100,8 @@
         </div>
       </div>
       <p class="note">One Profile can't see another Profile's data. None of this is sent to us or to anyone else.</p>
+      <h3>Backup files you make</h3>
+      <p>Settings → Export backup saves a copy of every Profile's name and look, bookmarks and Folders, history, open Tabs and Site settings, with your settings and Site Rules, to a file in a place you choose. Cookies, site storage, sign-ins, Private Tabs and downloaded files are never in it. The file is encrypted with a password you set (AES-256-GCM, with a key derived from the password by PBKDF2), unless you turn that off; then anyone who has the file can read it. Okapi sends the file nowhere itself. If you save it to a cloud drive, that drive's provider holds it, under their own terms. Import backup reads a file you choose, only when you ask.</p>
     </section>
 
     <section id="leaves" class="band wrap" aria-labelledby="leaves-title">
@@ -230,7 +232,8 @@
       <ul class="checks">
         <li><b>No server.</b> We have no copy of your data to lose.</li>
         <li><b>Separate Profiles.</b> Each Profile has its own web data store. A Move to another Profile carries only the page's address.</li>
-        <li><b>Private storage.</b> App data stays in the app's private storage, and backups and device transfers leave it out.</li>
+        <li><b>Private storage.</b> App data stays in the app's private storage, and Android's cloud backups and device transfers leave it out.</li>
+        <li><b>Encrypted backups.</b> A backup file you export is encrypted with your password unless you choose otherwise.</li>
         <li><b>Suggestions over HTTPS.</b> Search suggestion requests use HTTPS and carry no cookies.</li>
         <li><b>Cookies stay with their site.</b> During a download, each redirect step receives only its own cookies, so one site's session cookies don't go to another site.</li>
         <li><b>Quiet logs.</b> Release builds don't write addresses, page titles or cookies to the device log.</li>

@@ -1,5 +1,9 @@
 package app.jrny.browser.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,6 +59,7 @@ class SettingsUi(
     val version: String = "",
     /** Clears what is chosen from the Active Profile (SPEC, "Clear browsing data"). */
     val clearBrowsingData: (Set<BrowsingData>) -> Unit = {},
+    val backup: BackupUi = BackupUi(),
 )
 
 /**
@@ -89,6 +94,53 @@ fun SettingsPanel(
                 clearing = false
             },
             onDismiss = { clearing = false },
+        )
+    }
+    // The password waits here, in memory only, while the person chooses where the backup goes.
+    var exportPassword by remember { mutableStateOf<CharArray?>(null) }
+    // These survive Android recreating the activity meanwhile; the password doesn't.
+    var askingExport by rememberSaveable { mutableStateOf(false) }
+    var exportEncrypted by rememberSaveable { mutableStateOf(false) }
+    // A place already chosen for a backup whose password was lost: the dialog asks again for it.
+    var exportTarget by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BACKUP_TYPE)) { target ->
+        val password = exportPassword
+        exportPassword = null
+        when {
+            // Back to the dialog, which still has what was typed.
+            target == null -> password?.fill('\u0000')
+            // Never written plain because the password was lost on the way.
+            exportEncrypted && password == null -> {
+                exportTarget = target
+                askingExport = true
+            }
+            else -> {
+                askingExport = false
+                ui.backup.export(target, password)
+            }
+        }
+    }
+    val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { source ->
+        if (source != null) ui.backup.open(source)
+    }
+    if (askingExport) {
+        ExportBackupDialog(
+            onExport = { password ->
+                val chosen = exportTarget
+                if (chosen != null) {
+                    exportTarget = null
+                    askingExport = false
+                    ui.backup.export(chosen, password)
+                } else {
+                    exportPassword = password
+                    exportEncrypted = password != null
+                    saveBackup.launch(backupFileName())
+                }
+            },
+            onDismiss = {
+                askingExport = false
+                exportTarget = null
+            },
         )
     }
     PanelFrame(
@@ -147,6 +199,23 @@ fun SettingsPanel(
                 onClick = { clearing = true },
             )
 
+            Section(R.string.backup)
+            Link(
+                title = R.string.export_backup,
+                explanation = stringResource(R.string.export_backup_explanation),
+                value = "",
+                tag = "setting-export-backup",
+                onClick = { askingExport = true },
+            )
+            Link(
+                title = R.string.import_backup,
+                explanation = stringResource(R.string.import_backup_explanation),
+                value = "",
+                tag = "setting-import-backup",
+                // Some file managers don't call a .json file JSON.
+                onClick = { openBackup.launch(arrayOf(BACKUP_TYPE, "application/octet-stream", "text/plain")) },
+            )
+
             Section(R.string.theme)
             Column(Modifier.selectableGroup()) {
                 ThemeChoice.entries.forEach { theme ->
@@ -194,6 +263,12 @@ fun SettingsPanel(
         }
     }
 }
+
+/** Backup files are JSON, encrypted or not (SPEC, "Backup"). */
+private const val BACKUP_TYPE = "application/json"
+
+/** The name the save dialog offers, with today's date: `okapi-backup-2026-11-25.json`. */
+private fun backupFileName(): String = "okapi-backup-${java.time.LocalDate.now()}.json"
 
 @Composable
 private fun Section(title: Int) {

@@ -281,9 +281,19 @@ Holding a link or an image opens a menu:
 - Password managers work through the Android Autofill framework. Okapi does not store passwords itself.
 - Passkeys are not supported until the app is approved as a privileged browser ([ADR 0006](adr/0006-geckoview-as-engine.md)).
 
+## Backup
+
+- Settings → "Export backup" saves every live Profile's name and look, bookmarks and Folders, history, open Tabs (address, title, scroll position, which is selected and which are Pinned Tabs), Site Rules and Site settings, with the app settings, to one file. The person picks the place with Android's file picker; Okapi sends the file nowhere itself.
+- Never in a backup: cookies, site storage and other web data, so no sign-in; Private Tabs; downloaded files and the list of downloads; recently closed Tabs; Home Screen Shortcuts; site icons.
+- A backup is encrypted by default, with a password typed twice, of at least 8 characters: AES-256-GCM with a key derived by PBKDF2-HMAC-SHA256 (600,000 iterations). The dialog says that a forgotten password can't be recovered. Turning the password off saves plain JSON, and the dialog warns that anyone with the file can read it.
+- Settings → "Import backup" opens a file with Android's file picker. An encrypted one asks for its password and says when it's wrong. The dialog then names the backup's Profiles and counts its bookmarks, visits and open Tabs, and offers two ways to import it, Merge first:
+  - **Merge** adds what is missing. Nothing here is changed or removed: a Profile keeps every visit it has, and only the newest incoming visits that fit under its limit are added. A backup Profile joins the Profile here with the same name, ignoring case; the others are added. A bookmark or Folder the Profile already has (same address, or same name), a visit at the same time, a Tab with the same address, a Site Rule's pattern or a site's setting stays as it is here; an added Tab becomes the Pinned Tab only of a bookmark the import added. The Active Profile, the selected Tabs and the app settings stay.
+  - **Replace** deletes every Profile here, as deleting a Profile does, and adds the backup's Profiles with its settings; the backup's Active Profile becomes the Active Profile. The dialog warns that every Account will be signed out.
+- The Profiles and what they hold are imported in one database transaction: all of it or none of it. Replace's app settings are written right after. The file format is in [ADR 0007](adr/0007-backup-file-format.md). What Okapi wouldn't store itself is left out, such as an address that isn't a web address or an unknown Site setting. A file from a later version of Okapi, or one that isn't a backup, is refused with a message.
+
 ## Data protection
 
-- `android:allowBackup="false"`, and `dataExtractionRules` exclude everything from cloud backup and device-to-device transfer. Session cookies must never leave the device.
+- `android:allowBackup="false"`, and `dataExtractionRules` exclude everything from cloud backup and device-to-device transfer. Session cookies must never leave the device, and a backup the person exports holds none (see "Backup").
 - The app has no telemetry and no crash-reporting SDK.
 - The engine sends no telemetry and no crash reports: Okapi sets up neither in GeckoView.
 - Logs never contain addresses, page titles or cookies in release builds. GeckoView's console output and debug logging are off, and release builds strip debug and verbose log calls, GeckoView's included.

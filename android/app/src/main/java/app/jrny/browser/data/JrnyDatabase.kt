@@ -934,6 +934,7 @@ abstract class JrnyDatabase : RoomDatabase() {
     abstract fun siteSettings(): SiteSettingDao
     abstract fun closedTabs(): ClosedTabDao
     abstract fun shortcuts(): ShortcutDao
+    abstract fun backup(): BackupDao
 
     companion object {
         fun open(context: Context): JrnyDatabase =

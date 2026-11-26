@@ -51,6 +51,10 @@ _Avoid_: Transfer, send
 Opening a Tab's current address as a new Tab in another Profile while keeping the original.
 _Avoid_: Duplicate, copy
 
+**Backup**:
+A file the person exports from Okapi with every Profile's bookmarks, history, open Tabs, Site Rules and Site settings, and the app settings, but no web data, so no Account. Importing one either merges it, adding only what is missing, or replaces every Profile on the device with its own.
+_Avoid_: Sync, export (as a noun), archive
+
 ### Links
 
 **Incoming Link**:
