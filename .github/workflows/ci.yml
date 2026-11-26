@@ -179,7 +179,7 @@ jobs:
           script: |
             adb shell settings put global hide_error_dialogs 1
             adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural
-            test "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 2
+            for i in $(seq 30); do [ "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 2 ] && exit 0; sleep 1; done; exit 1
             ./gradlew connectedDebugAndroidTest || { grep -rh -A8 '<failure' app/build/outputs/androidTest-results; exit 1; }
 
       - name: Upload the device test reports
