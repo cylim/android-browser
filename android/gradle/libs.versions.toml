@@ -1,5 +1,5 @@
 [versions]
-agp = "9.5.2"
+agp = "9.5.3"
 # AGP 9 compiles Kotlin itself. This pins the Kotlin version it uses, and the Compose
 # compiler plugin must match it.
 kotlin = "2.4.21"
@@ -9,7 +9,7 @@ room = "2.8.5"
 kotlinx-serialization = "1.13.0"
 # Held at 2026.09.00: with 2026.11.01 (Compose 1.13), the page sometimes keeps the keyboard's
 # height after the keyboard has gone and is left with no room (StartPageUiTest's History tests).
-compose-bom = "2026.09.00"
+compose-bom = "2026.11.01"
 activity-compose = "1.13.0"
 core-ktx = "1.19.1"
 # The browser engine (ADR 0006). Mozilla ships one AAR per ABI; app/build.gradle.kts picks one.
