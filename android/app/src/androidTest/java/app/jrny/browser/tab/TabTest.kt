@@ -387,7 +387,14 @@ class TabTest {
             onMain { tab.load(address) }
             // The engine gives up after many rounds. The server can see every round before the Tab
             // hears that the page started, on a slow device, so the start comes first, then the end.
-            await("load started") { tab.isLoading }
+            // Watched every 5 ms, not every 50 like await: the start is remembered once seen.
+            var started = false
+            val deadline = System.currentTimeMillis() + 15_000
+            while (!started) {
+                check(System.currentTimeMillis() < deadline) { "Timed out waiting for: load started" }
+                started = onMain { tab.isLoading }
+                if (!started) Thread.sleep(5)
+            }
             await("load failed") { server.requests.size >= 15 && !tab.isLoading && tab.url == address }
             Thread.sleep(500)
             assertEquals("", onMain { tab.title })

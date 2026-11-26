@@ -410,6 +410,7 @@ class Tab(
         restoring = false
         restoringTitle = null
         addressRequested = true
+        personLoadUri = address
         url = address
         onPageChanged(this)
         loadInto(session, address)
@@ -467,10 +468,11 @@ class Tab(
     private var nextLoadByPerson = false
 
     /**
-     * True when the person started the load now under way with a tap, kept through its redirects
-     * until the next load starts. Unlike [nextLoadByPerson], it lasts until the response arrives.
+     * The address of the top-level load the person started, with a tap or an address they typed,
+     * followed through its redirects until a page arrives. Only a response from that address is
+     * theirs: a file a subframe or the page loads later isn't, though a tap brought the page.
      */
-    private var loadStartedByPerson = false
+    private var personLoadUri: String? = null
 
     /** True while a new session loads the empty page it starts with, which no one asked for. */
     private var loadingOwnBlank = false
@@ -647,8 +649,8 @@ class Tab(
      */
     private fun offerDownload(from: GeckoSession, response: WebResponse) {
         val request = downloadRequest(response)
-        // Read before the state below is reset: a tap, or an address the person typed.
-        val byPerson = from == session && (loadStartedByPerson || addressRequested)
+        // Only the response to the load the person started, read before the state below is reset.
+        val byPerson = from == session && response.uri == personLoadUri
         when (from) {
             session -> {
                 // The page before is still what shows, with its title.
@@ -725,7 +727,9 @@ class Tab(
             if (request.target == NavigationDelegate.TARGET_WINDOW_NEW) return GeckoResult.allow()
             if (from == session && !request.isRedirect) {
                 nextLoadByPerson = request.hasUserGesture
-                loadStartedByPerson = request.hasUserGesture
+                personLoadUri = request.uri.takeIf { request.hasUserGesture }
+            } else if (from == session && personLoadUri != null) {
+                personLoadUri = request.uri
             }
             // The Tab's page and its popup alike.
             if (WebAddress.isWebAddress(request.uri)) applyMode(from, wantsDesktop(SiteOrigin.of(request.uri)))
@@ -751,6 +755,8 @@ class Tab(
 
         override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
             if (session != this@Tab.session || url == null || !loadsHere(url)) return
+            // A page has arrived: what loads from here on wasn't the person's tap.
+            personLoadUri = null
             // Okapi's error page shows in the failed page's place: the address stays the page's.
             if (ErrorPages.isErrorPage(url) || (loadFailed && url == "about:blank")) return
             // A new session starts at an empty page of its own, which no one went to.
