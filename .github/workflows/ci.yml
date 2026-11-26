@@ -174,8 +174,12 @@ jobs:
           # No "isn't responding" dialogs from the emulator's own apps: one of those takes the
           # focus from the app's window, and every test that presses Back then times out.
           # On failure, print each failing test so the log says what broke.
+          # Gesture navigation, as on google_apis images and today's phones and tablets: the AOSP
+          # image starts with three buttons, whose bar takes room the layout tests count on.
           script: |
             adb shell settings put global hide_error_dialogs 1
+            adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural
+            test "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 2
             ./gradlew connectedDebugAndroidTest || { grep -rh -A8 '<failure' app/build/outputs/androidTest-results; exit 1; }
 
       - name: Upload the device test reports
