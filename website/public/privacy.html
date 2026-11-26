@@ -48,7 +48,7 @@
         <p class="eyebrow">Effective date: <time datetime="2026-11-26">26 November 2026</time></p>
         <h1 id="pp-title">Privacy policy</h1>
         <p class="lede">This policy covers Okapi by JRNY, the Android app with the application ID <code>app.jrny.browser</code>. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.</p>
-        <p class="lede">In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, and to the servers of the filter lists that block ads and trackers.</p>
+        <p class="lede">In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, and to addons.mozilla.org when you add extensions or Okapi checks for their updates.</p>
       </div>
       <dl class="reqs">
         <div><dt>Server</dt><dd>None</dd></div>
@@ -63,7 +63,7 @@
         <h2 id="who-title">Who makes Okapi</h2>
         <!-- TODO(owner): replace the next paragraph with the developer name, exactly as Google Play shows it. -->
         <p class="note">TODO(owner): developer name, exactly as Google Play shows it.</p>
-        <p>Okapi is free software under the <a href="https://github.com/cylim/android-browser/blob/main/LICENSE">MIT License</a>. It includes uBlock Origin, unchanged, which is free software under the GPL-3.0 license. Okapi is built in public on <a href="https://github.com/cylim/android-browser">GitHub</a>. In this policy, "we" means the people who maintain it.</p>
+        <p>Okapi is free software under the <a href="https://github.com/cylim/android-browser/blob/main/LICENSE">MIT License</a>. It carries uBlock Origin, unchanged, which is free software under the GPL-3.0 license, and installs it on the first start. Okapi is built in public on <a href="https://github.com/cylim/android-browser">GitHub</a>. In this policy, "we" means the people who maintain it.</p>
         <p>We run no server for the app, and the app sends nothing to us.</p>
       </div>
     </section>
@@ -97,6 +97,7 @@
             <li>Theme and compact rows</li>
             <li>Site Rules</li>
             <li>Link wrappers</li>
+            <li>Extensions you add, with their settings and data</li>
             <li>uBlock Origin's settings, filter lists, your own filters, trusted sites and counts of what it blocked</li>
           </ul>
         </div>
@@ -160,9 +161,19 @@
           <h3 id="l-blocking">Filter lists for ad and tracker blocking</h3>
         </div>
         <div class="feature-body">
-          <p>Okapi blocks ads and trackers with uBlock Origin, which is part of the app. uBlock Origin decides what to block on your device, from its filter lists. It checks every hour while the app runs whether a list needs updating, and downloads a list again once the list's own expiry has passed, usually after a few hours to a few days.</p>
+          <p>Okapi blocks ads and trackers with uBlock Origin, an extension that Okapi installs on the first start. You can turn it off or remove it in Settings &rarr; Extensions. uBlock Origin decides what to block on your device, from its filter lists. It checks every hour while the app runs whether a list needs updating, and downloads a list again once the list's own expiry has passed, usually after a few hours to a few days.</p>
           <p>It downloads the lists it uses by default from the lists' own servers: <code>ublockorigin.github.io</code>, <code>ublockorigin.pages.dev</code>, <code>cdn.jsdelivr.net</code> and <code>raw.githubusercontent.com</code> for uBlock Origin's own lists, EasyList and EasyPrivacy; <code>filters.adtidy.org</code> for AdGuard Mobile; <code>pgl.yoyo.org</code> for Peter Lowe's list; <code>malware-filter.gitlab.io</code> and <code>curbengh.github.io</code> for the Online Malicious URL Blocklist; and <code>publicsuffix.org</code> for the Public Suffix List. A list you turn on in its dashboard comes from that list's own server. These servers receive your IP address, the address of the list and the browser details the engine sends. They receive no cookies of any Profile and nothing about the pages you open.</p>
           <p>uBlock Origin is on by default. To let one site load everything, turn uBlock Origin off for that site in its popup: page menu &rarr; uBlock Origin. Its settings, your own filters and its trusted sites stay on your device and apply in every Profile.</p>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="l-extensions">
+        <div class="feature-name">
+          <h3 id="l-extensions">Extensions</h3>
+        </div>
+        <div class="feature-body">
+          <p>When you add an extension from addons.mozilla.org, the engine downloads it from Mozilla's servers, as your browser downloads any file, and checks Mozilla's signature on it. Once a day, and when you tap Check for updates, Okapi asks addons.mozilla.org whether your extensions have updates. The engine sends Mozilla each extension's id and version, with details such as the engine's version, that it runs on Android, the device's processor type and your language. It sends nothing about the pages you open.</p>
+          <p>Extensions you add are made by their developers, not by us. An extension can see and change the pages its permissions allow, in every Profile, and can send data to its developer under the developer's own policy. Before you add one, Okapi lists what it can do and what it says it sends its developer. To stop an extension, turn it off or remove it in Settings &rarr; Extensions. Removing it deletes the data it kept on your device.</p>
         </div>
       </article>
 

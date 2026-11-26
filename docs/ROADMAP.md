@@ -55,7 +55,8 @@ Added to v1 after Milestone 5:
   3. Page tools: Find in page, Desktop site, text size, dark pages, and pull to refresh.
   4. Tabs and data: Reopen closed Tab, Clear browsing data, and Add to Home screen.
 - Backup: export Okapi's own data to a file, encrypted by default, and import it by merging or replacing.
-- Content blocking, moved up from 0.2: uBlock Origin built in, on by default, controlled with its own popup and dashboard. Its trusted sites apply in every Profile, and it keeps its lists up to date from the lists' own servers, not from a service of ours ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)).
+- Extensions, moved up from after 0.2: install them from addons.mozilla.org or a file, turn them on or off, allow them in Private Tabs, open their popups and settings, and keep them updated. They work in every Profile, and the UI says so ([ADR 0009](adr/0009-people-install-extensions.md)).
+- Content blocking, moved up from 0.2: uBlock Origin installed by default on the first start, removable like any extension. It keeps its lists up to date from the lists' own servers, not from a service of ours ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)).
 
 ## Before the first release: GeckoView
 
@@ -72,7 +73,6 @@ Added to v1 after Milestone 5:
 ## After the first release
 
 - Web notifications, through GeckoView, without a Google push service.
-- Extensions, which GeckoView can run. They would see every Profile's Tabs, so the UI must say so.
 
 - Passkeys, after approval as a privileged browser.
 - Custom Tabs service.
