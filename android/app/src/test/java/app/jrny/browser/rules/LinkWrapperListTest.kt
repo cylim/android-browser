@@ -75,6 +75,16 @@ class LinkWrapperListTest {
     }
 
     @Test
+    fun `a changed wrapper of ones own keeps its place`() {
+        val two = start.save(null, proofpoint).save(null, mimecast)
+        val changed = wrapper("urldefense.example", "u", "url")
+        assertEquals(defaults + changed + mimecast, two.save(proofpoint, changed).all)
+        // Moved to another site, it keeps its place too.
+        val moved = wrapper("urldefense.example.org", "u")
+        assertEquals(defaults + moved + mimecast, two.save(proofpoint, moved).all)
+    }
+
+    @Test
     fun `changed back to the default, the list is the default list again`() {
         assertEquals(start, start.save(google, googleQ).save(googleQ, google))
         assertEquals(start, start.delete(slack).save(null, slack))

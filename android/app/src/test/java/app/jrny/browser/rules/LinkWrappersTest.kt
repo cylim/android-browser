@@ -107,6 +107,30 @@ class LinkWrappersTest {
     }
 
     @Test
+    fun `an empty parameter names no address, as in a link copied from Google's results`() {
+        assertEquals(
+            "https://github.com/",
+            defaults.unwrap("https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&url=https%3A%2F%2Fgithub.com%2F&usg=AOv"),
+        )
+        assertEquals("https://github.com/", defaults.unwrap("https://www.google.com/url?q&url=https%3A%2F%2Fgithub.com%2F"))
+    }
+
+    @Test
+    fun `a parameter written another way is still that parameter, since the site may read it so`() {
+        // Some sites ignore the case of a name, decode it, or drop a tab or line break in it.
+        listOf("URL", "Url", "u%72l", "u%52L", "u\trl", "ur\nl").forEach { name ->
+            assertNull(
+                name,
+                defaults.unwrap("https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2F&$name=https%3A%2F%2Fevil.test%2F"),
+            )
+            // Written another way alone, it still carries the address.
+            assertEquals(name, "https://github.com/", defaults.unwrap("https://eur01.safelinks.protection.outlook.com/?$name=https%3A%2F%2Fgithub.com%2F"))
+        }
+        // A name that can't be decoded may be any name.
+        assertNull(defaults.unwrap("https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2F&u%7=https%3A%2F%2Fevil.test%2F"))
+    }
+
+    @Test
     fun `the default list has one wrapper per site`() {
         assertEquals(LinkWrappers.DEFAULT.size, LinkWrappers.DEFAULT.distinctBy { it.pattern }.size)
     }

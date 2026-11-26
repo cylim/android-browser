@@ -61,7 +61,7 @@ class SiteRulesUiTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val server = TestServer(mapOf("/start" to "<title>start</title>"))
+    private val server = TestServer(mapOf("/start" to "<title>start</title>", WRAPPED to "<title>wrapped</title>"))
     private lateinit var tab: Tab
     private var rules by mutableStateOf(emptyList<SiteRule>())
     private var linkOffer by mutableStateOf<LinkOffer?>(null)
@@ -230,6 +230,19 @@ class SiteRulesUiTest {
         compose.onNodeWithTag("rule-use-page-site").assertDoesNotExist()
         compose.onNodeWithTag("save-site-rule").performClick()
         assertEquals(listOf(Triple(null, site, TestProfiles.personal)), saved)
+    }
+
+    @Test
+    fun onALinkWrappersPageTheEditorOffersTheSiteTheLinkCarries() {
+        val site = SitePattern.forSiteOf(server.url("/"))!!.text
+        wrappers = LinkWrapperList.DEFAULT.save(null, LinkWrapper.parse("$site/wrap", "to")!!)
+        compose.runOnUiThread { tab.load(server.url(WRAPPED)) }
+        compose.waitUntil(15_000) { !tab.isLoading && tab.title == "wrapped" }
+        show(deviceSize())
+        openSiteRules()
+        compose.onNodeWithTag("add-first-site-rule").performClick()
+
+        compose.onNodeWithTag("rule-use-page-site").assertTextEquals("Use elsewhere.example")
     }
 
     @Test
@@ -475,5 +488,8 @@ class SiteRulesUiTest {
     private companion object {
         val PHONE_PORTRAIT = DpSize(411.dp, 891.dp)
         val TABLET_LANDSCAPE = DpSize(1280.dp, 800.dp)
+
+        /** A link through the test server's wrapper at /wrap, which carries its address in "to". */
+        const val WRAPPED = "/wrap?to=https%3A%2F%2Felsewhere.example%2Fpage"
     }
 }

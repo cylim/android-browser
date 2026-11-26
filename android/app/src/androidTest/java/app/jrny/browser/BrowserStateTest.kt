@@ -391,6 +391,44 @@ class BrowserStateTest {
     }
 
     @Test
+    fun aMovedWrappedLinkThatOnlyTheWrappersRuleSentOffersANewRuleForTheSiteItCarries() {
+        val wrapped = "/wrap?to=" + java.net.URLEncoder.encode("https://elsewhere.example/page", Charsets.UTF_8)
+        TestServer(mapOf(wrapped to "<title>wrapped elsewhere</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(work.id) }
+            await("work active") { browser.active.value?.profile?.id == work.id }
+            val site = SitePattern.forSiteOf(server.url("/"))!!.text
+            onMain {
+                browser.saveLinkWrapper(null, LinkWrapper.parse("$site/wrap", "to")!!)
+                browser.saveSiteRule(null, SitePattern.parse(site)!!, personal)
+            }
+            await("rule saved") { browser.siteRules.value.size == 1 }
+            val wrapperRule = onMain { browser.siteRules.value.single() }
+
+            // No rule covers the carried address, so the wrapper's site decides.
+            onMain { browser.openIncomingLink(server.url(wrapped)) }
+            await("opened in Personal") { browser.incomingLinkTab != null && browser.active.value?.profile?.id == personal.id }
+            show(browser, onMain { browser.incomingLinkTab!! })
+            val moving = active(browser).selected
+            onMain { browser.moveTab(moving, work) }
+
+            // "Always" is about the carried site. Changing the wrapper's rule would send every
+            // link through that wrapper to Work.
+            await("rule offered") { browser.linkOffer is LinkOffer.Always }
+            val offer = onMain { browser.linkOffer } as LinkOffer.Always
+            assertEquals("elsewhere.example" to null, offer.pattern.text to offer.rule)
+            onMain { browser.acceptRuleOffer() }
+            await("rule saved") { browser.linkOffer is LinkOffer.RuleSaved }
+            assertEquals(
+                setOf(wrapperRule.pattern.text to personal.id, "elsewhere.example" to work.id),
+                onMain { browser.siteRules.value }.map { it.pattern.text to it.profileId }.toSet(),
+            )
+        }
+    }
+
+    @Test
     fun movingAnIncomingLinkOffersARuleForItsSiteAndTakingItSendsTheNextLinkThere() {
         TestServer(mapOf("/a" to "<title>a</title>", "/b" to "<title>b</title>")).use { server ->
             val browser = newBrowser()

@@ -956,12 +956,16 @@ class BrowserState(
             // to that Profile. The rule that decides for this link now is the one to change:
             // a new rule for the whole site would lose to a narrower one that names another
             // Profile. Without a rule, the link's site gets one.
-            // A Tab still on a Link Wrapper's page offers the site of the address it carries.
+            // A Tab still on a Link Wrapper's page offers the site of the address it carries, and
+            // a rule that covers only the wrapper's site isn't changed: every link through that
+            // wrapper would follow.
             val wrappers = linkWrappers.value.wrappers
+            val carried = wrappers.unwrap(url) ?: url
             val deciding = siteRuleRepository.ruleFor(url, wrappers)
-            val pattern = deciding?.pattern ?: SitePattern.forSiteOf(wrappers.unwrap(url) ?: url)
+            val changing = deciding?.takeIf { it.pattern.matches(carried) }
+            val pattern = changing?.pattern ?: SitePattern.forSiteOf(carried)
             if (wasIncomingLink && pattern != null && deciding?.profileId != profile.id) {
-                offer(LinkOffer.Always(moved, pattern, profile, deciding))
+                offer(LinkOffer.Always(moved, pattern, profile, changing))
             }
         }
     }

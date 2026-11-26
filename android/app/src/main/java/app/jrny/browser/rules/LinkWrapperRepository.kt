@@ -5,7 +5,6 @@ import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -26,9 +25,14 @@ class LinkWrapperRepository(private val preferences: SharedPreferences, private 
 
     val list: StateFlow<LinkWrapperList> = state.asStateFlow()
 
-    /** Changes the list as [change] says, at once for every reader, and keeps it. */
+    /**
+     * Changes the list as [change] says, at once for every reader, and keeps it. One change at a
+     * time, so the list kept is always the newest.
+     */
+    @Synchronized
     fun update(change: (LinkWrapperList) -> LinkWrapperList) {
-        val changed = state.updateAndGet(change)
+        val changed = change(state.value)
+        state.value = changed
         preferences.edit {
             if (changed.isDefault) {
                 remove(KEY)

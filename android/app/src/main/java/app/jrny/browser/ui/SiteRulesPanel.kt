@@ -158,7 +158,8 @@ fun SiteRulesPanel(
             rules = rules,
             profiles = profiles.all,
             preselected = profiles.active,
-            pageSite = SitePattern.forSiteOf(pageUrl),
+            // On a Link Wrapper's page, the site of the address it carries, as a Move offers.
+            pageSite = SitePattern.forSiteOf(pageUrl?.let { ui.wrappers.wrappers.unwrap(it) ?: it }),
             onSave = { pattern, profile ->
                 ui.save(edit.rule, pattern, profile)
                 editing = null

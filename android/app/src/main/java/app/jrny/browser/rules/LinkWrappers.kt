@@ -99,11 +99,17 @@ data class LinkWrapperList(
      * replaces for its site goes.
      */
     fun save(existing: LinkWrapper?, wrapper: LinkWrapper): LinkWrapperList {
-        val moved = existing != null && existing.pattern != wrapper.pattern
-        val kept = own.filter { it.pattern != wrapper.pattern }
-        val index = kept.indexOfFirst { it.pattern == existing?.pattern }
-        val changed = if (index >= 0) kept.toMutableList().apply { this[index] = wrapper } else kept + wrapper
-        val gone = if (moved) removed + existing!!.pattern else removed
+        val target = existing?.pattern
+        // One of the person's own takes [wrapper] in its place; any other for its site goes.
+        val replaced = own.mapNotNull {
+            when (it.pattern) {
+                target -> wrapper
+                wrapper.pattern -> null
+                else -> it
+            }
+        }
+        val changed = if (own.any { it.pattern == target }) replaced else replaced + wrapper
+        val gone = if (target != null && target != wrapper.pattern) removed + target else removed
         return LinkWrapperList(changed, gone - wrapper.pattern, defaults).normalized()
     }
 
@@ -165,14 +171,18 @@ class LinkWrappers(val all: List<LinkWrapper>) {
      * link carries none that can be trusted.
      */
     private fun carried(url: String): String? {
-        val names = all.filter { it.pattern.matches(url) }.flatMap { it.parameters }.toSet()
+        val names = all.filter { it.pattern.matches(url) }.flatMap { it.parameters }.map(String::lowercase).toSet()
         if (names.isEmpty()) return null
         // The fragment never reaches the site, so only the query before it counts.
-        val values = url.substringBefore('#').substringAfter('?', "")
-            .split('&')
-            .filter { it.substringBefore('=') in names }
-            .map { percentDecode(it.substringAfter('=', "")) ?: return null }
-        return values.distinct().singleOrNull()?.takeIf { it.length <= MAX_URL && WebAddress.hostOf(it).isNotEmpty() }
+        val values = url.substringBefore('#').substringAfter('?', "").split('&').mapNotNull { pair ->
+            // The site may read a name in another case, percent-encoded, or with a tab or line
+            // break in it as the same name, and a name that can't be decoded as any name.
+            val name = percentDecode(pair.substringBefore('=').filterNot { it in "\t\r\n" }) ?: return null
+            if (name.lowercase() in names) percentDecode(pair.substringAfter('=', "")) ?: return null else null
+        }
+        // An empty value names no address, as the empty q next to url in a copied Google result.
+        return values.filter(String::isNotEmpty).distinct().singleOrNull()
+            ?.takeIf { it.length <= MAX_URL && WebAddress.hostOf(it).isNotEmpty() }
     }
 
     companion object {
