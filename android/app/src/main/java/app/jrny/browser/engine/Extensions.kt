@@ -256,10 +256,15 @@ object Extensions {
         val body = (file.source as? DownloadSource.Response) ?: return
         val app = context
         if (target == null || app == null) return body.discard()
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                body.body?.use { input -> app.contentResolver.openOutputStream(target)?.use { input.copyTo(it) } }
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    val input = checkNotNull(body.body)
+                    input.use { checkNotNull(app.contentResolver.openOutputStream(target)).use { output -> input.copyTo(output) } }
+                }.isSuccess
             }
+            // The page's file was read once and is gone: the person makes it again to retry.
+            if (!saved) notice = ExtensionNotice.SaveFailed(file.fileName)
         }
     }
 
@@ -600,6 +605,9 @@ sealed class ExtensionNotice {
 
     /** Checking for updates is done: [count] updated now, and [waiting] that update at the next start. */
     class Updated(val count: Int, val waiting: Int) : ExtensionNotice()
+
+    /** A file an extension made, [name], couldn't be written where the person chose. */
+    class SaveFailed(val name: String) : ExtensionNotice()
 
     /** addons.mozilla.org couldn't be asked about at least one extension. */
     data object UpdateCheckFailed : ExtensionNotice()

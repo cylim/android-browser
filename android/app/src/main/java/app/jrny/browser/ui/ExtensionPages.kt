@@ -329,6 +329,7 @@ private fun NoticeDialog(notice: ExtensionNotice) {
             else -> pluralStringResource(R.plurals.extensions_updated, notice.count, notice.count) to
                 notice.waiting.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.extensions_update_waiting, it, it) }
         }
+        is ExtensionNotice.SaveFailed -> stringResource(R.string.extension_save_failed, notice.name) to stringResource(R.string.extension_save_failed_body)
         ExtensionNotice.UpdateCheckFailed -> stringResource(R.string.extensions_update_failed) to stringResource(R.string.extensions_update_failed_body)
     }
     AlertDialog(

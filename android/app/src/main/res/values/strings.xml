@@ -282,6 +282,8 @@
         <item quantity="one">%d update is ready. It is installed the next time Okapi starts.</item>
         <item quantity="other">%d updates are ready. They are installed the next time Okapi starts.</item>
     </plurals>
+    <string name="extension_save_failed">Couldn\'t save %1$s</string>
+    <string name="extension_save_failed_body">The file may be incomplete. Make it again in the extension, and choose another place if this one is full.</string>
     <string name="extensions_update_failed">Couldn\'t check for updates</string>
     <string name="extensions_update_failed_body">addons.mozilla.org couldn\'t be reached. Okapi tries again tomorrow.</string>
     <plurals name="extensions_updated">

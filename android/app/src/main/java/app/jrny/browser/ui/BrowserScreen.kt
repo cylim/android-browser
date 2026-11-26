@@ -330,7 +330,13 @@ fun BrowserWindow(
         onDispose { engine.setTabActive(tab.session, false) }
     }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
-    LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
+    LaunchedEffect(tabs.incomingLink) {
+        if (tabs.incomingLink) {
+            panel = null
+            Extensions.closePopup()
+            Extensions.closePages()
+        }
+    }
     HideStatusBar(fullscreen = tab.fullscreen != null)
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.

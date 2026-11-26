@@ -311,7 +311,8 @@ Holding a link or an image opens a menu:
 
 ### uBlock Origin, installed by default
 
-- On the first start, Okapi installs uBlock Origin from a signed copy in the APK, and lets it run in Private Tabs ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)). It blocks what its filter lists name, such as ads, trackers and known malware sites.
+- On the first start, Okapi installs uBlock Origin from a signed copy in the APK, and lets it run in Private Tabs ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)). It blocks what its filter lists name, such as ads, trackers and known malware sites. If the install fails, Okapi tries again at the next start, and pages load unblocked until then.
+- On the first start it also turns on the regional list for the device's language, if it has one, and downloads it.
 - After that it is an extension like any other: it can be turned off or removed, and a removed one isn't installed again. It updates from addons.mozilla.org.
 - Its default lists are the ones uBlock Origin turns on for Android. All but AdGuard Mobile are inside it, so it blocks before it has downloaded anything. It downloads AdGuard Mobile soon after the first start.
 - Its popup has the switch that turns blocking off for the page's site, the blocked count, and the element picker and zapper. Its settings page has its settings, filter lists, own filters, trusted sites, and its own "Back up to file" and "Restore from file".
