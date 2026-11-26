@@ -385,7 +385,9 @@ class TabTest {
             val tab = newTab("test-try-again")
             val address = server.url("/flaky")
             onMain { tab.load(address) }
-            // The engine gives up after many rounds; the Tab's address is set before any starts.
+            // The engine gives up after many rounds. The server can see every round before the Tab
+            // hears that the page started, on a slow device, so the start comes first, then the end.
+            await("load started") { tab.isLoading }
             await("load failed") { server.requests.size >= 15 && !tab.isLoading && tab.url == address }
             Thread.sleep(500)
             assertEquals("", onMain { tab.title })
