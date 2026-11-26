@@ -168,6 +168,14 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - "Check a link" names the address a wrapped link carries. "Always" after a Move offers that address's site, not the wrapper's.
 - A backup holds the changes to the Link Wrappers. Merge adds the wrappers for sites that have none; Replace takes the backup's changes.
 
+### Content blocking (not merged yet)
+
+- uBlock Origin 1.77.2 is built in and blocks ads, trackers and known malware sites by default, in every Profile and in Private Tabs.
+- Page menu → uBlock Origin opens its popup for the page: turn blocking off for the site, see what was blocked, or pick an element to hide.
+- Settings → Ad and tracker blocking opens uBlock Origin's dashboard: its settings, filter lists, your own filters and trusted sites. Its backup, restore, import and export use Android's file picker.
+- uBlock Origin updates its lists from each list's own servers. The privacy policy names them.
+- The APK is about 7 MB larger.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
@@ -177,4 +185,6 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - A Move loses unsaved form input and pages reached by submitting a form.
 - Sign-in with two Accounts at once is untested on GeckoView: Google, Microsoft, GitHub and Apple still need checking with real Accounts.
 - Site icons, dark pages and "Save image" need the engine's built-in Okapi extension, which runs in web pages only.
-- Not in v1: sync, extensions, a built-in password manager, content blocking and a lock per Profile.
+- uBlock Origin's trusted sites and settings apply in every Profile. It can't tell Profiles apart.
+- In the first few seconds after the first install, a page can load before uBlock Origin is ready, unblocked.
+- Not in v1: sync, installing extensions, a built-in password manager and a lock per Profile.

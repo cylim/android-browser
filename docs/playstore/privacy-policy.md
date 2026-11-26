@@ -1,6 +1,6 @@
 # Okapi privacy policy
 
-Effective date: 25 November 2026
+Effective date: 26 November 2026
 
 <!--
 This is the canonical text. website/public/privacy.html publishes the same policy. Change both
@@ -15,11 +15,11 @@ TODO(owner): Before you enter this policy's address in Play Console:
 
 This policy covers Okapi by JRNY, the Android app with the application ID `app.jrny.browser`. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.
 
-In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, and to Google's Safe Browsing service through the app's web engine.
+In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, and to the servers of the filter lists that block ads and trackers.
 
 ## Who makes Okapi
 
-Okapi is free software under the MIT License. It is built in public at <https://github.com/cylim/android-browser>. In this policy, "we" means the people who maintain it.
+Okapi is free software under the MIT License. It includes uBlock Origin, unchanged, which is free software under the GPL-3.0 license. Okapi is built in public at <https://github.com/cylim/android-browser>. In this policy, "we" means the people who maintain it.
 
 > TODO(owner): developer name, exactly as Google Play shows it.
 
@@ -42,7 +42,7 @@ Each Profile keeps its own:
 
 One Profile can't see another Profile's data.
 
-For all Profiles together, the app keeps your settings (search engine, Search suggestions, Safe Browsing, theme and compact rows), your Site Rules and your changes to the list of link wrappers.
+For all Profiles together, the app keeps your settings (search engine, Search suggestions, Safe Browsing, theme and compact rows), your Site Rules and your changes to the list of link wrappers. uBlock Origin keeps its settings, its filter lists, your own filters, its trusted sites and its counts of what it blocked.
 
 None of this is sent to us or to anyone else.
 
@@ -82,6 +82,14 @@ With Search suggestions off, the address field still suggests pages from the Pro
 ### Google Safe Browsing
 
 The engine downloads Google Safe Browsing's lists of dangerous sites and checks the addresses of pages against them on your device, and warns you before a page known to be dangerous opens. When an address matches an entry, the engine sends Google a short part of a hash of the address to confirm it, not the address itself. Google runs the service; the engine uses Mozilla's access to it. Safe Browsing is on by default. To turn it off, turn off Safe Browsing in Settings. The change also applies to pages that are already open.
+
+### Filter lists for ad and tracker blocking
+
+Okapi blocks ads and trackers with uBlock Origin, which is part of the app. uBlock Origin decides what to block on your device, from its filter lists. It checks every hour while the app runs whether a list needs updating, and downloads a list again once the list's own expiry has passed, usually after a few hours to a few days.
+
+It downloads the lists it uses by default from the lists' own servers: `ublockorigin.github.io`, `ublockorigin.pages.dev`, `cdn.jsdelivr.net` and `raw.githubusercontent.com` for uBlock Origin's own lists, EasyList and EasyPrivacy; `filters.adtidy.org` for AdGuard Mobile; `pgl.yoyo.org` for Peter Lowe's list; `malware-filter.gitlab.io` and `curbengh.github.io` for the Online Malicious URL Blocklist; and `publicsuffix.org` for the Public Suffix List. A list you turn on in its dashboard comes from that list's own server. These servers receive your IP address, the address of the list and the browser details the engine sends. They receive no cookies of any Profile and nothing about the pages you open.
+
+uBlock Origin is on by default. To let one site load everything, turn uBlock Origin off for that site in its popup: page menu → uBlock Origin. Its settings, your own filters and its trusted sites stay on your device and apply in every Profile.
 
 ### The engine's own updates
 

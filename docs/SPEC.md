@@ -147,7 +147,7 @@ The layout depends on window width, not device type. It switches live when the w
 The page menu ("More") is the same in the Sidebar, the Rail and the Bottom Bar:
 
 1. A row of icons: Forward (only when the bar has no room for its own Forward button), Bookmark this page, Share and Reload.
-2. **Page**: Copy link, Find in page, Desktop site (a switch), Print, Add to Home screen.
+2. **Page**: Copy link, Find in page, uBlock Origin, Desktop site (a switch), Print, Add to Home screen.
 3. **Profile**: Move, Open in Profile.
 4. **Browser**: New Tab, New Private Tab, History, Bookmarks, Downloads, Settings, and "Set as default browser" while Okapi isn't.
 
@@ -294,10 +294,24 @@ Holding a link or an image opens a menu:
 - Password managers work through the Android Autofill framework. Okapi does not store passwords itself.
 - Passkeys are not supported until the app is approved as a privileged browser ([ADR 0006](adr/0006-geckoview-as-engine.md)).
 
+## Content blocking
+
+- uBlock Origin, the content blocker, is built in and on by default ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)). It blocks what its filter lists name, such as ads, trackers and known malware sites, in every Profile and in Private Tabs.
+- Its default lists are the ones uBlock Origin turns on for Android. All but AdGuard Mobile ship in the APK, so it blocks before it has downloaded anything. It downloads AdGuard Mobile soon after the first start.
+- People control it with uBlock Origin's own pages, which are the same as in Firefox for Android:
+  - Page menu → "uBlock Origin" opens its popup for the shown page in a sheet. The popup has the switch that turns blocking off for the page's site, the blocked count, and the element picker and zapper. The sheet's title says that it applies in every Profile.
+  - Settings → "Ad and tracker blocking" opens its dashboard in the page's place: its settings, filter lists, own filters and trusted sites. A page that the dashboard or the popup opens, such as the logger or a list's contents, opens there too. Back shows the page before it, and Close closes them all.
+- uBlock Origin can't tell which Profile a request comes from. Its trusted sites, filters and settings apply in every Profile.
+- Its pages are uBlock Origin's own. A link on one of them to a web page opens in a new Tab of the Active Profile. Their dialogs look like a page's. Their file fields open Android's file picker, and a file they make, such as uBlock Origin's own backup, is saved where the person chooses with Android's file picker.
+- Okapi's backup doesn't hold uBlock Origin's settings. Its dashboard has its own "Back up to file" and "Restore from file".
+- uBlock Origin downloads list updates by itself, from each list's own servers (see the privacy policy). It checks every hour while the app runs, and fetches a list again once the list's own expiry has passed.
+- After any start but the first, uBlock Origin holds a page's requests until its lists are ready. In the first few seconds after the app's first install, a page can load before that, unblocked.
+- The engine's own tracking protection stays off, so only uBlock Origin's lists decide what a page loads.
+
 ## Backup
 
 - Settings → "Export backup" saves every live Profile's name and look, bookmarks and Folders, history, open Tabs (address, title, scroll position, which is selected and which are Pinned Tabs), Site Rules and Site settings, with the app settings and the person's changes to the default list of Link Wrappers, to one file. The person picks the place with Android's file picker; Okapi sends the file nowhere itself.
-- Never in a backup: cookies, site storage and other web data, so no sign-in; Private Tabs; downloaded files and the list of downloads; recently closed Tabs; Home Screen Shortcuts; site icons.
+- Never in a backup: cookies, site storage and other web data, so no sign-in; Private Tabs; downloaded files and the list of downloads; recently closed Tabs; Home Screen Shortcuts; site icons; uBlock Origin's settings, filters and trusted sites.
 - A backup is encrypted by default, with a password typed twice, of at least 8 characters: AES-256-GCM with a key derived by PBKDF2-HMAC-SHA256 (600,000 iterations). The dialog says that a forgotten password can't be recovered. Turning the password off saves plain JSON, and the dialog warns that anyone with the file can read it.
 - Settings → "Import backup" opens a file with Android's file picker. An encrypted one asks for its password and says when it's wrong. The dialog then names the backup's Profiles and counts its bookmarks, visits and open Tabs, and offers two ways to import it, Merge first:
   - **Merge** adds what is missing. Nothing here is changed or removed: a Profile keeps every visit it has, and only the newest incoming visits that fit under its limit are added. A backup Profile joins the Profile here with the same name, ignoring case; the others are added. A bookmark or Folder the Profile already has (same address, or same name), a visit at the same time, a Tab with the same address, a Site Rule's pattern or a site's setting stays as it is here; an added Tab becomes the Pinned Tab only of a bookmark the import added. The backup's own Link Wrappers for sites that have none here are added; the ones here stay as they are. The Active Profile, the selected Tabs and the app settings stay.
@@ -317,4 +331,4 @@ Holding a link or an image opens a menu:
 
 ## Out of scope for v1
 
-Sync, extensions, our own password manager, content blocking, per-Profile biometric lock, Custom Tabs, and passkeys.
+Sync, installing extensions, our own password manager, per-Profile biometric lock, Custom Tabs, and passkeys.

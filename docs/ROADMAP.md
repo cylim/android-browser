@@ -55,6 +55,7 @@ Added to v1 after Milestone 5:
   3. Page tools: Find in page, Desktop site, text size, dark pages, and pull to refresh.
   4. Tabs and data: Reopen closed Tab, Clear browsing data, and Add to Home screen.
 - Backup: export Okapi's own data to a file, encrypted by default, and import it by merging or replacing.
+- Content blocking, moved up from 0.2: uBlock Origin built in, on by default, controlled with its own popup and dashboard. Its trusted sites apply in every Profile, and it keeps its lists up to date from the lists' own servers, not from a service of ours ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)).
 
 ## Before the first release: GeckoView
 
@@ -65,15 +66,10 @@ Added to v1 after Milestone 5:
 ## Milestone 6: First public release
 
 - Signed release APK built by GitHub Actions and published on GitHub Releases, for `arm64-v8a` (`-PgeckoAbi=arm64-v8a`).
-- Check that the build meets F-Droid's requirements. F-Droid usually builds GeckoView from source.
-- A routine for taking each GeckoView security release, about every 4 weeks.
+- Check that the build meets F-Droid's requirements. F-Droid usually builds GeckoView from source, and the build downloads uBlock Origin's release file.
+- A routine for taking each GeckoView security release, about every 4 weeks, and each uBlock Origin release.
 
-## 0.2: Content blocking
-
-- Block known ad and tracker addresses, on by default, with a switch for each site in Site settings.
-- Keep the block lists up to date without contacting any service of ours, in line with [ADR 0002](adr/0002-no-proprietary-dependencies-or-telemetry.md).
-
-## After 0.2
+## After the first release
 
 - Web notifications, through GeckoView, without a Google push service.
 - Extensions, which GeckoView can run. They would see every Profile's Tabs, so the UI must say so.

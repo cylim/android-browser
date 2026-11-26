@@ -83,6 +83,10 @@ _Avoid_: Redirector, tracker, unwrapper, link shortener
 What a Profile remembers about each site: the permissions it was given or refused (camera, microphone, location) and whether it gets its desktop version. Each Profile has its own.
 _Avoid_: Site permissions (for the whole list), content settings
 
+**Content blocker**:
+uBlock Origin, built into Okapi, which stops pages from loading what its filter lists name, such as ads and trackers. There is one for all Profiles: its settings and trusted sites apply in every Profile.
+_Avoid_: Ad blocker, tracking protection (the engine's own feature, which is off)
+
 ### Layout
 
 **Sidebar**:

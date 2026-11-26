@@ -124,7 +124,7 @@ Answer **No**, or leave it unanswered. Okapi has had no independent security rev
 | App activity: In-app search history | See [below](#in-app-search-history) | Typed text goes to the chosen search engine for suggestions | `BrowserState.kt:512` |
 | App activity: Installed apps | No | The app doesn't query installed apps | `AndroidManifest.xml` (no `QUERY_ALL_PACKAGES`) |
 | App activity: Other user-generated content, Other actions | No | Bookmarks, Folders, Site Rules and settings stay on the device | `data/JrnyDatabase.kt`, `settings/Settings.kt` |
-| Web browsing: Web browsing history | No | History stays on the device, per Profile. Requests to pages fall under the open-web exemption. Safe Browsing: see [below](#web-browsing-history). | `library/Library.kt`, `res/xml/data_extraction_rules.xml` |
+| Web browsing: Web browsing history | No | History stays on the device, per Profile. Requests to pages fall under the open-web exemption. Safe Browsing: see [below](#web-browsing-history). uBlock Origin decides what to block on the device. Its filter list downloads carry only the list's address, nothing about the pages opened ([ADR 0008](../adr/0008-ublock-origin-as-content-blocker.md)). | `library/Library.kt`, `res/xml/data_extraction_rules.xml` |
 | App info and performance: Crash logs, Diagnostics, Other app performance data | No | No crash-reporting SDK, and WebView's usage statistics are turned off. See [below](#app-info-and-performance). | [ADR 0002](../adr/0002-no-proprietary-dependencies-or-telemetry.md) |
 | Device or other IDs | No | The app reads no device ID and has no advertising ID. WebView's crash reports carry a random pseudonymous token (D2). | Merged manifest: no `AD_ID` ([Blocker 5](#5-check-the-final-builds-merged-manifest)) |
 
