@@ -67,7 +67,7 @@ class ContentBlockerUiTest {
     @Test
     fun settingsOpensTheDashboardAndBackLeadsToSettingsAgain() {
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-settings").performClick()
+        compose.onNodeWithTag("menu-settings").performScrollTo().performClick()
         compose.onNodeWithTag("setting-content-blocking").performScrollTo().performClick()
         compose.onNodeWithTag("panel-ContentBlocker").assertIsDisplayed()
         assertTrue(ContentBlocker.pages.size == 1)
