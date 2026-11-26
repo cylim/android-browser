@@ -43,6 +43,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
@@ -909,10 +910,14 @@ class BrowserStateTest {
         val tab = show(browser, shown.id)
         // A file with nothing to read: it can't be saved.
         onMain { browser.saveDownload(shown, tab, DownloadRequest("data:text/plain", "report.txt", "text/plain", -1, source = DownloadSource.FromPage)) }
-        await("failed") { browser.pageFileSaved == SavedFileNotice(shown.id, "report.txt", saved = false) }
+        val failed = SavedFileNotice(shown.id, "report.txt", saved = false)
+        await("failed") { browser.pageFileSaved == failed }
         // The next save starts with no notice, so the last one's failure isn't taken for its own.
+        // Right after the call there is no notice yet, or already this save's own: when the work
+        // handed to other threads ends before the main thread waits for it (FakeDownloader saves
+        // at once), the save finishes within the call.
         val next = DownloadRequest("data:text/plain;base64,aGk=", "report.txt", "text/plain", -1, source = DownloadSource.FromPage)
-        assertEquals(null, onMain { browser.saveDownload(shown, tab, next); browser.pageFileSaved })
+        assertNotEquals("the last save's failure", failed, onMain { browser.saveDownload(shown, tab, next); browser.pageFileSaved })
         await("saved") { browser.pageFileSaved == SavedFileNotice(shown.id, "report.txt", saved = true) }
     }
 
