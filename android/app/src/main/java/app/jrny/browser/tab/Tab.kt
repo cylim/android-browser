@@ -16,6 +16,7 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadSource
 import app.jrny.browser.engine.Engine
+import app.jrny.browser.engine.Extensions
 import app.jrny.browser.engine.PageBridge
 import app.jrny.browser.engine.PageFile
 import app.jrny.browser.handoff.AppLink
@@ -652,6 +653,13 @@ class Tab(
             }
             popup, openingPopup -> closePopup()
             else -> return discard(request)
+        }
+        // An extension, such as addons.mozilla.org's "Add to Firefox": the engine fetches it
+        // again to install it, once the person agrees (SPEC, "Extensions").
+        if (Extensions.isExtension(response)) {
+            discard(request)
+            Extensions.install(response.uri)
+            return
         }
         // A file the page sends while another question is open is dropped: one at a time. The
         // person can't have tapped it meanwhile, so the page sent it by itself.

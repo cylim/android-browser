@@ -18,13 +18,12 @@ val geckoAbi = (findProperty("geckoAbi") as String?) ?: "x86_64"
 val ublockVersion = "1.77.2"
 val ublockSha256 = "c9186bcbb5ef542465187ce52aa7d76b5315e8a020c360e3e701f678ad47d776"
 
-/** Downloads uBlock Origin's release, refuses it unless its hash matches, and unpacks it. */
+/** Downloads uBlock Origin's release and refuses it unless its hash matches. */
 abstract class FetchUblock : DefaultTask() {
     @get:Input abstract val version: Property<String>
     @get:Input abstract val sha256: Property<String>
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
     @get:Inject abstract val files: FileSystemOperations
-    @get:Inject abstract val archives: ArchiveOperations
 
     @TaskAction
     fun fetch() {
@@ -36,10 +35,10 @@ abstract class FetchUblock : DefaultTask() {
         }
         val got = hashOf(xpi)
         check(got == sha256.get()) { "$name has SHA-256 $got, not ${sha256.get()}" }
+        // As published, so Mozilla's signature still covers it: GeckoView installs only signed extensions.
         files.sync {
-            // Mozilla's signature covers the file as published; a built-in extension isn't checked.
-            from(archives.zipTree(xpi)) { exclude("META-INF/**") }
-            into(outputDir.dir("ublock"))
+            from(xpi) { rename { "uBlock0@raymondhill.net.xpi" } }
+            into(outputDir.dir("extensions"))
         }
     }
 
@@ -86,12 +85,6 @@ android {
 
     // Room writes each database version's schema here, for migrations and their tests.
     sourceSets["androidTest"].assets.directories.add("$projectDir/schemas")
-
-    androidResources {
-        // The default pattern also drops folders whose name starts with "_", which would leave out
-        // uBlock Origin's `_locales`, without which the extension doesn't load.
-        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
-    }
 
     buildFeatures {
         compose = true

@@ -57,8 +57,8 @@ object Engine {
                     // jar for what it embeds (Total Cookie Protection). Sign-in popups still work.
                     .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
                     .cookieBehaviorPrivateMode(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
-                    // uBlock Origin blocks ads and trackers (ContentBlocker); the engine's own
-                    // tracking protection stays off, so one list decides what a page loads.
+                    // uBlock Origin, a default extension, blocks ads and trackers (ADR 0008); the
+                    // engine's own tracking protection stays off, so one list decides what a page loads.
                     .antiTracking(ContentBlocking.AntiTracking.NONE)
                     .enhancedTrackingProtectionLevel(ContentBlocking.EtpLevel.NONE)
                     .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
@@ -69,7 +69,7 @@ object Engine {
         runtime = created
         setPrefs()
         installBridge(created)
-        ContentBlocker.install(created, app)
+        Extensions.start(created, app)
         return created
     }
 
