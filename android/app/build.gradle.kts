@@ -1,3 +1,6 @@
+import java.net.URI
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -8,6 +11,53 @@ plugins {
 // GeckoView ships one AAR per ABI. x86_64 runs on the emulators (locally and in CI); build for a
 // phone or tablet with -PgeckoAbi=arm64-v8a.
 val geckoAbi = (findProperty("geckoAbi") as String?) ?: "x86_64"
+
+// uBlock Origin, built in as the content blocker (ADR 0008): the signed Firefox build from its
+// GitHub release, checked against this SHA-256 and put into the APK's assets unchanged. To update,
+// change both lines: `sha256sum uBlock0_<version>.firefox.signed.xpi`.
+val ublockVersion = "1.77.2"
+val ublockSha256 = "c9186bcbb5ef542465187ce52aa7d76b5315e8a020c360e3e701f678ad47d776"
+
+/** Downloads uBlock Origin's release, refuses it unless its hash matches, and unpacks it. */
+abstract class FetchUblock : DefaultTask() {
+    @get:Input abstract val version: Property<String>
+    @get:Input abstract val sha256: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+    @get:Inject abstract val files: FileSystemOperations
+    @get:Inject abstract val archives: ArchiveOperations
+
+    @TaskAction
+    fun fetch() {
+        val name = "uBlock0_${version.get()}.firefox.signed.xpi"
+        val xpi = temporaryDir.resolve(name)
+        if (!xpi.exists() || hashOf(xpi) != sha256.get()) {
+            URI("https://github.com/gorhill/uBlock/releases/download/${version.get()}/$name").toURL()
+                .openStream().use { input -> xpi.outputStream().use { input.copyTo(it) } }
+        }
+        val got = hashOf(xpi)
+        check(got == sha256.get()) { "$name has SHA-256 $got, not ${sha256.get()}" }
+        files.sync {
+            // Mozilla's signature covers the file as published; a built-in extension isn't checked.
+            from(archives.zipTree(xpi)) { exclude("META-INF/**") }
+            into(outputDir.dir("ublock"))
+        }
+    }
+
+    private fun hashOf(file: File): String =
+        MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+}
+
+val fetchUblock = tasks.register<FetchUblock>("fetchUblock") {
+    version = ublockVersion
+    sha256 = ublockSha256
+    outputDir = layout.buildDirectory.dir("generated/ublock")
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(fetchUblock, FetchUblock::outputDir)
+    }
+}
 
 android {
     namespace = "app.jrny.browser"
@@ -36,6 +86,12 @@ android {
 
     // Room writes each database version's schema here, for migrations and their tests.
     sourceSets["androidTest"].assets.directories.add("$projectDir/schemas")
+
+    androidResources {
+        // The default pattern also drops folders whose name starts with "_", which would leave out
+        // uBlock Origin's `_locales`, without which the extension doesn't load.
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
 
     buildFeatures {
         compose = true
