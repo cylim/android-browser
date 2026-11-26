@@ -112,6 +112,22 @@ class LinkWrappersTest {
     }
 
     @Test
+    fun `only the query is read, never the fragment`() {
+        // The fragment never reaches the wrapper's site, so it can't say where the link goes.
+        assertNull(defaults.unwrap("https://www.google.com/url#?q=https%3A%2F%2Fgithub.com%2F"))
+        assertNull(defaults.unwrap("https://www.google.com/url?sa=D#&q=https%3A%2F%2Fgithub.com%2F"))
+        assertEquals("https://github.com/", defaults.unwrap("https://www.google.com/url?q=https%3A%2F%2Fgithub.com%2F#top"))
+    }
+
+    @Test
+    fun `an escape is a percent sign and exactly two hexadecimal digits`() {
+        listOf("%+A", "%-1", "%2", "%G0", "% 2").forEach { escape ->
+            assertNull(escape, defaults.unwrap("https://www.google.com/url?q=https%3A%2F%2Fgithub.com%2F$escape"))
+        }
+        assertEquals("https://github.com/a%", LinkWrappers.percentDecode("https%3A%2F%2Fgithub.com%2Fa%25"))
+    }
+
+    @Test
     fun `the carried address is decoded only where it was percent-encoded`() {
         assertEquals(
             "https://example.com/search?q=a+b&lang=en",

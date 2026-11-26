@@ -52,12 +52,13 @@ data class LinkWrapper(val pattern: SitePattern, val parameters: List<String>) {
         /**
          * True when [pattern] names the site it covers: a `*` may stand for what comes before the
          * site's own name (`*.example.com`), but not for part of it (`*example.com`), nor for the
-         * part a registry hands out (`*.com`, `example.*`). Otherwise the wrapper would read its
-         * parameters on sites that belong to anyone.
+         * part a registry hands out (`*.com`, `example.*`), and that part alone (`com`, `co.uk`)
+         * isn't a site. Otherwise the wrapper would read its parameters on sites that belong to
+         * anyone.
          */
         fun namesItsSite(pattern: SitePattern): Boolean {
             val host = pattern.host
-            if ('*' !in host) return true
+            if ('*' !in host) return !WebAddress.isPublicSuffix(host)
             // Read with a letter in each star's place; a star must stay out of the registrable domain.
             val (_, domain) = WebAddress.splitAtRegistrableDomain(host.replace('*', 'x'))
             return '*' !in host.takeLast(domain.length)
@@ -166,7 +167,8 @@ class LinkWrappers(val all: List<LinkWrapper>) {
     private fun carried(url: String): String? {
         val names = all.filter { it.pattern.matches(url) }.flatMap { it.parameters }.toSet()
         if (names.isEmpty()) return null
-        val values = url.substringAfter('?', "").substringBefore('#')
+        // The fragment never reaches the site, so only the query before it counts.
+        val values = url.substringBefore('#').substringAfter('?', "")
             .split('&')
             .filter { it.substringBefore('=') in names }
             .map { percentDecode(it.substringAfter('=', "")) ?: return null }
@@ -210,7 +212,10 @@ class LinkWrappers(val all: List<LinkWrapper>) {
             while (i < text.length) {
                 if (text[i] == '%') {
                     if (i + 3 > text.length) return null
-                    bytes.write(text.substring(i + 1, i + 3).toIntOrNull(16) ?: return null)
+                    // Exactly two hexadecimal digits: toIntOrNull would also take a sign, as in "%+A".
+                    val digits = text.substring(i + 1, i + 3)
+                    if (!digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+                    bytes.write(digits.toInt(16))
                     i += 3
                 } else {
                     val next = text.indexOf('%', i).let { if (it < 0) text.length else it }

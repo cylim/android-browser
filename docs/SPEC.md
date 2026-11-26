@@ -111,8 +111,8 @@ This document describes what v1 of Okapi, a browser by JRNY, does. Terms in **bo
 - Site Rules apply only to Incoming Links. Links followed inside a page, and addresses typed in the address field, stay in their Tab.
 - An Incoming Link through a **Link Wrapper**, such as `https://nam12.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2F…`, is judged by the address it carries:
   - A Link Wrapper is a site, written as a rule's pattern, and the names of up to five query parameters that carry the address. A site has one Link Wrapper. Okapi reads the address from the link and fetches nothing.
-  - A link the pattern covers carries an address when every value its parameters give is that one percent-encoded `http` or `https` address. A second address, a value that isn't a web address or is badly encoded, and the link carries none, since the wrapper may read any of them.
-  - A wrapper's pattern names its own site: a `*` can stand only for what comes before the site's registrable name (`*.safelinks.protection.outlook.com`), never for part of it (`*example.com`, `*.com`, `example.*`).
+  - A link the pattern covers carries an address when every value its parameters give in the query (never the fragment) is that one percent-encoded `http` or `https` address. A second address, a value that isn't a web address or is badly encoded, and the link carries none, since the wrapper may read any of them.
+  - A wrapper's pattern names its own site: a `*` can stand only for what comes before the site's registrable name (`*.safelinks.protection.outlook.com`), never for part of it (`*example.com`, `*.com`, `example.*`), and a pattern can't be only the part a registry hands out (`com`, `co.uk`, `github.io`).
   - A wrapper inside a wrapper is read through, up to four deep.
   - The rules judge the innermost address first, then each wrapper outwards: a rule for the carried address wins over a rule for the wrapper's site, and a rule for the wrapper's site still decides when no rule covers the carried address.
   - The Tab still loads the link as it came, so the wrapper's own checks, such as Safe Links' scan, still run.

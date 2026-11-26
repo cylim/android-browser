@@ -48,6 +48,11 @@ class LinkWrapperListTest {
         // Each of these would read the parameter on sites that belong to anyone.
         listOf("*", "*.com", "*.co.uk", "google.*", "*example.com", "example.*.com")
             .forEach { assertNull(it, LinkWrapper.parse(it, "url")) }
+        // So would a part that a registry hands out, named without a star: it covers every site under it.
+        listOf("com", "co.uk", "github.io", "com/url")
+            .forEach { assertNull(it, LinkWrapper.parse(it, "url")) }
+        listOf("example.com", "user.github.io", "intranet")
+            .forEach { assertNotNull(it, LinkWrapper.parse(it, "url")) }
     }
 
     @Test
