@@ -161,7 +161,11 @@ jobs:
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: '37.0'
-          target: google_apis
+          # Plain AOSP, without Google's apps and services: Okapi uses none (ADR 0002). On the
+          # google_apis image they took the runner's CPU for seconds at a time, and the slow
+          # tablet's tests timed out waiting for pages (run 45777993303: 12 s with no engine event
+          # while Play services, System Intelligence and carrier entitlement logged 2,000 lines).
+          target: default
           arch: x86_64
           profile: ${{ matrix.device.profile }}
           ram-size: ${{ matrix.device.ram }}
