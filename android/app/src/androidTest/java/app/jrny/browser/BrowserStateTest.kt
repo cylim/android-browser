@@ -20,6 +20,8 @@ import app.jrny.browser.engine.Engine
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.profile.ProfileColor
 import app.jrny.browser.profile.ProfileIcon
+import app.jrny.browser.rules.LinkWrapper
+import app.jrny.browser.rules.LinkWrapperRepository
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.rules.SiteRule
 import app.jrny.browser.library.PinnedItem
@@ -64,6 +66,7 @@ class BrowserStateTest {
     private var privateTabs = PrivateTabs()
     private val settingsFile = "test-settings-${System.nanoTime()}"
     private val settings = SettingsRepository(context.getSharedPreferences(settingsFile, Context.MODE_PRIVATE))
+    private val linkWrappers = LinkWrapperRepository(context.getSharedPreferences(settingsFile, Context.MODE_PRIVATE))
 
     /** Suggests "<query> one" and "<query> two", and records what it was asked. */
     private val asked = java.util.Collections.synchronizedList(mutableListOf<Pair<SearchEngine, String>>())
@@ -96,7 +99,7 @@ class BrowserStateTest {
     private fun newBrowser(): BrowserState {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
-        val services = BrowserServices(repositories, downloader, privateTabs, settings, suggestions, siteIcons)
+        val services = BrowserServices(repositories, downloader, privateTabs, settings, linkWrappers, suggestions, siteIcons)
         return onMain { BrowserState(context, services, scope) }.also { browsers += it }
     }
 
@@ -347,6 +350,43 @@ class BrowserStateTest {
             // The visit is in Work's history, and Personal has only its own link.
             await("visit recorded") { browser.visits.value.any { it.url == server.url("/work/board?card=7") } }
             assertEquals(listOf(server.url("/news")), runBlocking { repositories.history.visits(personal.id).first() }.map { it.url })
+        }
+    }
+
+    @Test
+    fun aWrappedIncomingLinkOpensWhereTheAddressItCarriesWouldAndAMoveOffersThatSite() {
+        val board = "/wrap?to=" + java.net.URLEncoder.encode("http://127.0.0.1:1/work/board", Charsets.UTF_8)
+        val elsewhere = "/wrap?to=" + java.net.URLEncoder.encode("https://elsewhere.example/page", Charsets.UTF_8)
+        TestServer(mapOf(board to "<title>wrapped board</title>", elsewhere to "<title>wrapped elsewhere</title>")).use { server ->
+            val browser = newBrowser()
+            val personal = active(browser).profile
+            val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            val site = SitePattern.forSiteOf(server.url("/"))!!.text
+            // The test server's /wrap is a wrapper, like Safe Links: its link says where it goes in "to".
+            onMain {
+                browser.saveLinkWrapper(null, LinkWrapper.parse("$site/wrap", "to")!!)
+                browser.saveSiteRule(null, SitePattern.parse("127.0.0.1/work")!!, work)
+            }
+            await("rule saved") { browser.siteRules.value.size == 1 }
+
+            // The wrapper's own address has no rule; the one it carries does. The Tab still loads
+            // the wrapper's address, as it would pass the person on.
+            onMain { browser.openIncomingLink(server.url(board)) }
+            await("board opened in Work") { browser.active.value?.let { it.profile.id == work.id && it.selected.url == server.url(board) } == true }
+            assertEquals("127.0.0.1/work", (onMain { browser.linkOffer } as LinkOffer.Opened).rule?.pattern?.text)
+
+            // Moved while still on the wrapper, the link offers a rule for the site it carries, not the wrapper's.
+            runBlocking { profiles.activate(personal.id) }
+            await("personal active") { browser.active.value?.profile?.id == personal.id }
+            onMain { browser.openIncomingLink(server.url(elsewhere)) }
+            await("elsewhere opened") { browser.incomingLinkTab != null && browser.active.value?.selected?.url == server.url(elsewhere) }
+            show(browser, onMain { browser.incomingLinkTab!! })
+            val moving = active(browser).selected
+            onMain { browser.moveTab(moving, work) }
+            await("rule offered") { browser.linkOffer is LinkOffer.Always }
+            assertEquals("elsewhere.example", (onMain { browser.linkOffer } as LinkOffer.Always).pattern.text)
         }
     }
 

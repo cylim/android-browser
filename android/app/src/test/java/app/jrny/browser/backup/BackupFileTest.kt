@@ -49,6 +49,19 @@ class BackupFileTest {
     }
 
     @Test
+    fun theLinkWrappersOfOnesOwnGoInTheFileAndABackupWithoutThemHoldsTheDefaultList() {
+        val own = backup.copy(
+            linkWrappers = BackupLinkWrappers(own = listOf(BackupLinkWrapper("urldefense.example", listOf("u", "url"))), removed = listOf("l.instagram.com")),
+        )
+        assertEquals(OpenedBackup.Plain(own), BackupFile.read(BackupFile.write(own, password = null)))
+
+        // A file from before Link Wrappers.
+        val older = """{"format":"okapi-backup","version":1,"createdAt":1,"profiles":[{"name":"Work","color":"Teal","icon":"Build"}]}"""
+        val read = BackupFile.read(older.toByteArray()) as OpenedBackup.Plain
+        assertEquals(null, read.backup.linkWrappers)
+    }
+
+    @Test
     fun anEncryptedBackupHidesItsContentAndOpensWithItsPassword() {
         val bytes = BackupFile.write(backup, "correct horse".toCharArray(), iterations)
         val text = bytes.toString(Charsets.UTF_8)

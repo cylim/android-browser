@@ -178,6 +178,7 @@
               </tr>
             </tbody>
           </table>
+          <p>Mail and chat apps often send a link through a site of their own first, such as Outlook's Safe Links. Site Rules look at the address such a link carries, so a GitHub link in a work email still opens where your <code>github.com</code> rule says. Okapi reads that address from the link itself and fetches nothing. Under Settings → Site Rules → Link wrappers you can change the list, or go back to the default one, and new default wrappers still reach a list you changed.</p>
           <p class="note">"Check a link" under Settings → Site Rules tells you which Profile a link would open in. Incoming Links never open as Private Tabs, and only <code>http</code> and <code>https</code> links get in.</p>
         </div>
       </article>
@@ -487,6 +488,14 @@
               <li>Page dialogs, list and date fields, Okapi's own error pages, and downloads written by Okapi with their progress on the list.</li>
               <li>Deleting a Profile wipes its web data at once. Private Tabs keep their storage in memory, apart from site databases, which are written to disk encrypted and deleted with the last Private Tab.</li>
               <li>The app is larger, about 95 MB to download, and Okapi now ships each GeckoView security release itself.</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary><em class="pending">not merged</em> <span>Link wrappers</span></summary>
+            <ul>
+              <li>A link from another app that goes through a link wrapper, such as Outlook's Safe Links or Google's <code>/url</code> redirect, is matched against your Site Rules by the address it carries. Nothing is fetched to find it.</li>
+              <li>The list is under Settings → Site Rules → Link wrappers. Add, change or delete them, or go back to the default list. Okapi keeps only your changes, so new default wrappers still arrive, and backups include them.</li>
             </ul>
           </details>
 

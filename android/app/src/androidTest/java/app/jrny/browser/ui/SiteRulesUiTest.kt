@@ -21,8 +21,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
@@ -33,6 +37,9 @@ import app.jrny.browser.TestServer
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.rules.LinkWrapper
+import app.jrny.browser.rules.LinkWrapperList
+import app.jrny.browser.rules.LinkWrappers
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.rules.SiteRule
 import app.jrny.browser.tab.Tab
@@ -60,6 +67,10 @@ class SiteRulesUiTest {
     private var linkOffer by mutableStateOf<LinkOffer?>(null)
     private val saved = mutableListOf<Triple<SiteRule?, String, Profile>>()
     private val deleted = mutableListOf<SiteRule>()
+    private var wrappers by mutableStateOf(LinkWrapperList.DEFAULT)
+    private val savedWrappers = mutableListOf<Pair<LinkWrapper?, LinkWrapper>>()
+    private val deletedWrappers = mutableListOf<LinkWrapper>()
+    private var defaultsTaken = 0
     private var accepted = 0
 
     private fun rule(id: Long, pattern: String, profile: Profile) = SiteRule(id, SitePattern.parse(pattern)!!, profile.id)
@@ -100,6 +111,10 @@ class SiteRulesUiTest {
                         rules,
                         save = { existing, pattern, profile -> saved += Triple(existing, pattern.text, profile) },
                         delete = { deleted += it },
+                        wrappers = wrappers,
+                        saveWrapper = { existing, wrapper -> savedWrappers += existing to wrapper },
+                        deleteWrapper = { deletedWrappers += it },
+                        useDefaultWrappers = { defaultsTaken++ },
                     ),
                 )
             }
@@ -263,6 +278,130 @@ class SiteRulesUiTest {
 
         compose.onNodeWithContentDescription("Clear").performClick()
         answer().assertDoesNotExist()
+    }
+
+    @Test
+    fun checkingAWrappedLinkSaysWhichAddressDecides() {
+        rules = listOf(rule(1, "github.com", TestProfiles.work))
+        show(deviceSize())
+        openSiteRules()
+        fun answer() = compose.onNodeWithTag("check-link-answer", useUnmergedTree = true)
+
+        compose.onNodeWithTag("check-link")
+            .performTextReplacement("https://nam12.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2Fjrny%2Fokapi&data=05")
+        answer().assertTextEquals("Passes on to https://github.com/jrny/okapi. Opens in Work, by the rule github.com")
+
+        // Without the wrapper in the list, the link is judged as it is.
+        wrappers = LinkWrappers.DEFAULT.fold(LinkWrapperList.DEFAULT) { list, it -> list.delete(it) }
+        answer().assertTextEquals("No rule covers this link. It opens in the Active Profile, now Personal.")
+    }
+
+    /** The phone's layout on the phone, and the tablet's on the tablet: CI runs this suite on both. */
+    private fun deviceSize(): DpSize = listOf(PHONE_PORTRAIT, TABLET_LANDSCAPE).first(::fitsTheScreen)
+
+    private fun openLinkWrappers() {
+        openSiteRules()
+        compose.onNodeWithTag("site-rules-list").performScrollToNode(hasTestTag("site-rules-link-wrappers"))
+        compose.onNodeWithTag("site-rules-link-wrappers").performClick()
+        compose.onNodeWithTag("panel-LinkWrappers").assertExists()
+    }
+
+    private fun wrapperList() = compose.onNodeWithTag("link-wrappers-list")
+
+    private val slack = LinkWrappers.DEFAULT.single { it.pattern.text == "slack-redir.net/link" }
+
+    @Test
+    fun theLinkWrappersAreReachedFromTheSiteRulesOnceThereIsARule() {
+        show(deviceSize())
+        openSiteRules()
+        // Without a rule, wrappers change nothing, so they aren't offered.
+        compose.onNodeWithTag("site-rules-link-wrappers").assertDoesNotExist()
+
+        rules = listOf(rule(1, "github.com", TestProfiles.work))
+        compose.onNodeWithTag("site-rules-list").performScrollToNode(hasTestTag("site-rules-link-wrappers"))
+        compose.onNodeWithTag("site-rules-link-wrappers").assertTextContains("Default list")
+        wrappers = LinkWrapperList.DEFAULT.delete(slack)
+        compose.onNodeWithTag("site-rules-link-wrappers").assertTextContains("Your list")
+
+        compose.onNodeWithTag("site-rules-link-wrappers").performClick()
+        compose.onNodeWithTag("panel-LinkWrappers").assertExists()
+        compose.onNodeWithTag("panel-SiteRules").assertDoesNotExist()
+        // Back leads to the Site Rules again.
+        Espresso.pressBack()
+        compose.onNodeWithTag("panel-SiteRules").assertExists()
+    }
+
+    @Test
+    fun theLinkWrappersAreListedAndCanBeAddedChangedOrDeleted() {
+        rules = listOf(rule(1, "github.com", TestProfiles.work))
+        show(deviceSize())
+        openLinkWrappers()
+
+        // One row per site, with every parameter it is read from.
+        wrapperList().performScrollToNode(hasText("google.com/url"))
+        compose.onNodeWithText("google.com/url").assertExists()
+        compose.onNodeWithText("Reads the address in q or url").assertExists()
+        wrapperList().performScrollToNode(hasText("slack-redir.net/link"))
+        // The default list has nothing to take back.
+        compose.onNodeWithTag("use-default-link-wrappers").assertDoesNotExist()
+
+        compose.onNodeWithTag("add-link-wrapper").performClick()
+        compose.onNodeWithTag("link-wrapper-editor").assertExists()
+        fun explanation() = compose.onNodeWithTag("wrapper-site-explanation", useUnmergedTree = true)
+        compose.onNodeWithTag("save-link-wrapper").assertIsNotEnabled()
+        // A star for part of the site's own name would read links on anyone's site.
+        compose.onNodeWithTag("wrapper-site-field").performTextReplacement("*.com")
+        compose.onNodeWithTag("wrapper-parameter-field").performTextReplacement("u")
+        explanation().assertTextEquals("Name the site itself. A * can stand only for what comes before its name, as in *.example.com.")
+        compose.onNodeWithTag("save-link-wrapper").assertIsNotEnabled()
+        compose.onNodeWithTag("wrapper-site-field").performTextReplacement("urldefense.example")
+        compose.onNodeWithTag("wrapper-parameter-field").performTextReplacement("u=")
+        compose.onNodeWithTag("save-link-wrapper").assertIsNotEnabled()
+        compose.onNodeWithTag("wrapper-parameter-field").performTextReplacement("u, url")
+        compose.onNodeWithTag("save-link-wrapper").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf(null to LinkWrapper.parse("urldefense.example", "u, url")), savedWrappers)
+
+        // A tap opens a wrapper in the editor, as it is. The site of another wrapper replaces that one.
+        compose.onNodeWithText("slack-redir.net/link").performClick()
+        compose.onNodeWithTag("wrapper-site-field").assertTextContains("slack-redir.net/link")
+        compose.onNodeWithTag("wrapper-parameter-field").assertTextContains("url")
+        compose.onNodeWithTag("wrapper-site-field").performTextReplacement("google.com/url")
+        explanation().assertTextEquals("Replaces the link wrapper for google.com/url.")
+        compose.onNodeWithTag("wrapper-site-field").performTextReplacement("slack-redir.net/link")
+        compose.onNodeWithTag("wrapper-parameter-field").performTextReplacement("target")
+        compose.onNodeWithTag("save-link-wrapper").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(slack to slack.copy(parameters = listOf("target")), savedWrappers.last())
+
+        compose.onNodeWithContentDescription("Delete the link wrapper for slack-redir.net/link").performClick()
+        assertEquals(listOf(slack), deletedWrappers)
+    }
+
+    @Test
+    fun aChangedListCanGoBackToTheDefaultList() {
+        rules = listOf(rule(1, "github.com", TestProfiles.work))
+        wrappers = LinkWrapperList.DEFAULT.save(null, LinkWrapper.parse("urldefense.example", "u")!!)
+        show(deviceSize())
+        openLinkWrappers()
+
+        wrapperList().performScrollToNode(hasTestTag("use-default-link-wrappers"))
+        compose.onNodeWithText("urldefense.example").assertExists()
+        compose.onNodeWithTag("use-default-link-wrappers").performClick()
+        // It asks first: the changes are lost.
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(0, defaultsTaken)
+        compose.onNodeWithTag("use-default-link-wrappers").performClick()
+        compose.onNodeWithTag("confirm-use-default-link-wrappers").performClick()
+        assertEquals(1, defaultsTaken)
+    }
+
+    @Test
+    fun anEmptiedListSaysThatEveryLinkIsJudgedByItsOwnAddress() {
+        rules = listOf(rule(1, "github.com", TestProfiles.work))
+        wrappers = LinkWrappers.DEFAULT.fold(LinkWrapperList.DEFAULT) { list, it -> list.delete(it) }
+        show(deviceSize())
+        openLinkWrappers()
+        compose.onNodeWithText("No link wrappers. Site Rules judge each link by its own address.").assertExists()
+        compose.onNodeWithTag("link-wrapper").assertDoesNotExist()
     }
 
     @Test

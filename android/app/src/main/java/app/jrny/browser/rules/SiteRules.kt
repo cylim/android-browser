@@ -15,8 +15,14 @@ data class SiteRule(val id: Long, val pattern: SitePattern, val profileId: Profi
 /**
  * The rule for [url] among these: the one whose pattern covers it. When several do, the
  * narrowest wins ([SitePattern.weight]), and between equally narrow ones the older rule.
+ *
+ * A link one of [wrappers] wraps is judged by the address it carries first, and only when no rule
+ * covers that, by the wrapper's own address: the innermost address that a rule covers decides.
  */
-fun List<SiteRule>.ruleFor(url: String): SiteRule? =
+fun List<SiteRule>.ruleFor(url: String, wrappers: LinkWrappers): SiteRule? =
+    wrappers.layers(url).asReversed().firstNotNullOfOrNull(::coveringRule)
+
+private fun List<SiteRule>.coveringRule(url: String): SiteRule? =
     filter { it.pattern.matches(url) }.maxWithOrNull(compareBy<SiteRule> { it.pattern.weight }.thenByDescending { it.id })
 
 /** The Site Rules, which belong to the app and not to one Profile. [now] gives a rule's creation time. */
@@ -25,8 +31,11 @@ class SiteRuleRepository(private val dao: SiteRuleDao, private val now: () -> Lo
     /** Every rule, oldest first. */
     val rules: Flow<List<SiteRule>> = dao.observe().map { rows -> rows.mapNotNull(::toRule) }
 
-    /** The rule that says where a link to [url] opens, as the rules stand now, or null when none covers it. */
-    suspend fun ruleFor(url: String): SiteRule? = dao.all().mapNotNull(::toRule).ruleFor(url)
+    /**
+     * The rule that says where a link to [url] opens, as the rules stand now, seeing through
+     * [wrappers], or null when none covers it.
+     */
+    suspend fun ruleFor(url: String, wrappers: LinkWrappers): SiteRule? = dao.all().mapNotNull(::toRule).ruleFor(url, wrappers)
 
     /**
      * Saves a rule that sends [pattern] to [profile]: [existing] is changed, or a new rule is

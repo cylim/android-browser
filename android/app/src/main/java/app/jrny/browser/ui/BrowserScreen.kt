@@ -158,7 +158,16 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
     )
 
     val rules by browser.siteRules.collectAsState()
-    val siteRules = SiteRulesUi(rules, browser::saveSiteRule, browser::deleteSiteRule)
+    val wrappers by browser.linkWrappers.collectAsState()
+    val siteRules = SiteRulesUi(
+        rules,
+        browser::saveSiteRule,
+        browser::deleteSiteRule,
+        wrappers,
+        browser::saveLinkWrapper,
+        browser::deleteLinkWrapper,
+        browser::useDefaultLinkWrappers,
+    )
 
     val links = LinksUi(
         openInNewTab = { browser.openInNewTab(current.selected, it) },
@@ -292,7 +301,13 @@ fun BrowserWindow(
     // The file whose download just started, named over the page with a way to the Downloads list.
     var downloading by remember(tab) { mutableStateOf<String?>(null) }
     // The Site Rules and Site settings are reached from the settings, and Back leads there again.
-    BackHandler(enabled = panel != null) { panel = if (panel == Panel.SiteRules || panel == Panel.SiteSettings) Panel.Settings else null }
+    BackHandler(enabled = panel != null) {
+        panel = when (panel) {
+            Panel.SiteRules, Panel.SiteSettings -> Panel.Settings
+            Panel.LinkWrappers -> Panel.SiteRules
+            else -> null
+        }
+    }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
     LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
     HideStatusBar(fullscreen = tab.fullscreen != null)
@@ -538,6 +553,14 @@ fun BrowserWindow(
                                 // A Private Tab's page is named nowhere outside it.
                                 pageUrl = if (private) null else tab.url,
                                 onBack = { panel = Panel.Settings },
+                                onLinkWrappers = { panel = Panel.LinkWrappers },
+                                onClose = { panel = null },
+                                contentPadding = padding,
+                            )
+                        } else if (open == Panel.LinkWrappers) {
+                            LinkWrappersPanel(
+                                siteRules,
+                                onBack = { panel = Panel.SiteRules },
                                 onClose = { panel = null },
                                 contentPadding = padding,
                             )
