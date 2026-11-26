@@ -58,6 +58,13 @@ object WebAddress {
         return name.substring(0, split) to name.substring(split)
     }
 
+    /**
+     * True when [host] is a part of names that a registry hands out, by the Public Suffix List:
+     * `com`, `co.uk`, `github.io`. Sites under it belong to anyone.
+     */
+    fun isPublicSuffix(host: String): Boolean =
+        runCatching { InternetDomainName.from(host.trimEnd('.')).isPublicSuffix }.getOrDefault(false)
+
     /** True when [afterScheme] starts with `user:password@`. */
     internal fun hasCredentials(afterScheme: String): Boolean {
         val authority = afterScheme.substringBefore('/').substringBefore('?').substringBefore('#')

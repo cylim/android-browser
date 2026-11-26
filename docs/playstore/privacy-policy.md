@@ -42,13 +42,13 @@ Each Profile keeps its own:
 
 One Profile can't see another Profile's data.
 
-For all Profiles together, the app keeps your settings (search engine, Search suggestions, Safe Browsing, theme and compact rows) and your Site Rules.
+For all Profiles together, the app keeps your settings (search engine, Search suggestions, Safe Browsing, theme and compact rows), your Site Rules and your changes to the list of link wrappers.
 
 None of this is sent to us or to anyone else.
 
 ### Backup files you make
 
-Settings → Export backup saves a copy of every Profile's name and look, bookmarks and Folders, history, open Tabs and Site settings, with your settings and Site Rules, to a file in a place you choose. Cookies, site storage, sign-ins, Private Tabs and downloaded files are never in it. The file is encrypted with a password you set (AES-256-GCM, with a key derived from the password by PBKDF2), unless you turn that off; then anyone who has the file can read it. Okapi sends the file nowhere itself. If you save it to a cloud drive, that drive's provider holds it, under their own terms. Import backup reads a file you choose, only when you ask.
+Settings → Export backup saves a copy of every Profile's name and look, bookmarks and Folders, history, open Tabs and Site settings, with your settings, Site Rules and changes to the list of link wrappers, to a file in a place you choose. Cookies, site storage, sign-ins, Private Tabs and downloaded files are never in it. The file is encrypted with a password you set (AES-256-GCM, with a key derived from the password by PBKDF2), unless you turn that off; then anyone who has the file can read it. Okapi sends the file nowhere itself. If you save it to a cloud drive, that drive's provider holds it, under their own terms. Import backup reads a file you choose, only when you ask.
 
 ## What leaves your device, and who receives it
 

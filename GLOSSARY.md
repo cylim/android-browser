@@ -52,7 +52,7 @@ Opening a Tab's current address as a new Tab in another Profile while keeping th
 _Avoid_: Duplicate, copy
 
 **Backup**:
-A file the person exports from Okapi with every Profile's bookmarks, history, open Tabs, Site Rules and Site settings, and the app settings, but no web data, so no Account. Importing one either merges it, adding only what is missing, or replaces every Profile on the device with its own.
+A file the person exports from Okapi with every Profile's bookmarks, history, open Tabs, Site Rules and Site settings, the app settings and the person's changes to the Link Wrappers, but no web data, so no Account. Importing one either merges it, adding only what is missing, or replaces every Profile on the device with its own.
 _Avoid_: Sync, export (as a noun), archive
 
 ### Links
@@ -72,6 +72,10 @@ _Avoid_: Bookmark, web app, PWA
 **Site Rule**:
 A person's rule that sends Incoming Links for matching addresses to a specific Profile instead of the Active Profile. It names a site, optionally with a path, and `*` stands for anything.
 _Avoid_: AirControl, Air Traffic Control, routing rule
+
+**Link Wrapper**:
+A site whose links carry the address they pass the person on to in one of their query parameters, such as Outlook's Safe Links (`?url=`). A site has one Link Wrapper, which can name several parameters. A Site Rule judges a link through a Link Wrapper by the address it carries. Okapi has a default list; it keeps only the person's changes to it, which "Use default list" undoes.
+_Avoid_: Redirector, tracker, unwrapper, link shortener
 
 ### Sites
 

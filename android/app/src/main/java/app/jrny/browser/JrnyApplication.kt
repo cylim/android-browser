@@ -9,6 +9,7 @@ import app.jrny.browser.download.SystemDownloader
 import app.jrny.browser.engine.Engine
 import app.jrny.browser.profile.ProfileCleanup
 import app.jrny.browser.profile.WebProfile
+import app.jrny.browser.rules.LinkWrapperRepository
 import app.jrny.browser.settings.HttpSearchSuggestions
 import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.tab.PrivateTabs
@@ -35,6 +36,7 @@ class JrnyApplication : Application() {
             downloader = downloader,
             privateTabs = privateTabs,
             settings = SettingsRepository(getSharedPreferences("settings", MODE_PRIVATE)),
+            linkWrappers = LinkWrapperRepository(getSharedPreferences("settings", MODE_PRIVATE)),
             searchSuggestions = HttpSearchSuggestions(),
             siteIcons = SiteIconStore(File(filesDir, "site-icons")),
         )

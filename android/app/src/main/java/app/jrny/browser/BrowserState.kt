@@ -42,6 +42,8 @@ import app.jrny.browser.settings.Suggestion
 import app.jrny.browser.profile.ProfileLook
 import app.jrny.browser.profile.WebProfile
 import app.jrny.browser.rules.SitePattern
+import app.jrny.browser.rules.LinkWrapper
+import app.jrny.browser.rules.LinkWrapperList
 import app.jrny.browser.rules.SiteRule
 import app.jrny.browser.site.SiteOrigin
 import app.jrny.browser.site.SiteSetting
@@ -134,6 +136,7 @@ class BrowserState(
     private val bookmarkRepository = repositories.bookmarks
     private val downloadRepository = repositories.downloads
     private val siteRuleRepository = repositories.siteRules
+    private val linkWrapperRepository = services.linkWrappers
     private val siteSettingsRepository = repositories.siteSettings
     private val closedTabRepository = repositories.closedTabs
     private val shortcutRepository = repositories.shortcuts
@@ -208,6 +211,9 @@ class BrowserState(
 
     /** The Site Rules, oldest first. They belong to the app, not to one Profile. */
     val siteRules: StateFlow<List<SiteRule>> = siteRuleRepository.rules.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** The Link Wrappers that Site Rules see through: the default list, or the person's own. */
+    val linkWrappers: StateFlow<LinkWrapperList> = linkWrapperRepository.list
 
     /**
      * The Active Profile's recently closed Tabs, newest first (SPEC, "Reopen closed Tab"), tagged
@@ -950,10 +956,16 @@ class BrowserState(
             // to that Profile. The rule that decides for this link now is the one to change:
             // a new rule for the whole site would lose to a narrower one that names another
             // Profile. Without a rule, the link's site gets one.
-            val deciding = siteRuleRepository.ruleFor(url)
-            val pattern = deciding?.pattern ?: SitePattern.forSiteOf(url)
+            // A Tab still on a Link Wrapper's page offers the site of the address it carries, and
+            // a rule that covers only the wrapper's site isn't changed: every link through that
+            // wrapper would follow.
+            val wrappers = linkWrappers.value.wrappers
+            val carried = wrappers.unwrap(url) ?: url
+            val deciding = siteRuleRepository.ruleFor(url, wrappers)
+            val changing = deciding?.takeIf { it.pattern.matches(carried) }
+            val pattern = changing?.pattern ?: SitePattern.forSiteOf(carried)
             if (wasIncomingLink && pattern != null && deciding?.profileId != profile.id) {
-                offer(LinkOffer.Always(moved, pattern, profile, deciding))
+                offer(LinkOffer.Always(moved, pattern, profile, changing))
             }
         }
     }
@@ -979,6 +991,14 @@ class BrowserState(
         scope.launch { siteRuleRepository.delete(rule) }
     }
 
+    /** Adds a Link Wrapper, or puts it in [existing]'s place. The list becomes the person's own. */
+    fun saveLinkWrapper(existing: LinkWrapper?, wrapper: LinkWrapper) = linkWrapperRepository.update { it.save(existing, wrapper) }
+
+    fun deleteLinkWrapper(wrapper: LinkWrapper) = linkWrapperRepository.update { it.delete(wrapper) }
+
+    /** Takes the default list of Link Wrappers back, in place of the person's own. */
+    fun useDefaultLinkWrappers() = linkWrapperRepository.update { it.useDefault() }
+
     /** Open in Profile: opens [tab]'s current address as a new Tab in [profile] and shows it. [tab] stays. */
     fun openInProfile(tab: SavedTab, profile: Profile) {
         if (tab.isPrivate) return
@@ -1002,7 +1022,7 @@ class BrowserState(
             // The Profile can be deleted between choosing it and opening the Tab. Then nothing is
             // opened there, its rules are gone with it, and the next try chooses again.
             repeat(INCOMING_LINK_ATTEMPTS) {
-                val rule = siteRuleRepository.ruleFor(url)
+                val rule = siteRuleRepository.ruleFor(url, linkWrappers.value.wrappers)
                 val target = rule?.profileId ?: profileRepository.activeProfile.filterNotNull().first().id
                 val opened = if (rule != null) tabRepository.openIn(target, url) else tabRepository.openUrl(target, url)
                 if (opened != null) {

@@ -4,7 +4,8 @@ import kotlinx.serialization.Serializable
 
 /**
  * What a backup file holds (SPEC, "Backup"): the app's settings and every live Profile with its
- * look, bookmarks and Folders, history, open Tabs, Site Rules and Site settings. Never web data:
+ * look, bookmarks and Folders, history, open Tabs, Site Rules and Site settings, and the person's
+ * own list of Link Wrappers. Never web data:
  * no cookies, site storage or sign-ins. Private Tabs, downloads, recently closed Tabs and Home
  * Screen Shortcuts stay on the device too.
  *
@@ -19,6 +20,11 @@ data class Backup(
     val settings: BackupSettings = BackupSettings(),
     /** In the order they were created; at most one is [BackupProfile.active]. */
     val profiles: List<BackupProfile>,
+    /**
+     * How the person changed the default list of Link Wrappers, or null while it is unchanged.
+     * Backups made before Link Wrappers have none, and so hold the default list.
+     */
+    val linkWrappers: BackupLinkWrappers? = null,
 ) {
     companion object {
         const val FORMAT = "okapi-backup"
@@ -83,6 +89,18 @@ data class BackupVisit(val url: String, val title: String = "", val visitedAt: L
  */
 @Serializable
 data class BackupTab(val url: String? = null, val title: String = "", val scrollY: Int = 0, val selected: Boolean = false, val pinned: String? = null)
+
+/**
+ * The person's changes to the default list of Link Wrappers: the wrappers they added or changed
+ * ([own]), in their order, and the sites of the default ones they removed ([removed]). The default
+ * list itself isn't in the backup, so the one of the version that reads it applies.
+ */
+@Serializable
+data class BackupLinkWrappers(val own: List<BackupLinkWrapper> = emptyList(), val removed: List<String> = emptyList())
+
+/** A Link Wrapper: a Site Rule's kind of pattern, and the query parameters that carry the address. */
+@Serializable
+data class BackupLinkWrapper(val pattern: String, val parameters: List<String>)
 
 @Serializable
 data class BackupSiteRule(val pattern: String, val createdAt: Long = 0)

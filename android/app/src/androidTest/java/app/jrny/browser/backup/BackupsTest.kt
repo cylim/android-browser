@@ -10,6 +10,10 @@ import app.jrny.browser.data.ProfileEntity
 import app.jrny.browser.data.ProfileRows
 import app.jrny.browser.data.ShortcutEntity
 import app.jrny.browser.data.SiteSettingEntity
+import app.jrny.browser.rules.LinkWrapper
+import app.jrny.browser.rules.LinkWrapperList
+import app.jrny.browser.rules.LinkWrapperRepository
+import app.jrny.browser.rules.LinkWrappers
 import app.jrny.browser.settings.SearchEngine
 import app.jrny.browser.settings.SettingsRepository
 import app.jrny.browser.settings.ThemeChoice
@@ -32,7 +36,8 @@ class BackupsTest {
     private inner class Device {
         val database = JrnyDatabase.inMemory(context).also { databases += it }
         val settings = SettingsRepository(context.getSharedPreferences("test-backup-${System.nanoTime()}".also { files += it }, Context.MODE_PRIVATE))
-        val backups = Backups(database.backup(), settings, now = { 42 })
+        val linkWrappers = LinkWrapperRepository(context.getSharedPreferences("test-backup-${System.nanoTime()}".also { files += it }, Context.MODE_PRIVATE))
+        val backups = Backups(database.backup(), settings, linkWrappers, now = { 42 })
 
         suspend fun profile(name: String, color: String = "Blue", icon: String = "Person", tint: String = "Medium"): Long =
             database.profiles().insertActive(ProfileEntity(name = name, color = color, icon = icon, tint = tint))
@@ -271,6 +276,75 @@ class BackupsTest {
         val settings = target.settings.settings.value
         assertEquals(SearchEngine.Google, settings.searchEngine)
         assertEquals(200, settings.textZoom)
+    }
+
+    private val proofpoint = requireNotNull(LinkWrapper.parse("urldefense.example", "u, url"))
+    private val mimecast = requireNotNull(LinkWrapper.parse("protect.example", "url"))
+    private val slack = LinkWrappers.DEFAULT.single { it.pattern.text == "slack-redir.net/link" }
+
+    @Test
+    fun aBackupHoldsTheChangesToTheDefaultListOfLinkWrappers() = runBlocking {
+        val device = freshDevice()
+        assertEquals(null, device.backups.snapshot().linkWrappers)
+        device.linkWrappers.update { it.save(null, proofpoint).delete(slack) }
+        assertEquals(
+            BackupLinkWrappers(own = listOf(BackupLinkWrapper("urldefense.example", listOf("u", "url"))), removed = listOf("slack-redir.net/link")),
+            device.backups.snapshot().linkWrappers,
+        )
+    }
+
+    @Test
+    fun replacingTakesTheBackupsChangesToTheLinkWrappers() = runBlocking {
+        val source = freshDevice()
+        source.linkWrappers.update { it.save(null, proofpoint).delete(slack) }
+        val carried = (BackupFile.read(BackupFile.write(source.backups.snapshot(), password = null)) as OpenedBackup.Plain).backup
+        val target = freshDevice()
+        target.linkWrappers.update { it.save(null, mimecast) }
+
+        target.backups.restore(carried, ImportMode.Replace)
+        assertEquals(source.linkWrappers.list.value, target.linkWrappers.list.value)
+
+        // A backup made with the default list takes the default list back.
+        target.backups.restore(freshDevice().backups.snapshot(), ImportMode.Replace)
+        assertEquals(LinkWrapperList.DEFAULT, target.linkWrappers.list.value)
+    }
+
+    @Test
+    fun mergingAddsOnlyTheLinkWrappersForSitesThatAreMissing() = runBlocking {
+        val source = freshDevice()
+        source.linkWrappers.update { it.save(null, proofpoint).delete(LinkWrappers.DEFAULT.first()) }
+        val target = freshDevice()
+        target.linkWrappers.update { it.delete(slack) }
+
+        target.backups.restore(source.backups.snapshot(), ImportMode.Merge)
+        // Proofpoint is added. What was removed here stays removed, and nothing here is removed.
+        assertEquals(LinkWrappers.DEFAULT - slack + proofpoint, target.linkWrappers.list.value.all)
+
+        // A backup made with the default list changes nothing.
+        val before = target.linkWrappers.list.value
+        target.backups.restore(freshDevice().backups.snapshot(), ImportMode.Merge)
+        assertEquals(before, target.linkWrappers.list.value)
+    }
+
+    @Test
+    fun aLinkWrapperOkapiWouldNotHaveStoredIsLeftOut() = runBlocking {
+        val crafted = freshDevice().backups.snapshot().copy(
+            linkWrappers = BackupLinkWrappers(
+                own = listOf(
+                    BackupLinkWrapper("*.com", listOf("u")),
+                    BackupLinkWrapper("ok.example", listOf("a&b")),
+                    BackupLinkWrapper("ok.example", emptyList()),
+                    BackupLinkWrapper("ok.example", listOf("u")),
+                    BackupLinkWrapper("OK.example", listOf("url")),
+                ),
+                removed = listOf("slack-redir.net/link", "not a site", "*"),
+            ),
+        )
+        val target = freshDevice()
+        target.backups.restore(crafted, ImportMode.Replace)
+        val restored = target.linkWrappers.list.value
+        assertEquals(listOfNotNull(LinkWrapper.parse("ok.example", "u")), restored.own)
+        assertEquals(setOf(slack.pattern), restored.removed)
     }
 
     @Test

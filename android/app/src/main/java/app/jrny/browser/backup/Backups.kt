@@ -19,6 +19,8 @@ import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.ProfileName
 import app.jrny.browser.profile.ProfileRepository
 import app.jrny.browser.profile.ProfileTint
+import app.jrny.browser.rules.LinkWrapper
+import app.jrny.browser.rules.LinkWrapperRepository
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.settings.SearchEngine
 import app.jrny.browser.settings.Settings
@@ -47,21 +49,37 @@ data class Restored(val replaced: List<ProfileId>, val shortcuts: List<String>)
 class Backups(
     private val dao: BackupDao,
     private val settings: SettingsRepository,
+    private val linkWrappers: LinkWrapperRepository,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
 
     suspend fun snapshot(): Backup {
         val rows = dao.snapshot()
         val active = rows.maxByOrNull { it.profile.activation }?.profile?.id
-        return Backup(createdAt = now(), settings = settings.settings.value.toBackup(), profiles = rows.map { it.toBackup(active) })
+        return Backup(
+            createdAt = now(),
+            settings = settings.settings.value.toBackup(),
+            profiles = rows.map { it.toBackup(active) },
+            linkWrappers = linkWrappers.list.value.takeUnless { it.isDefault }?.let { list ->
+                BackupLinkWrappers(list.own.map { BackupLinkWrapper(it.pattern.text, it.parameters) }, list.removed.map { it.text })
+            },
+        )
     }
 
     suspend fun restore(backup: Backup, mode: ImportMode): Restored {
         val incoming = backup.profiles.withOneActive().map { it.toRows() }
         val outcome = dao.restore(incoming, replace = mode == ImportMode.Replace, keepVisits = HistoryRepository.MAX_VISITS)
+        // As a Site Rule's pattern, each wrapper is checked as if a person had typed it.
+        val changes = backup.linkWrappers
+        val own = changes?.own.orEmpty().mapNotNull { LinkWrapper.of(it.pattern, it.parameters) }
+        val removed = changes?.removed.orEmpty().mapNotNull(SitePattern::parse)
         if (mode == ImportMode.Replace) {
             val restored = backup.settings.toSettings()
             settings.update { restored }
+            linkWrappers.update { LinkWrapperRepository.restore(it.useDefault(), own, removed) }
+        } else if (changes != null) {
+            // Like Site Rules: what is missing here is added, and nothing here is changed or removed.
+            linkWrappers.update { it.merge(LinkWrapperRepository.restore(it.useDefault(), own, removed)) }
         }
         return Restored(outcome.replaced.map { ProfileId(it.toString()) }, outcome.shortcuts)
     }

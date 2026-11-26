@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -60,23 +61,34 @@ import androidx.compose.ui.window.DialogProperties
 import app.jrny.browser.R
 import app.jrny.browser.profile.Profile
 import app.jrny.browser.profile.ProfileId
+import app.jrny.browser.rules.LinkWrapper
+import app.jrny.browser.rules.LinkWrapperList
+import app.jrny.browser.rules.LinkWrappers
 import app.jrny.browser.rules.SitePattern
 import app.jrny.browser.rules.SiteRule
 import app.jrny.browser.rules.ruleFor
 
-/** The Site Rules and how to change them. */
+/** The Site Rules and how to change them, with the Link Wrappers they see through. */
 class SiteRulesUi(
     /** Every rule, oldest first. */
     val rules: List<SiteRule> = emptyList(),
     /** Adds a rule, or changes [existing]: links the pattern covers open in that Profile. */
     val save: (existing: SiteRule?, pattern: SitePattern, profile: Profile) -> Unit = { _, _, _ -> },
     val delete: (SiteRule) -> Unit = {},
+    /** The Link Wrappers in use: the default list, or the person's own. */
+    val wrappers: LinkWrapperList = LinkWrapperList.DEFAULT,
+    /** Adds a Link Wrapper, or puts it in [existing]'s place. */
+    val saveWrapper: (existing: LinkWrapper?, wrapper: LinkWrapper) -> Unit = { _, _ -> },
+    val deleteWrapper: (LinkWrapper) -> Unit = {},
+    /** Takes the default list back, in place of the person's own. */
+    val useDefaultWrappers: () -> Unit = {},
 )
 
 /**
  * The Site Rules, in the page's place: which Profile takes the links from other apps for which
  * site. A tap on a rule changes it. "Check a link" answers where a given link would open, with
- * the rules as they stand.
+ * the rules as they stand. Below the rules, the Link Wrappers they see through, which can be
+ * changed too, and the default list taken back.
  *
  * Each rule shows the avatar of the Profile it opens in: the avatar's circle starts on the
  * panel's text line, and the pattern follows 8dp after its 48dp slot. [pageUrl] is the address of
@@ -88,6 +100,8 @@ fun SiteRulesPanel(
     profiles: ProfilesUi,
     pageUrl: String?,
     onBack: () -> Unit,
+    /** Opens the Link Wrappers, which the rules see through. */
+    onLinkWrappers: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
@@ -128,10 +142,12 @@ fun SiteRulesPanel(
             if (rules.isEmpty()) {
                 item("empty") { NoRules(onAdd = { editing = RuleEdit(null) }) }
             } else {
-                item("check") { CheckLink(checked, { checked = it }, rules, byId, profiles.active) }
+                item("check") { CheckLink(checked, { checked = it }, rules, ui.wrappers.wrappers, byId, profiles.active) }
                 items(rules, key = { it.id }) { rule ->
                     RuleRow(rule, byId.getValue(rule.profileId), onEdit = { editing = RuleEdit(rule) }, onDelete = { ui.delete(rule) })
                 }
+                // Only with a rule: without one, Link Wrappers change nothing.
+                item("link-wrappers") { LinkWrappersRow(ui.wrappers.isDefault, onLinkWrappers) }
             }
         }
     }
@@ -142,7 +158,8 @@ fun SiteRulesPanel(
             rules = rules,
             profiles = profiles.all,
             preselected = profiles.active,
-            pageSite = SitePattern.forSiteOf(pageUrl),
+            // On a Link Wrapper's page, the site of the address it carries, as a Move offers.
+            pageSite = SitePattern.forSiteOf(pageUrl?.let { ui.wrappers.wrappers.unwrap(it) ?: it }),
             onSave = { pattern, profile ->
                 ui.save(edit.rule, pattern, profile)
                 editing = null
@@ -153,6 +170,43 @@ fun SiteRulesPanel(
 }
 
 private class RuleEdit(val rule: SiteRule?)
+
+/** The way to the Link Wrappers: what they do, and whether the list is the default one. */
+@Composable
+private fun LinkWrappersRow(isDefault: Boolean, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp)
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = PANEL_TEXT_INSET, vertical = 8.dp)
+            .testTag("site-rules-link-wrappers"),
+    ) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(stringResource(R.string.link_wrappers), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(R.string.link_wrappers_row_explanation),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            stringResource(if (isDefault) R.string.link_wrappers_default else R.string.link_wrappers_own),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
 
 /** What the panel says before there is a rule: what one does, and the way to the first. */
 @Composable
@@ -178,18 +232,28 @@ private fun NoRules(onAdd: () -> Unit) {
 
 /**
  * Answers where a link would open: the Profile of the rule that covers it, or the Active Profile.
- * What is typed without `https://` in front is read as if it had it.
+ * What is typed without `https://` in front is read as if it had it. For a wrapped link, the answer
+ * first names the address it passes on to.
  */
 @Composable
-private fun CheckLink(text: String, onChange: (String) -> Unit, rules: List<SiteRule>, profiles: Map<ProfileId, Profile>, active: Profile) {
+private fun CheckLink(
+    text: String,
+    onChange: (String) -> Unit,
+    rules: List<SiteRule>,
+    wrappers: LinkWrappers,
+    profiles: Map<ProfileId, Profile>,
+    active: Profile,
+) {
     val url = SitePattern.linkFrom(text)
-    val rule = url?.let(rules::ruleFor)
-    val answer = when {
+    val rule = url?.let { rules.ruleFor(it, wrappers) }
+    val carried = url?.let(wrappers::unwrap)
+    val where = when {
         text.isBlank() -> null
         url == null -> stringResource(R.string.check_link_not_web)
         rule != null -> stringResource(R.string.check_link_rule, profiles.getValue(rule.profileId).name, rule.pattern.text)
         else -> stringResource(R.string.check_link_no_rule, active.name)
     }
+    val answer = if (where != null && carried != null) stringResource(R.string.check_link_unwrapped, carried, where) else where
     OutlinedTextField(
         value = text,
         onValueChange = onChange,
@@ -350,7 +414,7 @@ fun SiteRuleEditorDialog(
 }
 
 /** A keyboard for typing an address: no capitals, no corrections. */
-private val WEB_ADDRESS_KEYBOARD = KeyboardOptions(
+internal val WEB_ADDRESS_KEYBOARD = KeyboardOptions(
     capitalization = KeyboardCapitalization.None,
     autoCorrectEnabled = false,
     keyboardType = KeyboardType.Uri,

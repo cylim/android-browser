@@ -22,6 +22,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SiteRuleRepositoryTest {
 
+    // The rules alone: what Link Wrappers change is SiteRulesTest's.
+    private val noWrappers = LinkWrappers(emptyList())
     private val database = JrnyDatabase.inMemory(InstrumentationRegistry.getInstrumentation().targetContext)
     private val profiles = ProfileRepository(database.profiles())
     private val rules = SiteRuleRepository(database.siteRules())
@@ -46,10 +48,10 @@ class SiteRuleRepositoryTest {
         assertTrue(rules.save(null, pattern("example.org"), personal))
         assertEquals(listOf("example.com" to work, "example.org" to personal), listed())
 
-        assertEquals(work, rules.ruleFor("https://www.example.com/page")?.profileId)
-        assertEquals(personal, rules.ruleFor("http://example.org/")?.profileId)
-        assertNull(rules.ruleFor("https://example.net/"))
-        assertNull(rules.ruleFor("intent://example.com/#Intent;end"))
+        assertEquals(work, rules.ruleFor("https://www.example.com/page", noWrappers)?.profileId)
+        assertEquals(personal, rules.ruleFor("http://example.org/", noWrappers)?.profileId)
+        assertNull(rules.ruleFor("https://example.net/", noWrappers))
+        assertNull(rules.ruleFor("intent://example.com/#Intent;end", noWrappers))
     }
 
     @Test
@@ -57,15 +59,15 @@ class SiteRuleRepositoryTest {
         rules.save(null, pattern("example.com"), personal)
         rules.save(null, pattern("mail.example.com"), work)
         rules.save(null, pattern("example.com/work"), work)
-        assertEquals(personal, rules.ruleFor("https://example.com/")?.profileId)
-        assertEquals(work, rules.ruleFor("https://mail.example.com/inbox")?.profileId)
-        assertEquals(work, rules.ruleFor("https://example.com/work/today")?.profileId)
-        assertEquals(personal, rules.ruleFor("https://example.com/workshop")?.profileId)
+        assertEquals(personal, rules.ruleFor("https://example.com/", noWrappers)?.profileId)
+        assertEquals(work, rules.ruleFor("https://mail.example.com/inbox", noWrappers)?.profileId)
+        assertEquals(work, rules.ruleFor("https://example.com/work/today", noWrappers)?.profileId)
+        assertEquals(personal, rules.ruleFor("https://example.com/workshop", noWrappers)?.profileId)
 
         // Both cover the link and name as much of it: the one made first decides.
         rules.save(null, pattern("a*.example.net"), personal)
         rules.save(null, pattern("*a.example.net"), work)
-        assertEquals("a*.example.net", rules.ruleFor("https://aa.example.net/")?.pattern?.text)
+        assertEquals("a*.example.net", rules.ruleFor("https://aa.example.net/", noWrappers)?.pattern?.text)
     }
 
     @Test
@@ -104,7 +106,7 @@ class SiteRuleRepositoryTest {
 
         // At once, not only when its row goes at the next cold start.
         assertEquals(listOf("example.org" to personal), listed())
-        assertNull(rules.ruleFor("https://example.com/"))
+        assertNull(rules.ruleFor("https://example.com/", noWrappers))
         assertFalse(rules.save(null, pattern("example.net"), work))
         assertEquals(listOf("example.org" to personal), listed())
     }

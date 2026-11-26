@@ -138,6 +138,30 @@
     <string name="rule_replaces">Replaces your rule that opens %1$s in %2$s.</string>
     <string name="rule_open_in">Open in</string>
     <string name="rule_use_page_site">Use %1$s</string>
+    <string name="check_link_unwrapped">Passes on to %1$s. %2$s</string>
+    <string name="link_wrappers">Link wrappers</string>
+    <string name="link_wrappers_subtitle">For Site Rules</string>
+    <string name="link_wrappers_explanation">Mail and chat apps often send a link through a site of their own first, such as Outlook\'s Safe Links. For links through these sites, Site Rules look at the address the link passes on to. Okapi reads it from the link itself and fetches nothing.</string>
+    <string name="link_wrappers_row_explanation">Site Rules look at the address a link through these sites passes on to, such as Outlook\'s Safe Links.</string>
+    <string name="link_wrappers_default">Default list</string>
+    <string name="link_wrappers_own">Your list</string>
+    <string name="link_wrappers_empty">No link wrappers. Site Rules judge each link by its own address.</string>
+    <string name="link_wrapper_reads">Reads the address in %1$s</string>
+    <string name="link_wrapper_parameters_or">%1$s or %2$s</string>
+    <string name="delete_link_wrapper">Delete the link wrapper for %1$s</string>
+    <string name="add_link_wrapper">Add wrapper</string>
+    <string name="use_default_link_wrappers">Use default list</string>
+    <string name="use_default_link_wrappers_title">Use the default list?</string>
+    <string name="use_default_link_wrappers_body">The link wrappers you added, changed or removed go back to Okapi\'s default list.</string>
+    <string name="new_link_wrapper">New link wrapper</string>
+    <string name="edit_link_wrapper">Edit link wrapper</string>
+    <string name="link_wrapper_site_help">The site whose links pass on to another address, such as safelinks.protection.outlook.com.</string>
+    <string name="link_wrapper_too_broad">Name the site itself. A * can stand only for what comes before its name, as in *.example.com.</string>
+    <string name="link_wrapper_replaces">Replaces the link wrapper for %1$s.</string>
+    <string name="link_wrapper_parameters">Parameters</string>
+    <string name="link_wrapper_parameters_placeholder" translatable="false">url</string>
+    <string name="link_wrapper_parameters_help">The name before = in the link, such as url. Separate several with commas.</string>
+    <string name="link_wrapper_parameters_invalid">Up to 5 names, separated by commas, each of letters, digits and . _ ~ -</string>
     <string name="set_default_browser">Set as default browser</string>
     <string name="history">History</string>
     <string name="bookmarks">Bookmarks</string>

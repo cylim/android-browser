@@ -11,6 +11,7 @@ import app.jrny.browser.tab.PrivateTabs
 import app.jrny.browser.library.BookmarkRepository
 import app.jrny.browser.library.HistoryRepository
 import app.jrny.browser.profile.ProfileRepository
+import app.jrny.browser.rules.LinkWrapperRepository
 import app.jrny.browser.rules.SiteRuleRepository
 import app.jrny.browser.site.SiteSettingsRepository
 import app.jrny.browser.tab.TabRepository
@@ -37,9 +38,11 @@ class BrowserServices(
     val downloader: Downloader,
     val privateTabs: PrivateTabs,
     val settings: SettingsRepository,
+    /** The Link Wrappers that Site Rules see through, kept with the settings. */
+    val linkWrappers: LinkWrapperRepository,
     val searchSuggestions: SearchSuggestions,
     val siteIcons: SiteIconStore,
 ) {
-    /** Makes and restores backups of what [repositories] and [settings] keep. */
-    val backups = Backups(repositories.backup, settings)
+    /** Makes and restores backups of what [repositories], [settings] and [linkWrappers] keep. */
+    val backups = Backups(repositories.backup, settings, linkWrappers)
 }

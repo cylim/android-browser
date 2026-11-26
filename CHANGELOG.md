@@ -160,6 +160,14 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Settings → Export backup saves every Profile's bookmarks and Folders, history, open Tabs, Site Rules and Site settings, with the settings, to a file you choose. It is encrypted with a password unless you turn that off. Cookies and sign-ins are never in it.
 - Settings → Import backup brings a backup back. Merge adds only what is missing; Replace deletes the Profiles here and puts the backup's in their place.
 
+### Link Wrappers (not merged yet)
+
+- An Incoming Link through a Link Wrapper, such as Outlook's Safe Links or Google's `/url` redirect, is judged by the Site Rules by the address it carries. Okapi reads that address from the link and fetches nothing. When no rule covers it, a rule for the wrapper's own site still decides.
+- The default list covers Outlook Safe Links, Google, Facebook, Messenger, Instagram, YouTube, Slack and LinkedIn. Settings → Site Rules → Link wrappers lists them, one per site, and they can be added, changed or deleted. "Use default list" undoes every change. Okapi keeps only the changes, so new default wrappers still arrive.
+- A wrapper's site can't use `*` for part of the site's own name, such as `*.com`.
+- "Check a link" names the address a wrapped link carries. "Always" after a Move offers that address's site, not the wrapper's.
+- A backup holds the changes to the Link Wrappers. Merge adds the wrappers for sites that have none; Replace takes the backup's changes.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
