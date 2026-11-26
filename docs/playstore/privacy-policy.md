@@ -15,7 +15,7 @@ TODO(owner): Before you enter this policy's address in Play Console:
 
 This policy covers Okapi by JRNY, the Android app with the application ID `app.jrny.browser`. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.
 
-In short: Okapi has no server, no accounts, no ads and no analytics. Okapi keeps your history, bookmarks, cookies and site data on your device. An extension you add can read the pages its permissions allow and send what it reads to its developer. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, and to addons.mozilla.org when you add extensions or Okapi checks for their updates.
+In short: Okapi has no server, no accounts, no ads and no analytics. Okapi keeps your history, bookmarks, cookies and site data on your device. An extension you add can read the pages its permissions allow and send what it reads to its developer. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, to addons.mozilla.org when you add extensions, and to each extension's update server when Okapi checks for updates: addons.mozilla.org, or a server that an extension installed from a file names.
 
 ## Who makes Okapi
 
