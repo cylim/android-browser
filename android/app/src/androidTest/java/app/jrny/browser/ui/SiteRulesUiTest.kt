@@ -123,7 +123,7 @@ class SiteRulesUiTest {
 
     private fun openSiteRules() {
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-settings").performClick()
+        compose.onNodeWithTag("menu-settings").performScrollTo().performClick()
         compose.onNodeWithTag("setting-site-rules").performScrollTo().performClick()
         compose.onNodeWithTag("panel-SiteRules").assertExists()
     }
@@ -134,7 +134,7 @@ class SiteRulesUiTest {
     fun theSettingsLeadToTheSiteRulesAndBackLeadsToTheSettingsAgain() {
         show(TABLET_LANDSCAPE)
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-settings").performClick()
+        compose.onNodeWithTag("menu-settings").performScrollTo().performClick()
         compose.onNodeWithTag("setting-site-rules").performScrollTo().assertTextContains("None yet")
         compose.onNodeWithTag("setting-site-rules").performClick()
 

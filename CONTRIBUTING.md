@@ -69,7 +69,7 @@ Point Gradle at your SDK. `local.properties` is gitignored:
 echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 ```
 
-The build includes GeckoView, the browser engine, for one ABI: `x86_64` by default, for emulators. For a phone or tablet, add `-PgeckoAbi=arm64-v8a` to any Gradle command. The first build downloads about 95 MB of GeckoView from Mozilla's Maven repository.
+The build includes GeckoView, the browser engine, for one ABI: `x86_64` by default, for emulators. For a phone or tablet, add `-PgeckoAbi=arm64-v8a` to any Gradle command. The first build downloads about 95 MB of GeckoView from Mozilla's Maven repository, and uBlock Origin's 6 MB release file from GitHub, which it checks against the SHA-256 hash in `app/build.gradle.kts`.
 
 Build, lint and run the unit tests, the same as CI:
 

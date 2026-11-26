@@ -21,6 +21,7 @@ Okapi is an Android browser with separate Profiles, so you can stay signed in to
 - **Pinned tabs and folders**: each Profile's bookmarks sit at the top of its tab list, open or closed, and closing one keeps it.
 - **Tablet layout** with an Arc-style sidebar of tabs and the Profile switcher at the bottom.
 - **Phone layout** with a Safari-style bottom bar for search and switching Profiles.
+- **Extensions** from addons.mozilla.org, with uBlock Origin installed by default to block ads and trackers.
 - **No telemetry**: no analytics and no crash reporting, in the app or in its engine. No Google Play Services, no trackers.
 
 Requires Android 15 or later.
@@ -50,4 +51,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md). To report a security problem, follow [S
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The APK also carries [uBlock Origin](https://github.com/gorhill/uBlock)'s signed release file, unchanged, under its own license, GPL-3.0.

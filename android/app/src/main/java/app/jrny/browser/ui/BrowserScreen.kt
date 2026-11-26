@@ -1,6 +1,10 @@
 package app.jrny.browser.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import app.jrny.browser.engine.Extensions
+import app.jrny.browser.engine.Engine
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -200,6 +204,9 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         rememberPermission = { origin, settings, allowed -> browser.rememberPermission(current.selected, origin, settings, allowed) },
     )
 
+    // A web page that an extension opens, or that its pages link to, opens in a new Tab of the Active Profile.
+    SideEffect { Extensions.openWeb = { browser.openLinkInProfile(profile, it) } }
+
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
@@ -298,6 +305,10 @@ fun BrowserWindow(
     val context = LocalContext.current
     // The history or bookmarks, shown in the page's place. Back closes it before anything else.
     var panel by rememberSaveable { mutableStateOf<Panel?>(null) }
+    // The extension the Extension panel shows, and where Back leads from the list of them:
+    // Settings when it was opened there, else the page.
+    var extensionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var extensionsBack by rememberSaveable { mutableStateOf<Panel?>(null) }
     // The file whose download just started, named over the page with a way to the Downloads list.
     var downloading by remember(tab) { mutableStateOf<String?>(null) }
     // The Site Rules and Site settings are reached from the settings, and Back leads there again.
@@ -305,11 +316,27 @@ fun BrowserWindow(
         panel = when (panel) {
             Panel.SiteRules, Panel.SiteSettings -> Panel.Settings
             Panel.LinkWrappers -> Panel.SiteRules
+            Panel.Extension -> Panel.Extensions
+            Panel.Extensions -> extensionsBack
             else -> null
         }
     }
+    // Extensions' own pages lie over any panel, and Back closes them first.
+    BackHandler(enabled = Extensions.pages.isNotEmpty(), onBack = Extensions::closePage)
+    // Extensions' popups and their "active tab" are the page's that shows.
+    val engine = Engine.runtime(context).webExtensionController
+    DisposableEffect(tab.session) {
+        engine.setTabActive(tab.session, true)
+        onDispose { engine.setTabActive(tab.session, false) }
+    }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
-    LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
+    LaunchedEffect(tabs.incomingLink) {
+        if (tabs.incomingLink) {
+            panel = null
+            Extensions.closePopup()
+            Extensions.closePages()
+        }
+    }
     HideStatusBar(fullscreen = tab.fullscreen != null)
     // One address field that moves between the layouts, and its draft kept here, so a
     // half-typed address survives a resize across 840dp.
@@ -386,6 +413,8 @@ fun BrowserWindow(
                             // A panel takes the page's place, so an address being typed is given up.
                             draft.value = null
                             focusManager.clearFocus(force = true)
+                            // From the page menu, Back from the list of extensions goes back to the page.
+                            if (it == Panel.Extensions) extensionsBack = null
                             panel = it
                         },
                         onSetDefaultBrowser = onSetDefaultBrowser,
@@ -395,6 +424,8 @@ fun BrowserWindow(
                         },
                         onDesktopSite = links.setDesktopSite,
                         onAddToHome = links.addToHomeScreen,
+                        extensions = Extensions.installed.filter { it.metaData.enabled && Extensions.actions.containsKey(it.id) },
+                        onExtension = Extensions::openPopup,
                     )
                 },
                 findBar = if (tab.findInPage.state != null) {
@@ -524,7 +555,9 @@ fun BrowserWindow(
                 } else {
                     null
                 },
-                panel = panel?.let { open ->
+                panel = if (Extensions.pages.isNotEmpty()) {
+                    { padding -> ExtensionPagePanel(padding) }
+                } else panel?.let { open ->
                     { padding ->
                         if (open == Panel.Settings) {
                             SettingsPanel(
@@ -537,6 +570,32 @@ fun BrowserWindow(
                                 profileName = profiles.active.name,
                                 sites = siteSettings.sites.size,
                                 onSiteSettings = { panel = Panel.SiteSettings },
+                                extensions = Extensions.installed.size,
+                                onExtensions = {
+                                    extensionsBack = Panel.Settings
+                                    panel = Panel.Extensions
+                                },
+                            )
+                        } else if (open == Panel.Extensions) {
+                            ExtensionsPanel(
+                                onOpen = {
+                                    extensionId = it.id
+                                    panel = Panel.Extension
+                                },
+                                onFindMore = {
+                                    Extensions.openWeb(Extensions.FIND_MORE)
+                                    panel = null
+                                },
+                                onBack = { panel = extensionsBack },
+                                onClose = { panel = null },
+                                contentPadding = padding,
+                            )
+                        } else if (open == Panel.Extension) {
+                            ExtensionPanel(
+                                id = extensionId.orEmpty(),
+                                onBack = { panel = Panel.Extensions },
+                                onClose = { panel = null },
+                                contentPadding = padding,
                             )
                         } else if (open == Panel.SiteSettings) {
                             SiteSettingsPanel(
@@ -599,6 +658,8 @@ fun BrowserWindow(
     PageAsks(tab, profiles.active.name, private, onRemember = siteSettings.rememberPermission)
     // What its scripts and form fields ask: alerts, questions, lists, dates and colors.
     PagePrompts(tab)
+    ExtensionPopup(private)
+    ExtensionAsks()
 
     // A page can only offer a file. It downloads once the person agrees.
     tab.download?.let { request ->

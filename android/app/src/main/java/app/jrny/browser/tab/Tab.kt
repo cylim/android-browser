@@ -16,6 +16,7 @@ import app.jrny.browser.address.WebAddress
 import app.jrny.browser.download.DownloadRequest
 import app.jrny.browser.download.DownloadSource
 import app.jrny.browser.engine.Engine
+import app.jrny.browser.engine.Extensions
 import app.jrny.browser.engine.PageBridge
 import app.jrny.browser.engine.PageFile
 import app.jrny.browser.handoff.AppLink
@@ -409,6 +410,7 @@ class Tab(
         restoring = false
         restoringTitle = null
         addressRequested = true
+        personLoadUri = address
         url = address
         onPageChanged(this)
         loadInto(session, address)
@@ -464,6 +466,13 @@ class Tab(
 
     /** True when the page loading next is one the person tapped a link to. */
     private var nextLoadByPerson = false
+
+    /**
+     * The address of the top-level load the person started, with a tap or an address they typed,
+     * followed through its redirects until a page arrives. Only a response from that address is
+     * theirs: a file a subframe or the page loads later isn't, though a tap brought the page.
+     */
+    private var personLoadUri: String? = null
 
     /** True while a new session loads the empty page it starts with, which no one asked for. */
     private var loadingOwnBlank = false
@@ -640,6 +649,10 @@ class Tab(
      */
     private fun offerDownload(from: GeckoSession, response: WebResponse) {
         val request = downloadRequest(response)
+        // Only the response to the load the person started, read before the state below is reset.
+        // A tap answers for one response: a later file from the same address needs a tap of its own.
+        val byPerson = from == session && response.uri == personLoadUri
+        personLoadUri = null
         when (from) {
             session -> {
                 // The page before is still what shows, with its title.
@@ -652,6 +665,14 @@ class Tab(
             }
             popup, openingPopup -> closePopup()
             else -> return discard(request)
+        }
+        // An extension, such as addons.mozilla.org's "Add to Firefox": the engine fetches it
+        // again to install it, once the person agrees (SPEC, "Extensions").
+        // Only when the person asked for it: a page can't open the question by itself, again and again.
+        if (Extensions.isExtension(response)) {
+            discard(request)
+            if (byPerson) Extensions.install(response.uri)
+            return
         }
         // A file the page sends while another question is open is dropped: one at a time. The
         // person can't have tapped it meanwhile, so the page sent it by itself.
@@ -706,7 +727,12 @@ class Tab(
         if (loadsHere(request.uri)) {
             // A load into a new window is the popup's, which gets its own mode once it opens.
             if (request.target == NavigationDelegate.TARGET_WINDOW_NEW) return GeckoResult.allow()
-            if (from == session && !request.isRedirect) nextLoadByPerson = request.hasUserGesture
+            if (from == session && !request.isRedirect) {
+                nextLoadByPerson = request.hasUserGesture
+                personLoadUri = request.uri.takeIf { request.hasUserGesture }
+            } else if (from == session && personLoadUri != null) {
+                personLoadUri = request.uri
+            }
             // The Tab's page and its popup alike.
             if (WebAddress.isWebAddress(request.uri)) applyMode(from, wantsDesktop(SiteOrigin.of(request.uri)))
             return GeckoResult.allow()
@@ -731,6 +757,8 @@ class Tab(
 
         override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
             if (session != this@Tab.session || url == null || !loadsHere(url)) return
+            // A page has arrived: what loads from here on wasn't the person's tap.
+            personLoadUri = null
             // Okapi's error page shows in the failed page's place: the address stays the page's.
             if (ErrorPages.isErrorPage(url) || (loadFailed && url == "about:blank")) return
             // A new session starts at an empty page of its own, which no one went to.

@@ -83,6 +83,9 @@ fun SettingsPanel(
     onSiteSettings: () -> Unit = {},
     /** The Active Profile's id: Clear browsing data's dialog belongs to it, and closes if it changes. */
     profileId: String = "",
+    /** How many extensions are installed, shown on the row that leads to them. */
+    extensions: Int = 0,
+    onExtensions: () -> Unit = {},
 ) {
     val settings = ui.settings
     var clearing by remember(profileId) { mutableStateOf(false) }
@@ -199,6 +202,15 @@ fun SettingsPanel(
                 onClick = { clearing = true },
             )
 
+            Section(R.string.extensions)
+            Link(
+                title = R.string.extensions,
+                explanation = stringResource(R.string.extensions_explanation),
+                value = if (extensions == 0) stringResource(R.string.extensions_none) else pluralStringResource(R.plurals.extension_count, extensions, extensions),
+                tag = "setting-extensions",
+                onClick = onExtensions,
+            )
+
             Section(R.string.backup)
             Link(
                 title = R.string.export_backup,
@@ -271,7 +283,7 @@ private const val BACKUP_TYPE = "application/json"
 private fun backupFileName(): String = "okapi-backup-${java.time.LocalDate.now()}.json"
 
 @Composable
-private fun Section(title: Int) {
+internal fun Section(title: Int) {
     Text(
         stringResource(title),
         style = MaterialTheme.typography.labelLarge,
@@ -313,7 +325,7 @@ private fun Choice(label: String, selected: Boolean, tag: String, onChoose: () -
  * set there now and an arrow. The arrow ends on the same line as the switches.
  */
 @Composable
-private fun Link(title: Int, explanation: String, value: String, tag: String, onClick: () -> Unit) {
+internal fun Link(title: Int, explanation: String, value: String, tag: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -431,7 +443,7 @@ private fun ClearBrowsingDataDialog(profileName: String, onClear: (Set<BrowsingD
 
 /** An on/off setting with what it means underneath. The whole row is the target. */
 @Composable
-private fun Toggle(title: Int, explanation: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+internal fun Toggle(title: Int, explanation: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

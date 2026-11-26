@@ -148,8 +148,9 @@ The page menu ("More") is the same in the Sidebar, the Rail and the Bottom Bar:
 
 1. A row of icons: Forward (only when the bar has no room for its own Forward button), Bookmark this page, Share and Reload.
 2. **Page**: Copy link, Find in page, Desktop site (a switch), Print, Add to Home screen.
-3. **Profile**: Move, Open in Profile.
-4. **Browser**: New Tab, New Private Tab, History, Bookmarks, Downloads, Settings, and "Set as default browser" while Okapi isn't.
+3. **Extensions**: each extension that is on and has a popup, then "Manage extensions".
+4. **Profile**: Move, Open in Profile.
+5. **Browser**: New Tab, New Private Tab, History, Bookmarks, Downloads, Settings, and "Set as default browser" while Okapi isn't.
 
 Items that need a web page, such as Share and Find in page, are disabled on the Start Page.
 
@@ -294,10 +295,37 @@ Holding a link or an image opens a menu:
 - Password managers work through the Android Autofill framework. Okapi does not store passwords itself.
 - Passkeys are not supported until the app is approved as a privileged browser ([ADR 0006](adr/0006-geckoview-as-engine.md)).
 
+## Extensions
+
+- People can add extensions that Mozilla has signed and that work in Firefox for Android ([ADR 0009](adr/0009-people-install-extensions.md)). The engine runs one set of extensions for the whole app, so every extension works in every Profile and can see the pages open in all of them. Okapi says so wherever an extension is added or listed.
+- Settings → "Extensions", or Page menu → "Manage extensions", lists them in the page's place, each with its icon, its version and a switch that turns it on or off. From the list:
+  - "Find extensions" opens addons.mozilla.org's extensions for Android in a new Tab of the Active Profile. Its "Add to Firefox" button starts the install: Okapi hands the file to the engine instead of offering a download. An extension file that a page loads without the person's tap is dropped.
+  - "Install from file" takes a signed `.xpi` file from Android's file picker.
+  - "Check for updates" asks every extension's update server, addons.mozilla.org for the ones from there, and says what happened: up to date, updated, ready at the next start (an extension may hold its update until then, as uBlock Origin does), or that it couldn't check.
+- Before an extension is added, a dialog shows its icon and lists what it can do in plain words: every site or which sites, and permissions such as seeing the Tabs open in every Profile or reading browsing history. It also says what the extension says it sends its developer, and that it works in every Profile. "Run in Private Tabs" is off unless the person ticks it. An update that asks for more permissions, and an extension that asks for an optional one, ask first the same way.
+- Tapping an extension opens its panel: its description and author, "On", "Run in Private Tabs", "Extension settings" when it has a settings page, what it can do, and "Remove", which asks first and deletes its data.
+- The page menu lists every extension that is on and has a popup. Tapping one opens its popup for the shown page in a sheet, under the extension's name and "Works in every Profile".
+- An extension's settings page, and any page of its own that it opens, open in the page's place. Back shows the page before it, and Close closes them all. Their dialogs look like a page's. Their file fields open Android's file picker, and a file they make, such as an extension's own backup, is saved where the person chooses with Android's file picker. A web page that an extension opens, or that one of its pages links to, opens in a new Tab of the Active Profile.
+- Okapi checks for updates once a day, when the app starts. An extension from addons.mozilla.org updates from there. One installed from a file may name its own update server in its manifest, and the check goes there.
+- Okapi's backup holds no extensions or their settings.
+
+### uBlock Origin, installed by default
+
+- On the first start, Okapi installs uBlock Origin from a signed copy in the APK, and lets it run in Private Tabs ([ADR 0008](adr/0008-ublock-origin-as-content-blocker.md)). It blocks what its filter lists name, such as ads, trackers and known malware sites. If the install fails, Okapi tries again at the next start, and pages load unblocked until then.
+- On the first start it also turns on the regional list for the device's language, if it has one, and downloads it.
+- After that it is an extension like any other: it can be turned off or removed, and a removed one isn't installed again. It updates from addons.mozilla.org.
+- Its default lists are the ones uBlock Origin turns on for Android. All but AdGuard Mobile are inside it, so it blocks before it has downloaded anything. It downloads AdGuard Mobile soon after the first start.
+- Its popup has the switch that turns blocking off for the page's site, the blocked count, and the element picker and zapper. Its settings page has its settings, filter lists, own filters, trusted sites, and its own "Back up to file" and "Restore from file".
+- It can't tell which Profile a request comes from. Its trusted sites, filters and settings apply in every Profile.
+- It downloads list updates by itself, from each list's own servers (see the privacy policy). It checks every hour while the app runs, and fetches a list again once the list's own expiry has passed.
+- After any start but the first, it holds a page's requests until its lists are ready. In the first seconds after the app's first install, while it installs and reads its lists, a page can load unblocked.
+- The engine's own tracking protection stays off, so only uBlock Origin's lists decide what a page loads.
+- No other extension is installed by default. ADR 0008 says which ones were considered and why.
+
 ## Backup
 
 - Settings → "Export backup" saves every live Profile's name and look, bookmarks and Folders, history, open Tabs (address, title, scroll position, which is selected and which are Pinned Tabs), Site Rules and Site settings, with the app settings and the person's changes to the default list of Link Wrappers, to one file. The person picks the place with Android's file picker; Okapi sends the file nowhere itself.
-- Never in a backup: cookies, site storage and other web data, so no sign-in; Private Tabs; downloaded files and the list of downloads; recently closed Tabs; Home Screen Shortcuts; site icons.
+- Never in a backup: cookies, site storage and other web data, so no sign-in; Private Tabs; downloaded files and the list of downloads; recently closed Tabs; Home Screen Shortcuts; site icons; extensions and their settings, such as uBlock Origin's filters and trusted sites.
 - A backup is encrypted by default, with a password typed twice, of at least 8 characters: AES-256-GCM with a key derived by PBKDF2-HMAC-SHA256 (600,000 iterations). The dialog says that a forgotten password can't be recovered. Turning the password off saves plain JSON, and the dialog warns that anyone with the file can read it.
 - Settings → "Import backup" opens a file with Android's file picker. An encrypted one asks for its password and says when it's wrong. The dialog then names the backup's Profiles and counts its bookmarks, visits and open Tabs, and offers two ways to import it, Merge first:
   - **Merge** adds what is missing. Nothing here is changed or removed: a Profile keeps every visit it has, and only the newest incoming visits that fit under its limit are added. A backup Profile joins the Profile here with the same name, ignoring case; the others are added. A bookmark or Folder the Profile already has (same address, or same name), a visit at the same time, a Tab with the same address, a Site Rule's pattern or a site's setting stays as it is here; an added Tab becomes the Pinned Tab only of a bookmark the import added. The backup's own Link Wrappers for sites that have none here are added; the ones here stay as they are. The Active Profile, the selected Tabs and the app settings stay.
@@ -317,4 +345,4 @@ Holding a link or an image opens a menu:
 
 ## Out of scope for v1
 
-Sync, extensions, our own password manager, content blocking, per-Profile biometric lock, Custom Tabs, and passkeys.
+Sync, our own password manager, per-Profile biometric lock, Custom Tabs, and passkeys.

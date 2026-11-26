@@ -83,6 +83,14 @@ _Avoid_: Redirector, tracker, unwrapper, link shortener
 What a Profile remembers about each site: the permissions it was given or refused (camera, microphone, location) and whether it gets its desktop version. Each Profile has its own.
 _Avoid_: Site permissions (for the whole list), content settings
 
+**Extension**:
+A program from addons.mozilla.org, signed by Mozilla, that the engine runs for every Profile at once. It can see and change the pages that its permissions allow, in every Profile, and in Private Tabs only when the person allows it.
+_Avoid_: Add-on (except when naming addons.mozilla.org), plugin
+
+**Content blocker**:
+uBlock Origin, the Extension Okapi installs by default, which stops pages from loading what its filter lists name, such as ads and trackers. Its settings and trusted sites apply in every Profile.
+_Avoid_: Ad blocker, tracking protection (the engine's own feature, which is off)
+
 ### Layout
 
 **Sidebar**:

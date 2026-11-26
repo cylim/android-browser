@@ -168,6 +168,15 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - "Check a link" names the address a wrapped link carries. "Always" after a Move offers that address's site, not the wrapper's.
 - A backup holds the changes to the Link Wrappers. Merge adds the wrappers for sites that have none; Replace takes the backup's changes.
 
+### Extensions and content blocking (not merged yet)
+
+- Add extensions from addons.mozilla.org: Settings → Extensions → Find extensions, then "Add to Firefox". Install from file takes a signed `.xpi`. Before anything is added, Okapi lists what it can do and says it works in every Profile.
+- Settings → Extensions, or Page menu → Manage extensions, lists them with a switch each. An extension's panel has Run in Private Tabs, its settings, what it can do, and Remove.
+- The page menu lists every extension with a popup and opens the popup for the page.
+- Okapi checks addons.mozilla.org for extension updates once a day, and when you tap Check for updates.
+- uBlock Origin is installed on the first start and blocks ads, trackers and known malware sites, in every Profile and in Private Tabs. You can turn it off or remove it like any extension. It updates its lists from each list's own servers, which the privacy policy names.
+- The APK is about 7 MB larger.
+
 ### Known limits
 
 - Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.
@@ -177,4 +186,6 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - A Move loses unsaved form input and pages reached by submitting a form.
 - Sign-in with two Accounts at once is untested on GeckoView: Google, Microsoft, GitHub and Apple still need checking with real Accounts.
 - Site icons, dark pages and "Save image" need the engine's built-in Okapi extension, which runs in web pages only.
-- Not in v1: sync, extensions, a built-in password manager, content blocking and a lock per Profile.
+- Extensions work in every Profile at once. uBlock Origin's trusted sites and settings apply in every Profile.
+- In the first seconds after the first install, a page can load before uBlock Origin is ready, unblocked.
+- Not in v1: sync, installing extensions, a built-in password manager and a lock per Profile.

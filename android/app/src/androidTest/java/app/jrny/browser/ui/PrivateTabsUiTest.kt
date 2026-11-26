@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -132,7 +133,7 @@ class PrivateTabsUiTest {
         compose.onNodeWithTag("page-menu").performClick()
         compose.onNodeWithTag("menu-move").assertIsNotEnabled()
         compose.onNodeWithTag("menu-open-in").assertIsNotEnabled()
-        compose.onNodeWithTag("menu-new-private-tab").performClick()
+        compose.onNodeWithTag("menu-new-private-tab").performScrollTo().performClick()
         assertEquals(1, openedPrivate.size)
     }
 

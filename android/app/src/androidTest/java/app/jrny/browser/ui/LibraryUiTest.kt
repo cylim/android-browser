@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
@@ -118,7 +119,7 @@ class LibraryUiTest {
         show(PHONE_PORTRAIT)
         compose.onNodeWithTag("page-menu").performClick()
         compose.onNodeWithContentDescription("Bookmark this page").assertExists()
-        compose.onNodeWithTag("menu-bookmark").assertIsEnabled().performClick()
+        compose.onNodeWithTag("menu-bookmark").performScrollTo().assertIsEnabled().performClick()
         assertEquals(listOf(server.url("/mail") to "Mail"), toggled)
 
         bookmarks = bookmarks + Bookmark(6, server.url("/mail"), "Mail")

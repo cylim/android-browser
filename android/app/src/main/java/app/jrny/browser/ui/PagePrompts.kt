@@ -65,10 +65,13 @@ import java.util.Locale
  * Dismissing a dialog is the page's "Cancel".
  */
 @Composable
-fun PagePrompts(tab: Tab) {
-    val prompt = tab.prompt ?: return
+fun PagePrompts(tab: Tab) = PagePrompts(tab.prompt, tab::closePrompt)
+
+/** Shows [prompt], from any page; [close] takes it away once it is answered. */
+@Composable
+fun PagePrompts(prompt: PagePrompt?, close: () -> Unit) {
+    prompt ?: return
     val site = prompt.site
-    val close: () -> Unit = { tab.closePrompt() }
     val dismiss: () -> Unit = {
         prompt.dismiss()
         close()

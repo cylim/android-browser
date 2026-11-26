@@ -217,7 +217,12 @@ class PageAsksUiTest {
     @Test
     fun aFileFieldForImagesOffersThePickerAndTheCameraButNoVideo() {
         show()
-        load(serve("<title>upload</title><input id=f type=file accept='image/*' style='position:fixed;inset:0;width:100%;height:100%'>"))
+        load(
+            serve(
+                "<title>upload</title><input id=f type=file accept='image/*' style='position:fixed;inset:0;width:100%;height:100%'>" +
+                    "<script>f.oncancel = () => { document.title = 'cancelled' }</script>",
+            ),
+        )
         awaitTitle("upload")
         tapPage()
         compose.waitUntil(15_000) { exists("file-source-dialog") }
@@ -225,9 +230,11 @@ class PageAsksUiTest {
         compose.onNodeWithTag("file-source-photo").assertExists()
         compose.onNodeWithTag("file-source-video").assertDoesNotExist()
 
-        // Cancelling answers the page, so the field can be used again.
+        // Cancelling answers the page, so the field can be used again. The page hears it a moment
+        // later: until then the engine still counts the field's picker as open and ignores a tap.
         compose.onNodeWithText("Cancel").performClick()
         assertNull(compose.runOnUiThread { tab.fileChooser })
+        awaitTitle("cancelled")
         tapPage()
         compose.waitUntil(15_000) { exists("file-source-dialog") }
         compose.onNodeWithText("Cancel").performClick()

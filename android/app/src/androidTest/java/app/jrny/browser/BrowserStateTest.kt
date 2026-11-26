@@ -43,6 +43,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
@@ -421,10 +422,14 @@ class BrowserStateTest {
             assertEquals("elsewhere.example" to null, offer.pattern.text to offer.rule)
             onMain { browser.acceptRuleOffer() }
             await("rule saved") { browser.linkOffer is LinkOffer.RuleSaved }
-            assertEquals(
-                setOf(wrapperRule.pattern.text to personal.id, "elsewhere.example" to work.id),
-                onMain { browser.siteRules.value }.map { it.pattern.text to it.profileId }.toSet(),
-            )
+            // The list comes from the database, which tells of the new rule a moment after the save.
+            val expected = setOf(wrapperRule.pattern.text to personal.id, "elsewhere.example" to work.id)
+            fun rules() = browser.siteRules.value.map { it.pattern.text to it.profileId }.toSet()
+            try {
+                await("both rules listed") { rules() == expected }
+            } catch (e: AssertionError) {
+                throw AssertionError("rules: " + onMain { rules() }, e)
+            }
         }
     }
 
@@ -905,10 +910,14 @@ class BrowserStateTest {
         val tab = show(browser, shown.id)
         // A file with nothing to read: it can't be saved.
         onMain { browser.saveDownload(shown, tab, DownloadRequest("data:text/plain", "report.txt", "text/plain", -1, source = DownloadSource.FromPage)) }
-        await("failed") { browser.pageFileSaved == SavedFileNotice(shown.id, "report.txt", saved = false) }
+        val failed = SavedFileNotice(shown.id, "report.txt", saved = false)
+        await("failed") { browser.pageFileSaved == failed }
         // The next save starts with no notice, so the last one's failure isn't taken for its own.
+        // Right after the call there is no notice yet, or already this save's own: when the work
+        // handed to other threads ends before the main thread waits for it (FakeDownloader saves
+        // at once), the save finishes within the call.
         val next = DownloadRequest("data:text/plain;base64,aGk=", "report.txt", "text/plain", -1, source = DownloadSource.FromPage)
-        assertEquals(null, onMain { browser.saveDownload(shown, tab, next); browser.pageFileSaved })
+        assertNotEquals("the last save's failure", failed, onMain { browser.saveDownload(shown, tab, next); browser.pageFileSaved })
         await("saved") { browser.pageFileSaved == SavedFileNotice(shown.id, "report.txt", saved = true) }
     }
 
@@ -1420,8 +1429,10 @@ class BrowserStateTest {
         val personal = active(browser).profile
         val work = runBlocking { profiles.create("Work", ProfileColor.Teal, ProfileIcon.Build) }
         val shortcut = runBlocking { repositories.shortcuts.add(work.id, "https://example.com/work", "Work page") }!!
-        // Personal is the Active Profile; the shortcut still opens in Work.
-        assertEquals(personal.id, active(browser).profile.id)
+        // A new Profile becomes the Active Profile, so Personal is made active again: the shortcut
+        // still opens in Work. Read before the database said so, Personal only seemed active.
+        runBlocking { profiles.activate(personal.id) }
+        await("personal active") { browser.active.value?.profile?.id == personal.id }
         assertTrue(runBlocking { browser.openShortcut(shortcut.id) })
         await("work active") { browser.active.value?.profile?.id == work.id }
         await("page open") { browser.active.value?.selected?.url == "https://example.com/work" }

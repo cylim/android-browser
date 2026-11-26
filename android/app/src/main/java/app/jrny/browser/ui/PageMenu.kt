@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import org.mozilla.geckoview.WebExtension
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +90,10 @@ fun PageMenu(
     onDesktopSite: ((Boolean) -> Unit)? = null,
     /** Add to Home screen, or null where it isn't offered: a Private Tab, or a launcher without pinned shortcuts. */
     onAddToHome: (() -> Unit)? = null,
+    /** The extensions with a popup, in the order to list them. */
+    extensions: List<WebExtension> = emptyList(),
+    /** Opens an extension's popup for the page. */
+    onExtension: (WebExtension) -> Unit = {},
 ) {
     var open by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -182,6 +187,21 @@ fun PageMenu(
             if (onAddToHome != null) {
                 Item(R.string.add_to_home_screen, Icons.Filled.Home, "menu-add-to-home", enabled = url != null, onClick = onAddToHome)
             }
+
+            Section(R.string.extensions)
+            extensions.forEach { extension ->
+                DropdownMenuItem(
+                    text = { Text(nameOf(extension)) },
+                    leadingIcon = { ExtensionIcon(extension, 24.dp) },
+                    enabled = url != null,
+                    onClick = {
+                        open = false
+                        onExtension(extension)
+                    },
+                    modifier = Modifier.testTag("menu-extension-${extension.id}"),
+                )
+            }
+            Item(R.string.manage_extensions, JrnyIcons.Extension, "menu-extensions") { onPanel(Panel.Extensions) }
 
             Section(R.string.menu_profile)
             Item(R.string.move_to_profile, Icons.AutoMirrored.Filled.ExitToApp, "menu-move", enabled = canUseOtherProfile) {
