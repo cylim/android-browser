@@ -1,6 +1,7 @@
 package app.jrny.browser.tab
 
 import android.util.Log
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.jrny.browser.TestPages.await
@@ -384,16 +385,17 @@ class TabTest {
         TestServer(pages).use { server ->
             val tab = newTab("test-try-again")
             val address = server.url("/flaky")
-            onMain { tab.load(address) }
             // The engine gives up after many rounds. The server can see every round before the Tab
             // hears that the page started, on a slow device, so the start comes first, then the end.
-            // Watched every 5 ms, not every 50 like await: the start is remembered once seen.
-            var started = false
-            val deadline = System.currentTimeMillis() + 15_000
-            while (!started) {
-                check(System.currentTimeMillis() < deadline) { "Timed out waiting for: load started" }
-                started = onMain { tab.isLoading }
-                if (!started) Thread.sleep(5)
+            // The start is caught as the Tab records it, however short the load and however late
+            // this thread looks.
+            val started = java.util.concurrent.atomic.AtomicBoolean(false)
+            val watch = Snapshot.registerGlobalWriteObserver { if (tab.isLoading) started.set(true) }
+            try {
+                onMain { tab.load(address) }
+                await("load started") { started.get() }
+            } finally {
+                watch.dispose()
             }
             await("load failed") { server.requests.size >= 15 && !tab.isLoading && tab.url == address }
             Thread.sleep(500)

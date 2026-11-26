@@ -650,7 +650,9 @@ class Tab(
     private fun offerDownload(from: GeckoSession, response: WebResponse) {
         val request = downloadRequest(response)
         // Only the response to the load the person started, read before the state below is reset.
+        // A tap answers for one response: a later file from the same address needs a tap of its own.
         val byPerson = from == session && response.uri == personLoadUri
+        personLoadUri = null
         when (from) {
             session -> {
                 // The page before is still what shows, with its title.
