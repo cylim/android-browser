@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -213,7 +214,7 @@ class PageMenuUiTest {
         loadPage()
         show(PHONE_PORTRAIT, offerDefaultBrowser = true)
         openMenu()
-        compose.onNodeWithTag("menu-default-browser").performClick()
+        compose.onNodeWithTag("menu-default-browser").performScrollTo().performClick()
         assertEquals(1, defaultBrowserAsked)
     }
 
