@@ -15,7 +15,7 @@ TODO(owner): Before you enter this policy's address in Play Console:
 
 This policy covers Okapi by JRNY, the Android app with the application ID `app.jrny.browser`. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.
 
-In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, and to addons.mozilla.org when you add extensions or Okapi checks for their updates.
+In short: Okapi has no server, no accounts, no ads and no analytics. Okapi keeps your history, bookmarks, cookies and site data on your device. An extension you add can read the pages its permissions allow and send what it reads to its developer. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, and to addons.mozilla.org when you add extensions or Okapi checks for their updates.
 
 ## Who makes Okapi
 
@@ -44,7 +44,7 @@ One Profile can't see another Profile's data.
 
 For all Profiles together, the app keeps your settings (search engine, Search suggestions, Safe Browsing, theme and compact rows), your Site Rules and your changes to the list of link wrappers. Extensions you add keep their own settings and data, for all Profiles together. uBlock Origin keeps its settings, its filter lists, your own filters, its trusted sites and its counts of what it blocked.
 
-None of this is sent to us or to anyone else.
+Okapi sends none of this to us or to anyone else. Extensions you add are the exception: see "Extensions" below.
 
 ### Backup files you make
 
@@ -93,7 +93,7 @@ uBlock Origin is on by default. To let one site load everything, turn uBlock Ori
 
 ### Extensions
 
-When you add an extension from addons.mozilla.org, the engine downloads it from Mozilla's servers, as your browser downloads any file, and checks Mozilla's signature on it. Once a day, and when you tap Check for updates, Okapi asks addons.mozilla.org whether your extensions have updates. The engine sends Mozilla each extension's id and version, with details such as the engine's version, that it runs on Android, the device's processor type and your language. It sends nothing about the pages you open.
+When you add an extension from addons.mozilla.org, the engine downloads it from Mozilla's servers, as your browser downloads any file, and checks Mozilla's signature on it. Once a day, and when you tap Check for updates, Okapi asks each extension's update server whether it has a newer version. For an extension from addons.mozilla.org, that server is Mozilla's. An extension installed from a file can name its own update server. The engine sends that server the extension's id and version, with details such as the engine's version, that it runs on Android, the device's processor type and your language. It sends nothing about the pages you open.
 
 Extensions you add are made by their developers, not by us. An extension can see and change the pages its permissions allow, in every Profile, and can send data to its developer under the developer's own policy. Before you add one, Okapi lists what it can do and what it says it sends its developer. To stop an extension, turn it off or remove it in Settings → Extensions. Removing it deletes the data it kept on your device.
 

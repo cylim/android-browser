@@ -48,7 +48,7 @@
         <p class="eyebrow">Effective date: <time datetime="2026-11-26">26 November 2026</time></p>
         <h1 id="pp-title">Privacy policy</h1>
         <p class="lede">This policy covers Okapi by JRNY, the Android app with the application ID <code>app.jrny.browser</code>. It says what the app keeps on your device, what it sends off your device and who receives it, and how you delete it.</p>
-        <p class="lede">In short: Okapi has no server, no accounts, no ads and no analytics. Your history, bookmarks, cookies and site data stay on your device. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, and to addons.mozilla.org when you add extensions or Okapi checks for their updates.</p>
+        <p class="lede">In short: Okapi has no server, no accounts, no ads and no analytics. Okapi keeps your history, bookmarks, cookies and site data on your device. An extension you add can read the pages its permissions allow and send what it reads to its developer. What leaves your device goes to the sites you open, to your search engine while you type in the address field, to Google's Safe Browsing service through the app's web engine, to the servers of the filter lists that block ads and trackers, and to addons.mozilla.org when you add extensions or Okapi checks for their updates.</p>
       </div>
       <dl class="reqs">
         <div><dt>Server</dt><dd>None</dd></div>
@@ -102,7 +102,7 @@
           </ul>
         </div>
       </div>
-      <p class="note">One Profile can't see another Profile's data. None of this is sent to us or to anyone else.</p>
+      <p class="note">One Profile can't see another Profile's data. Okapi sends none of this to us or to anyone else. Extensions you add are the exception: see <a href="#l-extensions">Extensions</a>.</p>
       <h3>Backup files you make</h3>
       <p>Settings → Export backup saves a copy of every Profile's name and look, bookmarks and Folders, history, open Tabs and Site settings, with your settings, Site Rules and changes to the list of link wrappers, to a file in a place you choose. Cookies, site storage, sign-ins, Private Tabs and downloaded files are never in it. The file is encrypted with a password you set (AES-256-GCM, with a key derived from the password by PBKDF2), unless you turn that off; then anyone who has the file can read it. Okapi sends the file nowhere itself. If you save it to a cloud drive, that drive's provider holds it, under their own terms. Import backup reads a file you choose, only when you ask.</p>
     </section>
@@ -172,7 +172,7 @@
           <h3 id="l-extensions">Extensions</h3>
         </div>
         <div class="feature-body">
-          <p>When you add an extension from addons.mozilla.org, the engine downloads it from Mozilla's servers, as your browser downloads any file, and checks Mozilla's signature on it. Once a day, and when you tap Check for updates, Okapi asks addons.mozilla.org whether your extensions have updates. The engine sends Mozilla each extension's id and version, with details such as the engine's version, that it runs on Android, the device's processor type and your language. It sends nothing about the pages you open.</p>
+          <p>When you add an extension from addons.mozilla.org, the engine downloads it from Mozilla's servers, as your browser downloads any file, and checks Mozilla's signature on it. Once a day, and when you tap Check for updates, Okapi asks each extension's update server whether it has a newer version. For an extension from addons.mozilla.org, that server is Mozilla's. An extension installed from a file can name its own update server. The engine sends that server the extension's id and version, with details such as the engine's version, that it runs on Android, the device's processor type and your language. It sends nothing about the pages you open.</p>
           <p>Extensions you add are made by their developers, not by us. An extension can see and change the pages its permissions allow, in every Profile, and can send data to its developer under the developer's own policy. Before you add one, Okapi lists what it can do and what it says it sends its developer. To stop an extension, turn it off or remove it in Settings &rarr; Extensions. Removing it deletes the data it kept on your device.</p>
         </div>
       </article>

@@ -466,6 +466,12 @@ class Tab(
     /** True when the page loading next is one the person tapped a link to. */
     private var nextLoadByPerson = false
 
+    /**
+     * True when the person started the load now under way with a tap, kept through its redirects
+     * until the next load starts. Unlike [nextLoadByPerson], it lasts until the response arrives.
+     */
+    private var loadStartedByPerson = false
+
     /** True while a new session loads the empty page it starts with, which no one asked for. */
     private var loadingOwnBlank = false
 
@@ -641,6 +647,8 @@ class Tab(
      */
     private fun offerDownload(from: GeckoSession, response: WebResponse) {
         val request = downloadRequest(response)
+        // Read before the state below is reset: a tap, or an address the person typed.
+        val byPerson = from == session && (loadStartedByPerson || addressRequested)
         when (from) {
             session -> {
                 // The page before is still what shows, with its title.
@@ -656,9 +664,10 @@ class Tab(
         }
         // An extension, such as addons.mozilla.org's "Add to Firefox": the engine fetches it
         // again to install it, once the person agrees (SPEC, "Extensions").
+        // Only when the person asked for it: a page can't open the question by itself, again and again.
         if (Extensions.isExtension(response)) {
             discard(request)
-            Extensions.install(response.uri)
+            if (byPerson) Extensions.install(response.uri)
             return
         }
         // A file the page sends while another question is open is dropped: one at a time. The
@@ -714,7 +723,10 @@ class Tab(
         if (loadsHere(request.uri)) {
             // A load into a new window is the popup's, which gets its own mode once it opens.
             if (request.target == NavigationDelegate.TARGET_WINDOW_NEW) return GeckoResult.allow()
-            if (from == session && !request.isRedirect) nextLoadByPerson = request.hasUserGesture
+            if (from == session && !request.isRedirect) {
+                nextLoadByPerson = request.hasUserGesture
+                loadStartedByPerson = request.hasUserGesture
+            }
             // The Tab's page and its popup alike.
             if (WebAddress.isWebAddress(request.uri)) applyMode(from, wantsDesktop(SiteOrigin.of(request.uri)))
             return GeckoResult.allow()

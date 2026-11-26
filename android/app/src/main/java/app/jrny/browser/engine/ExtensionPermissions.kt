@@ -16,7 +16,7 @@ data class ExtensionPermissions(
 ) {
     companion object {
         fun of(permissions: Array<out String>, origins: Array<out String>, dataCollection: Array<out String>): ExtensionPermissions {
-            val all = origins.any { it in ALL_SITES }
+            val all = origins.any { it in ALL_SITES || isEveryHost(it) }
             return ExtensionPermissions(
                 allSites = all,
                 sites = if (all) emptyList() else origins.mapNotNull(::siteOf).distinct(),
@@ -31,6 +31,12 @@ data class ExtensionPermissions(
             if (scheme !in WEB_SCHEMES) return null
             val host = pattern.substringAfter("://").substringBefore('/').substringBefore(':').removePrefix("*.")
             return host.takeIf { it.isNotEmpty() && it != "*" }
+        }
+
+        /** A web pattern whose host is `*`, such as one for a path on every site. */
+        private fun isEveryHost(pattern: String): Boolean {
+            val scheme = pattern.substringBefore("://", missingDelimiterValue = "")
+            return scheme in WEB_SCHEMES && pattern.substringAfter("://").substringBefore('/') == "*"
         }
 
         /** Patterns for every web page. */

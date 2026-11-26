@@ -299,14 +299,14 @@ Holding a link or an image opens a menu:
 
 - People can add extensions that Mozilla has signed and that work in Firefox for Android ([ADR 0009](adr/0009-people-install-extensions.md)). The engine runs one set of extensions for the whole app, so every extension works in every Profile and can see the pages open in all of them. Okapi says so wherever an extension is added or listed.
 - Settings → "Extensions", or Page menu → "Manage extensions", lists them in the page's place, each with its icon, its version and a switch that turns it on or off. From the list:
-  - "Find extensions" opens addons.mozilla.org's extensions for Android in a new Tab of the Active Profile. Its "Add to Firefox" button starts the install: Okapi hands the file to the engine instead of offering a download.
+  - "Find extensions" opens addons.mozilla.org's extensions for Android in a new Tab of the Active Profile. Its "Add to Firefox" button starts the install: Okapi hands the file to the engine instead of offering a download. An extension file that a page loads without the person's tap is dropped.
   - "Install from file" takes a signed `.xpi` file from Android's file picker.
-  - "Check for updates" asks addons.mozilla.org about every extension and says what happened: up to date, updated, ready at the next start (an extension may hold its update until then, as uBlock Origin does), or that it couldn't check.
+  - "Check for updates" asks every extension's update server, addons.mozilla.org for the ones from there, and says what happened: up to date, updated, ready at the next start (an extension may hold its update until then, as uBlock Origin does), or that it couldn't check.
 - Before an extension is added, a dialog shows its icon and lists what it can do in plain words: every site or which sites, and permissions such as seeing the Tabs open in every Profile or reading browsing history. It also says what the extension says it sends its developer, and that it works in every Profile. "Run in Private Tabs" is off unless the person ticks it. An update that asks for more permissions, and an extension that asks for an optional one, ask first the same way.
 - Tapping an extension opens its panel: its description and author, "On", "Run in Private Tabs", "Extension settings" when it has a settings page, what it can do, and "Remove", which asks first and deletes its data.
 - The page menu lists every extension that is on and has a popup. Tapping one opens its popup for the shown page in a sheet, under the extension's name and "Works in every Profile".
 - An extension's settings page, and any page of its own that it opens, open in the page's place. Back shows the page before it, and Close closes them all. Their dialogs look like a page's. Their file fields open Android's file picker, and a file they make, such as an extension's own backup, is saved where the person chooses with Android's file picker. A web page that an extension opens, or that one of its pages links to, opens in a new Tab of the Active Profile.
-- Okapi checks addons.mozilla.org for updates once a day, when the app starts.
+- Okapi checks for updates once a day, when the app starts. An extension from addons.mozilla.org updates from there. One installed from a file may name its own update server in its manifest, and the check goes there.
 - Okapi's backup holds no extensions or their settings.
 
 ### uBlock Origin, installed by default

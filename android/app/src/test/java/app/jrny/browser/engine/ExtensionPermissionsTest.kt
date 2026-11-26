@@ -18,6 +18,13 @@ class ExtensionPermissionsTest {
     }
 
     @Test
+    fun aPathOnEverySiteIsStillEverySite() {
+        val asked = ExtensionPermissions.of(emptyArray(), arrayOf("https://*/api/*"), emptyArray())
+        assertTrue(asked.allSites)
+        assertEquals(emptyList<String>(), asked.sites)
+    }
+
+    @Test
     fun sitesAreNamedOnceWithoutSchemeWildcardOrPath() {
         val asked = ExtensionPermissions.of(
             emptyArray(),

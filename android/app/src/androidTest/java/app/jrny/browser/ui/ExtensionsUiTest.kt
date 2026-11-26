@@ -10,6 +10,7 @@ import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.jrny.browser.TestServer
+import app.jrny.browser.engine.ExtensionAsk
 import app.jrny.browser.engine.Extensions
 import app.jrny.browser.profile.ProfileId
 import app.jrny.browser.profile.WebProfile
@@ -48,16 +49,28 @@ class ExtensionsUiTest {
         compose.waitUntil(60_000) { Extensions.actions.containsKey(ublock.id) }
     }
 
+    /** Leaves uBlock Origin installed and on, as the app's first start does, for the tests after this one. */
     @After
     fun closeAll() {
-        compose.runOnUiThread {
-            Extensions.closePopup()
-            Extensions.closePages()
-            Extensions.installed.firstOrNull { it.id == ublock.id && !it.metaData.enabled }?.let { Extensions.setEnabled(it, true) }
-            tab.destroy()
+        try {
+            compose.runOnUiThread {
+                Extensions.closePopup()
+                Extensions.closePages()
+                Extensions.dismissNotice()
+                (Extensions.ask as? ExtensionAsk.Add)?.answer?.invoke(false, false)
+                val present = Extensions.installed.firstOrNull { it.id == ublock.id }
+                if (present == null) Extensions.install(ublock.location) else if (!present.metaData.enabled) Extensions.setEnabled(present, true)
+                tab.destroy()
+            }
+            // A removed one comes back through the question any install asks.
+            compose.waitUntil(30_000) {
+                (Extensions.ask as? ExtensionAsk.Add)?.takeIf { it.extension.id == ublock.id }?.answer?.invoke(true, true)
+                Extensions.actions.containsKey(ublock.id)
+            }
+            compose.runOnUiThread { Extensions.dismissNotice() }
+        } finally {
+            server.close()
         }
-        compose.waitUntil(15_000) { Extensions.actions.containsKey(ublock.id) }
-        server.close()
     }
 
     @Test
