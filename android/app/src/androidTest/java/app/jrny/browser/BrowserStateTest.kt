@@ -421,10 +421,14 @@ class BrowserStateTest {
             assertEquals("elsewhere.example" to null, offer.pattern.text to offer.rule)
             onMain { browser.acceptRuleOffer() }
             await("rule saved") { browser.linkOffer is LinkOffer.RuleSaved }
-            assertEquals(
-                setOf(wrapperRule.pattern.text to personal.id, "elsewhere.example" to work.id),
-                onMain { browser.siteRules.value }.map { it.pattern.text to it.profileId }.toSet(),
-            )
+            // The list comes from the database, which tells of the new rule a moment after the save.
+            val expected = setOf(wrapperRule.pattern.text to personal.id, "elsewhere.example" to work.id)
+            fun rules() = browser.siteRules.value.map { it.pattern.text to it.profileId }.toSet()
+            try {
+                await("both rules listed") { rules() == expected }
+            } catch (e: AssertionError) {
+                throw AssertionError("rules: " + onMain { rules() }, e)
+            }
         }
     }
 
