@@ -69,7 +69,7 @@ object Engine {
         runtime = created
         setPrefs()
         installBridge(created)
-        ContentBlocker.install(created)
+        ContentBlocker.install(created, app)
         return created
     }
 

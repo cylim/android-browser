@@ -1,6 +1,10 @@
 package app.jrny.browser.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import app.jrny.browser.engine.ContentBlocker
+import app.jrny.browser.engine.Engine
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -200,6 +204,9 @@ fun BrowserScreen(browser: BrowserState, onSetDefaultBrowser: (() -> Unit)? = nu
         rememberPermission = { origin, settings, allowed -> browser.rememberPermission(current.selected, origin, settings, allowed) },
     )
 
+    // A web page that uBlock Origin's own pages link to opens in a new Tab of the Active Profile.
+    SideEffect { ContentBlocker.openWeb = { browser.openLinkInProfile(profile, it) } }
+
     val selected = current.selected.id
     val tab = browser.tabFor(current.selected)
     LaunchedEffect(selected) { browser.shown(selected) }
@@ -308,6 +315,14 @@ fun BrowserWindow(
             else -> null
         }
     }
+    // uBlock Origin's pages lie over any panel, and Back closes them first.
+    BackHandler(enabled = ContentBlocker.pages.isNotEmpty(), onBack = ContentBlocker::closePage)
+    // uBlock Origin's popup and its "active tab" are the page's that shows.
+    val engine = Engine.runtime(context).webExtensionController
+    DisposableEffect(tab.session) {
+        engine.setTabActive(tab.session, true)
+        onDispose { engine.setTabActive(tab.session, false) }
+    }
     // A link from another app shows at once, with its Move offer, not behind an open panel.
     LaunchedEffect(tabs.incomingLink) { if (tabs.incomingLink) panel = null }
     HideStatusBar(fullscreen = tab.fullscreen != null)
@@ -395,6 +410,7 @@ fun BrowserWindow(
                         },
                         onDesktopSite = links.setDesktopSite,
                         onAddToHome = links.addToHomeScreen,
+                        onContentBlocker = if (ContentBlocker.ready) ContentBlocker::openPopup else null,
                     )
                 },
                 findBar = if (tab.findInPage.state != null) {
@@ -524,7 +540,9 @@ fun BrowserWindow(
                 } else {
                     null
                 },
-                panel = panel?.let { open ->
+                panel = if (ContentBlocker.pages.isNotEmpty()) {
+                    { padding -> ContentBlockerPanel(padding) }
+                } else panel?.let { open ->
                     { padding ->
                         if (open == Panel.Settings) {
                             SettingsPanel(
@@ -537,6 +555,7 @@ fun BrowserWindow(
                                 profileName = profiles.active.name,
                                 sites = siteSettings.sites.size,
                                 onSiteSettings = { panel = Panel.SiteSettings },
+                                onContentBlocker = if (ContentBlocker.extension != null) ContentBlocker::openDashboard else null,
                             )
                         } else if (open == Panel.SiteSettings) {
                             SiteSettingsPanel(
@@ -599,6 +618,8 @@ fun BrowserWindow(
     PageAsks(tab, profiles.active.name, private, onRemember = siteSettings.rememberPermission)
     // What its scripts and form fields ask: alerts, questions, lists, dates and colors.
     PagePrompts(tab)
+    ContentBlockerPopup(private)
+    ContentBlockerAsks()
 
     // A page can only offer a file. It downloads once the person agrees.
     tab.download?.let { request ->

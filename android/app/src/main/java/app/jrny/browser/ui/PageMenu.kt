@@ -89,6 +89,8 @@ fun PageMenu(
     onDesktopSite: ((Boolean) -> Unit)? = null,
     /** Add to Home screen, or null where it isn't offered: a Private Tab, or a launcher without pinned shortcuts. */
     onAddToHome: (() -> Unit)? = null,
+    /** Opens uBlock Origin's popup for the page, or null until it can. */
+    onContentBlocker: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -164,6 +166,9 @@ fun PageMenu(
                 Sharing.copy(context, linkLabel, url!!, private)
             }
             Item(R.string.find_in_page, Icons.Filled.Search, "menu-find", enabled = url != null, onClick = onFind)
+            if (onContentBlocker != null) {
+                Item(R.string.content_blocker_name, JrnyIcons.Shield, "menu-content-blocker", enabled = url != null, onClick = onContentBlocker)
+            }
             // A switch: it shows whether the site gets its desktop version, and changes it.
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.site_setting_desktop)) },

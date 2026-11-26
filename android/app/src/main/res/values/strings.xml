@@ -234,6 +234,10 @@
     <string name="open_android_settings">Open settings</string>
     <string name="sites">Sites</string>
     <string name="site_settings">Site settings</string>
+    <string name="content_blocking">Ad and tracker blocking</string>
+    <string name="content_blocking_explanation">uBlock Origin\'s settings, filter lists and trusted sites. They apply in every Profile.</string>
+    <string name="content_blocker_name" translatable="false">uBlock Origin</string>
+    <string name="content_blocker_note">Applies in every Profile</string>
     <string name="site_settings_explanation">Camera, microphone and location for each site in %1$s</string>
     <string name="site_settings_none">None yet</string>
     <plurals name="site_count">

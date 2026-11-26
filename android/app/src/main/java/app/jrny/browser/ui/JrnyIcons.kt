@@ -27,6 +27,9 @@ object JrnyIcons {
             "M12,8v5l4.28,2.54 0.72,-1.21 -3.5,-2.08L13.5,8L12,8z",
     )
 
+    /** A shield: the content blocker. */
+    val Shield: ImageVector = icon("Shield", "M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5l-9,-4z")
+
     /** An arrow down onto a tray: downloads. */
     val Download: ImageVector = icon("Download", "M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z")
 

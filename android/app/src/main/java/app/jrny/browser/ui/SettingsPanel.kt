@@ -83,6 +83,8 @@ fun SettingsPanel(
     onSiteSettings: () -> Unit = {},
     /** The Active Profile's id: Clear browsing data's dialog belongs to it, and closes if it changes. */
     profileId: String = "",
+    /** Opens uBlock Origin's dashboard, or null until it is installed. */
+    onContentBlocker: (() -> Unit)? = null,
 ) {
     val settings = ui.settings
     var clearing by remember(profileId) { mutableStateOf(false) }
@@ -191,6 +193,15 @@ fun SettingsPanel(
                 checked = settings.safeBrowsing,
                 tag = "setting-safe-browsing",
             ) { on -> ui.update { it.copy(safeBrowsing = on) } }
+            if (onContentBlocker != null) {
+                Link(
+                    title = R.string.content_blocking,
+                    explanation = stringResource(R.string.content_blocking_explanation),
+                    value = "",
+                    tag = "setting-content-blocking",
+                    onClick = onContentBlocker,
+                )
+            }
             Link(
                 title = R.string.clear_browsing_data,
                 explanation = stringResource(R.string.clear_browsing_data_explanation, profileName),
