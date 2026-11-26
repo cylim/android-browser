@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -148,7 +149,7 @@ class LinksUiTest {
         loadServed("<title>copy me</title>")
         show()
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-copy-link").assertIsEnabled().performClick()
+        compose.onNodeWithTag("menu-copy-link").performScrollTo().assertIsEnabled().performClick()
         val clip = compose.runOnUiThread {
             instrumentation.targetContext.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString()
         }

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -190,7 +191,7 @@ class DownloadsUiTest {
         statuses = mapOf(3L to DownloadStatus.Running(0.4f), 2L to DownloadStatus.Done(2000), 1L to DownloadStatus.Failed)
         show(TABLET_LANDSCAPE)
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-downloads").performClick()
+        compose.onNodeWithTag("menu-downloads").performScrollTo().performClick()
 
         compose.onNodeWithText("Downloading · 40%", substring = true).assertExists()
         // The size in the device's own format, which has its own spacing characters.
@@ -217,7 +218,7 @@ class DownloadsUiTest {
         statuses = mapOf(1L to DownloadStatus.Done(10))
         show(PHONE_PORTRAIT)
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-downloads").performClick()
+        compose.onNodeWithTag("menu-downloads").performScrollTo().performClick()
         compose.onNodeWithText("strange.xyz").performClick()
         compose.onNodeWithText("No app on this device can open this file.").assertExists()
     }
@@ -226,7 +227,7 @@ class DownloadsUiTest {
     fun anEmptyListSaysWhatWillShowThere() {
         show(PHONE_PORTRAIT)
         compose.onNodeWithTag("page-menu").performClick()
-        compose.onNodeWithTag("menu-downloads").performClick()
+        compose.onNodeWithTag("menu-downloads").performScrollTo().performClick()
         compose.onNodeWithText("Files you download in this Profile show here.").assertExists()
     }
 

@@ -91,7 +91,7 @@ class PageMenuUiTest {
         loadPage()
         show(TABLET_LANDSCAPE)
         openMenu()
-        compose.onNodeWithTag("menu-move").assertIsEnabled().performClick()
+        compose.onNodeWithTag("menu-move").performScrollTo().assertIsEnabled().performClick()
 
         compose.onNodeWithTag("profile-picker").assertExists()
         compose.onNodeWithText("Unsaved form input will be lost.", substring = true).assertExists()
@@ -110,7 +110,7 @@ class PageMenuUiTest {
         loadPage()
         show(PHONE_PORTRAIT)
         openMenu()
-        compose.onNodeWithTag("menu-open-in").assertIsEnabled().performClick()
+        compose.onNodeWithTag("menu-open-in").performScrollTo().assertIsEnabled().performClick()
         compose.onNodeWithText("This Tab stays open.", substring = true).assertExists()
         compose.onNodeWithTag("pick-profile-${TestProfiles.work.id.value}").performClick()
         assertEquals(listOf(TestProfiles.work), openedIn)
@@ -122,7 +122,7 @@ class PageMenuUiTest {
         loadPage()
         show(PHONE_PORTRAIT)
         openMenu()
-        compose.onNodeWithTag("menu-move").performClick()
+        compose.onNodeWithTag("menu-move").performScrollTo().performClick()
         compose.onNodeWithText("Cancel").performClick()
         compose.onNodeWithTag("profile-picker").assertDoesNotExist()
         assertEquals(emptyList<Profile>(), moved)
@@ -141,7 +141,7 @@ class PageMenuUiTest {
             }
         }
         openMenu()
-        compose.onNodeWithTag("menu-move").performClick()
+        compose.onNodeWithTag("menu-move").performScrollTo().performClick()
         compose.onNodeWithTag("profile-picker").assertExists()
 
         // An Incoming Link, say, selects another Tab while the picker is open.
@@ -175,7 +175,7 @@ class PageMenuUiTest {
         loadPage()
         show(TABLET_LANDSCAPE)
         openMenu()
-        compose.onNodeWithTag("menu-new-tab").performClick()
+        compose.onNodeWithTag("menu-new-tab").performScrollTo().performClick()
         assertEquals(1, opened.size)
     }
 
