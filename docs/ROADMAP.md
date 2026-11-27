@@ -61,21 +61,31 @@ Added to v1 after Milestone 5:
 ## Before the first release: GeckoView
 
 - Pages render in GeckoView instead of Android System WebView ([ADR 0006](adr/0006-geckoview-as-engine.md)), with page dialogs, error pages and engine-built downloads.
-- Sign in with two Accounts each to Google, Microsoft (personal and work), GitHub and Apple, in two Profiles.
-- Capture and document what the engine itself sends over the network, for the privacy policy.
+- Sign in with two Accounts each to Google, Microsoft (personal and work), GitHub and Apple, in two Profiles ([#33](https://github.com/cylim/android-browser/issues/33)).
+- Capture and document what the engine itself sends over the network, for the privacy policy ([#34](https://github.com/cylim/android-browser/issues/34)).
 
 ## Milestone 6: First public release
 
-- Signed release APK built by GitHub Actions and published on GitHub Releases, for `arm64-v8a` (`-PgeckoAbi=arm64-v8a`).
+- Signed release APK built by GitHub Actions and published on GitHub Releases, for `arm64-v8a` (`-PgeckoAbi=arm64-v8a`), as `okapi-arm64-v8a.apk`. The website's download button links to that name in the latest release ([#31](https://github.com/cylim/android-browser/issues/31)).
 - Check that the build meets F-Droid's requirements. F-Droid usually builds GeckoView from source, and the build downloads uBlock Origin's release file.
-- A routine for taking each GeckoView security release, about every 4 weeks, and each uBlock Origin release.
+- A routine for taking each GeckoView security release, about every 4 weeks, and each uBlock Origin release ([#32](https://github.com/cylim/android-browser/issues/32)).
 
 ## After the first release
 
-- Web notifications, through GeckoView, without a Google push service.
+Each item closes a gap between Okapi and Chrome or Firefox for Android. Items that add a network service need an ADR first ([ADR 0002](adr/0002-no-proprietary-dependencies-or-telemetry.md)).
 
-- Passkeys, after approval as a privileged browser.
-- Custom Tabs service.
+- Web notifications, through GeckoView, without a Google push service ([#35](https://github.com/cylim/android-browser/issues/35)).
+- Passkeys, after approval as a privileged browser ([#36](https://github.com/cylim/android-browser/issues/36)).
+- Custom Tabs service ([#37](https://github.com/cylim/android-browser/issues/37)).
+- Memory use and download size measured on real phones, with the live-Tab limit set from the device's memory ([#45](https://github.com/cylim/android-browser/issues/45)).
+- Android versions older than 15. GeckoView supports Android 8 and later ([#44](https://github.com/cylim/android-browser/issues/44)).
+- Extensions per Profile, if GeckoView allows it ([#43](https://github.com/cylim/android-browser/issues/43)).
+- Sync between devices ([#38](https://github.com/cylim/android-browser/issues/38)).
+- Page translation on the device ([#39](https://github.com/cylim/android-browser/issues/39)).
+- Reader view ([#40](https://github.com/cylim/android-browser/issues/40)).
+- QR code scanning ([#41](https://github.com/cylim/android-browser/issues/41)).
+- Voice search ([#42](https://github.com/cylim/android-browser/issues/42)).
 - Biometric lock per Profile.
 - Bookmark export and import.
 - Google Play release.
+- A decision on a news or content feed for the Start Page ([#46](https://github.com/cylim/android-browser/issues/46)).
