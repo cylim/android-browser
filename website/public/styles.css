@@ -172,6 +172,7 @@ h1 {
 .btn-quiet { color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
 .btn-quiet:hover { border-color: var(--accent-ink); }
 .soon { font-family: var(--f-mono); font-size: 0.75rem; font-weight: 500; color: var(--muted); border-left: 1px solid var(--line); padding-left: 10px; }
+.btn-primary .soon { color: inherit; border-color: currentColor; opacity: 0.85; }
 .fine { margin-top: var(--s3); font-size: 0.875rem; color: var(--muted); }
 
 /* Hero art: the Okapi mark, large. Below the two-column width it follows the text, smaller. */
@@ -353,42 +354,35 @@ h3 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; }
 .reqs dt { font-family: var(--f-mono); font-size: 0.8rem; color: var(--muted); }
 .reqs dd { margin: var(--s1) 0 0; font-size: 1.1rem; font-weight: 650; }
 
-/* Changelog */
-.log { display: grid; gap: var(--s6); max-width: 52rem; }
-.release-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s3); margin-bottom: var(--s3); }
-.ver { font-family: var(--f-mono); font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
-.tag { font-family: var(--f-mono); font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--muted); color: var(--muted); }
-.release > ul, details ul { display: grid; gap: var(--s2); }
-.release > ul li, details li { position: relative; padding-left: 20px; }
-.release > ul li::before, details li::before { content: ""; position: absolute; left: 2px; top: 0.7em; width: 7px; height: 7px; border-radius: 2px; background: var(--accent-ink); }
-.limits li::before { background: transparent !important; border: 1.5px solid var(--muted); }
+/* Why Okapi */
+.strengths { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.strengths article {
+  background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--accent);
+  border-radius: var(--radius); padding: var(--s4);
+}
+.strengths h3 { margin-bottom: var(--s2); }
+.strengths p { color: var(--muted); }
 
-details { border-top: 1px solid var(--line); }
-details:last-of-type { border-bottom: 1px solid var(--line); }
-summary {
-  display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px var(--s3);
-  padding: 14px 0 14px 28px; position: relative; cursor: pointer; list-style: none;
+/* Download */
+.steps { counter-reset: step; display: grid; gap: var(--s3); margin: var(--s5) 0 0; padding: 0; list-style: none; max-width: 44rem; }
+.steps li { counter-increment: step; position: relative; padding-left: 44px; min-height: 28px; }
+.steps li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: var(--on-accent);
+  font-family: var(--f-mono); font-size: 0.85rem; font-weight: 700;
 }
-summary::-webkit-details-marker { display: none; }
-summary::before {
-  content: ""; position: absolute; left: 4px; top: 21px; width: 8px; height: 8px;
-  border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform 160ms ease;
-}
-details[open] > summary::before { transform: rotate(45deg); top: 18px; }
-summary time, summary .pending { font-family: var(--f-mono); font-size: 0.82rem; font-style: normal; color: var(--muted); }
-summary span:first-of-type { font-weight: 650; }
-summary .pr { grid-column: 2; font-family: var(--f-mono); font-size: 0.78rem; color: var(--muted); }
-@media (min-width: 640px) {
-  summary { grid-template-columns: 7rem 1fr auto; }
-  summary .pr { grid-column: auto; }
-}
-details > ul { padding: 0 0 var(--s4) 28px; color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
 
-/* After v1 */
-.next { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.next li { border: 1.5px dashed var(--line); border-radius: 12px; padding: 10px var(--s3); font-size: 0.98rem; }
-#next .actions { margin-top: var(--s6); }
+/* What Okapi doesn't do yet */
+.gaps { display: grid; gap: var(--s3); }
+@media (min-width: 720px) { .gaps { grid-template-columns: 1fr 1fr; gap: var(--s3) var(--s6); } }
+.gaps li { position: relative; padding-left: 34px; color: var(--muted); }
+.gaps li b { color: var(--ink); font-weight: 650; }
+.gaps li::before {
+  content: ""; position: absolute; left: 0; top: 0.3em; width: 20px; height: 20px; border-radius: 6px;
+  border: 2px dashed var(--muted);
+}
+.gaps a { font-family: var(--f-mono); font-size: 0.85rem; white-space: nowrap; }
+#limits .actions, #download .actions { margin-top: var(--s5); }
 
 /* Footer */
 .site-foot { background: linear-gradient(var(--line), var(--line)) top center / calc(100% - 2 * var(--gutter)) 1px no-repeat; padding-block: var(--s5) var(--s6); display: grid; gap: var(--s3); font-size: 0.95rem; color: var(--muted); }

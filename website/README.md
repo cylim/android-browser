@@ -42,6 +42,6 @@ GitHub Pages can't send custom headers. Each page sets its Content Security Poli
 
 ## Keep it true
 
-The page only says what the repository's documents support: [README.md](../README.md), [docs/SPEC.md](../docs/SPEC.md), [docs/ROADMAP.md](../docs/ROADMAP.md), [GLOSSARY.md](../GLOSSARY.md) and [docs/adr](../docs/adr/). The changelog section mirrors [CHANGELOG.md](../CHANGELOG.md). Update both together.
+The page only says what the repository's documents support: [README.md](../README.md), [docs/SPEC.md](../docs/SPEC.md), [docs/ROADMAP.md](../docs/ROADMAP.md), [GLOSSARY.md](../GLOSSARY.md) and [docs/adr](../docs/adr/). The page links to [CHANGELOG.md](../CHANGELOG.md) instead of copying it. The download buttons point at `okapi-arm64-v8a.apk` in the latest GitHub release, so every release must attach an asset with that exact name ([#31](https://github.com/cylim/android-browser/issues/31)). Each gap under "What Okapi doesn't do yet" links its issue, and the roadmap lists the same issues.
 
 Don't add fonts, scripts, analytics or embeds from other servers. Links to this repository on GitHub are the only outside addresses on the page.

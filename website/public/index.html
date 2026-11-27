@@ -7,7 +7,7 @@
        Inline style attributes set the Profile colors (style="--c:…"), hence style-src-attr. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
   <title>Okapi, a browser by JRNY</title>
-  <meta name="description" content="Okapi by JRNY is an Android browser with separate Profiles, so you can be signed in to a different Account on the same site in each one. No telemetry, no Google Play Services, MIT licensed.">
+  <meta name="description" content="Okapi by JRNY is an Android browser with separate Profiles, so you can be signed in to a different Account on the same site in each one. Ads blocked by uBlock Origin, no telemetry, no Google Play Services, MIT licensed. Download the APK from GitHub Releases.">
   <meta name="color-scheme" content="light dark">
   <meta name="referrer" content="no-referrer">
   <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
@@ -42,10 +42,10 @@
     </a>
     <nav aria-label="Sections">
       <ul>
+        <li><a href="#why">Why Okapi</a></li>
         <li><a href="#profiles">Profiles</a></li>
-        <li><a href="#layouts">Layouts</a></li>
         <li><a href="#privacy">Privacy</a></li>
-        <li><a href="#changelog">Changelog</a></li>
+        <li><a href="#download">Download</a></li>
         <li><a href="https://github.com/cylim/android-browser">GitHub</a></li>
       </ul>
     </nav>
@@ -54,7 +54,7 @@
   <main id="main">
     <section class="hero wrap" aria-labelledby="hero-title">
       <div class="hero-text">
-        <p class="eyebrow">Okapi for Android, in early development</p>
+        <p class="eyebrow">Okapi for Android, version 0.1.0</p>
         <h1 id="hero-title">Sign in to the same site twice.</h1>
         <p class="lede">Okapi keeps separate Profiles, and each one has its own cookies, Tabs, history, bookmarks and downloads. Work mail in one Profile, personal mail in another, both signed in. Nothing in one Profile is visible from another.</p>
 
@@ -69,10 +69,10 @@
         </fieldset>
 
         <div class="actions">
-          <a class="btn btn-primary" href="https://github.com/cylim/android-browser">Read the source on GitHub</a>
-          <a class="btn btn-quiet" href="https://github.com/cylim/android-browser/releases">Releases <span class="soon">first one coming</span></a>
+          <a class="btn btn-primary" href="https://github.com/cylim/android-browser/releases/latest/download/okapi-arm64-v8a.apk">Download the APK <span class="soon">95 MB</span></a>
+          <a class="btn btn-quiet" href="#download">How to install</a>
         </div>
-        <p class="fine">No APK to download yet. The first signed release will go on GitHub Releases.</p>
+        <p class="fine">Free and open source. For Android 15 or later on 64-bit ARM. Not on Google Play yet.</p>
       </div>
 
       <div class="hero-art">
@@ -80,6 +80,39 @@
           <source srcset="assets/mark-dark.svg" media="(prefers-color-scheme: dark)">
           <img src="assets/mark.svg" alt="The Okapi logo, an okapi curled into the letter O with its head looking over the top." width="778" height="897">
         </picture>
+      </div>
+    </section>
+
+    <section id="why" class="band wrap" aria-labelledby="why-title">
+      <div class="section-head">
+        <h2 id="why-title">Why Okapi</h2>
+        <p>Okapi runs Gecko, the engine inside Firefox, so pages work as they do in Firefox for Android. Here is what it adds.</p>
+      </div>
+      <div class="strengths">
+        <article>
+          <h3>Every Account signed in at once</h3>
+          <p>Each Profile has its own cookies and sign-ins. Keep work Google in one Profile and personal Google in another, and switch between them without signing out. Chrome and Firefox for Android keep one set of cookies, so on most sites a second Account means signing out of the first.</p>
+        </article>
+        <article>
+          <h3>Links open in the right Profile</h3>
+          <p>A Site Rule sends links from other apps to the Profile you chose for that site. It reads through Outlook Safe Links and other link wrappers, so a GitHub link in a work email opens in your work Profile. Opened the wrong one? Move the Tab from the page menu.</p>
+        </article>
+        <article>
+          <h3>Ads blocked from the first start</h3>
+          <p>uBlock Origin comes installed and blocks ads, trackers and known malware sites. Add other extensions from addons.mozilla.org. Chrome for Android can't install extensions at all.</p>
+        </article>
+        <article>
+          <h3>A layout for tablets</h3>
+          <p>On a tablet or an unfolded phone, your Tabs sit in a sidebar, with Pinned Tabs and Folders at the top. On a phone, the address bar sits at the bottom, where your thumb is.</p>
+        </article>
+        <article>
+          <h3>Nothing reports back</h3>
+          <p>No analytics and no crash reporter, in the app or in its engine. No Google Play Services, and no account to create. The code and every design decision are public.</p>
+        </article>
+        <article>
+          <h3>A backup you keep</h3>
+          <p>Export your Profiles' bookmarks, history, open Tabs, Site Rules and settings to one file, encrypted with your password. Okapi sends it nowhere. Import it on another device.</p>
+        </article>
       </div>
     </section>
 
@@ -115,7 +148,7 @@
           </ul>
         </div>
       </div>
-      <p class="note">A Profile's web data store is named after its ID, never its name. Rename a Profile and you stay signed in. Delete it and its data is wiped at the next cold start (<a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0004-profile-web-data-is-named-by-profile-id.md">ADR 0004</a>).</p>
+      <p class="note">A Profile's web data store is named after its ID, never its name. Rename a Profile and you stay signed in. Delete it and its data is wiped at once, and again at the next cold start (<a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0004-profile-web-data-is-named-by-profile-id.md">ADR 0004</a>).</p>
     </section>
 
     <section id="features" class="band wrap" aria-labelledby="features-title">
@@ -308,237 +341,58 @@
         <li><b>No Google Play Services.</b> No Firebase, no API keys. A public repository with no secrets in the app has no secret to leak.</li>
         <li><b>Sessions stay on the device.</b> Cloud backup and device-to-device transfer leave out all of the app's data, so your signed-in sessions are never copied off the device.</li>
         <li><b>Quiet logs.</b> Release builds never log addresses, page titles or cookies.</li>
+        <li><b>Ads and trackers blocked.</b> uBlock Origin is installed on the first start, in every Profile and in Private Tabs. It fetches its filter lists from each list's own servers, not from a service of ours.</li>
+        <li><b>Cookies kept apart.</b> Total Cookie Protection gives a site embedded in another its own cookie jar there, so it can't follow you from site to site.</li>
         <li><b>Safe Browsing without a key.</b> It's built into GeckoView, so the app doesn't need one.</li>
         <li><b>Built in public, MIT licensed.</b> The code, the spec and the architecture decisions, with the reasons behind them, are on GitHub.</li>
       </ul>
       <p class="note">This page follows the same rule: no fonts, scripts or trackers from other servers.</p>
     </section>
 
-    <section id="requirements" class="band wrap" aria-labelledby="req-title">
+    <section id="download" class="band wrap" aria-labelledby="download-title">
       <div class="section-head">
-        <h2 id="req-title">What you need</h2>
+        <h2 id="download-title">Download and install</h2>
+        <p>Okapi isn't on Google Play yet. Each version is an APK on GitHub Releases, built by GitHub Actions from the code in this repository.</p>
       </div>
       <dl class="reqs">
-        <div><dt>Android</dt><dd>15 (API 35) or later</dd></div>
-        <div><dt>Engine</dt><dd>GeckoView (Gecko, as in Firefox), inside the app</dd></div>
+        <div><dt>Android</dt><dd>15 or later</dd></div>
+        <div><dt>Processor</dt><dd>64-bit ARM (arm64-v8a)</dd></div>
+        <div><dt>Size</dt><dd>About 95 MB, 250 MB installed</dd></div>
         <div><dt>Google Play Services</dt><dd>Not needed</dd></div>
-        <div><dt>Screens</dt><dd>Phones, tablets and foldables</dd></div>
       </dl>
-    </section>
-
-    <section id="changelog" class="band wrap" aria-labelledby="changelog-title">
-      <div class="section-head">
-        <h2 id="changelog-title">Changelog</h2>
-        <p>Nothing is released yet. Version 0.1.0 ships once a signed APK is built by GitHub Actions, published on GitHub Releases and checked against F-Droid's requirements. The full text is in <a href="https://github.com/cylim/android-browser/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
-      </div>
-
-      <div class="log">
-        <section class="release" aria-labelledby="rel-010">
-          <h3 id="rel-010" class="release-head"><span class="ver">0.1.0</span> <span class="tag">not released yet</span></h3>
-
-          <details>
-            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Browsing in one Profile</span> <span class="pr">Milestone 1, #1</span></summary>
-            <ul>
-              <li>Load a page, go back and forward, reload, and stop loading.</li>
-              <li>The address field loads an address or searches for the text. An address, or text shaped like credentials, is never sent to the search engine.</li>
-              <li>Two layouts that follow the window's width: the Sidebar at 840dp and wider, which collapses to the Rail, and the Bottom Bar below that. They switch live when the window resizes.</li>
-              <li>Sign-in popups open in the Tab's Profile, under a bar that shows the popup's own address.</li>
-              <li>A Tab survives a crash of the page's renderer instead of closing the app.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Profiles</span> <span class="pr">Milestone 2, #2</span></summary>
-            <ul>
-              <li>Create, switch, rename, recolor and delete Profiles. Each Profile keeps its own cookies, site storage, cache, site permissions and service workers.</li>
-              <li>Deleting a Profile asks first and warns that every Account signed in within it will be signed out. The Profile disappears at once, and its web data is wiped at the next cold start. The last Profile can't be deleted.</li>
-              <li>In the Sidebar, the Profile switcher sits at the bottom, and swiping across the Tab list switches Profiles. In the Bottom Bar, the Profile's avatar opens the Profile sheet.</li>
-              <li>The Sidebar and the Bottom Bar take the Active Profile's color.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Tabs</span> <span class="pr">Milestone 3, #3</span></summary>
-            <ul>
-              <li>Several Tabs per Profile. After Android kills the app, each Tab comes back with its address, title and scroll position.</li>
-              <li>At most 5 Tabs are live at once, across all Profiles. The others reload when you open them.</li>
-              <li>The Sidebar lists the Active Profile's Tabs. In the Bottom Bar, the Tab count opens the Tab Overview, and swiping along the bar switches Tabs.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-16">2026-11-16</time> <span>Move, Open in Profile and Incoming Links</span> <span class="pr">Milestone 4, #4</span></summary>
-            <ul>
-              <li>Move takes a Tab to another Profile. Only its address goes along, and the page reloads there. The Profile picker says what is lost before you choose.</li>
-              <li>Open in Profile opens the Tab's address in another Profile and keeps the original Tab.</li>
-              <li>A page menu ("More") in the Sidebar, the Rail and the Bottom Bar holds Move, Open in Profile and a new Tab.</li>
-              <li>Okapi can be the default browser. An Incoming Link opens as a new Tab in the Active Profile, with a one-tap "Move to Profile…". Only <code>http</code> and <code>https</code> links are accepted.</li>
-              <li>The menu offers "Set as default browser" while Okapi isn't.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>History and bookmarks</span> <span class="pr">Milestone 5, #5</span></summary>
-            <ul>
-              <li>Each Profile keeps its own history and bookmarks.</li>
-              <li>History keeps the pages you go to, not reloads, Back, Forward or restored Tabs, and leaves out a redirect's stops on the way. A Profile keeps its latest 5,000 visits.</li>
-              <li>Bookmarks and History open in the page's place: beside the Sidebar, or full screen on a phone. History can be cleared after a confirmation.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Downloads</span> <span class="pr">Milestone 5, #6</span></summary>
-            <ul>
-              <li>A page can only offer a file. It downloads once you agree, in a dialog that names the file, the site and the size.</li>
-              <li>Android's download service fetches the file with the Profile's cookies and saves it to the device's Downloads folder.</li>
-              <li>Each Profile has its own list of downloads. A finished file opens, and a running one can be cancelled.</li>
-              <li>A download that redirects to another site doesn't take the first site's cookies with it.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Private Tabs</span> <span class="pr">Milestone 5, #7</span></summary>
-            <ul>
-              <li>Each Profile can open Private Tabs. They share one temporary web data store, apart from the Profile's own, and never write to history.</li>
-              <li>When the last Private Tab of a Profile closes, its cookies and site storage are cleared. Private Tabs end when the app's window closes and are never restored.</li>
-              <li>While a Private Tab shows, screenshots and the recent-apps preview are blocked. In the Tab list it carries a lock.</li>
-              <li>A Private Tab can't be Moved or opened in another Profile, and never takes an Incoming Link.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Settings</span> <span class="pr">Milestone 5, #8</span></summary>
-            <ul>
-              <li>Search engine: Google, Bing, DuckDuckGo or Brave Search.</li>
-              <li>Suggestions while you type: pages from the Active Profile's bookmarks and history first, then the search engine's suggestions. Suggestion requests carry no cookies, and a Private Tab offers none.</li>
-              <li>Safe Browsing can be turned off, and the change reaches pages that are already open.</li>
-              <li>Theme: the device's, light or dark.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Fixed: the keyboard</span> <span class="pr">#9</span></summary>
-            <ul>
-              <li>On a tablet in landscape, the on-screen keyboard no longer covers the New Profile dialog's buttons.</li>
-              <li>With the keyboard up, the Sidebar's suggestions and Tab list end above it and scroll.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Site Rules</span> <span class="pr">#10</span></summary>
-            <ul>
-              <li>A Site Rule sends Incoming Links for a site, optionally with a path, to the Profile you chose. <code>*</code> stands for anything.</li>
-              <li>Site Rules live under Settings → Site Rules, where "Check a link" says which Profile a link would open in.</li>
-              <li>After you Move an Incoming Link to another Profile, the page offers a rule with one tap ("Always").</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Pinned Tabs and Folders</span> <span class="pr">#11</span></summary>
-            <ul>
-              <li>A Profile's bookmarks are its Pinned Tabs, listed under "Pinned" above its other Tabs, in the Sidebar and the Tab Overview.</li>
-              <li>A Pinned Tab is open while a Tab shows it and dimmed otherwise. Closing it keeps the bookmark.</li>
-              <li>Folders group Pinned Tabs, one level deep. A Folder can be collapsed, renamed and deleted, and deleting it keeps its bookmarks.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Styling</span> <span class="pr">#12</span></summary>
-            <ul>
-              <li>Each Profile picks one of 12 colors and a color strength: soft, medium or strong. While it is active, the Sidebar, the Bottom Bar and the Tab Overview are tinted with it, and switching Profiles glides from one color to the next.</li>
-              <li>A Profile's avatar shows one of 8 icons or any one emoji.</li>
-              <li>"Compact rows" in Settings makes every row of the Tab list one line.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Site icons</span> <span class="pr">#13</span></summary>
-            <ul>
-              <li>Every row of the Tab list starts with its site's own icon, or the first letter of the site's name until the Profile has shown a page of that site.</li>
-              <li>Icons are kept per Profile on the device. A Private Tab's icons are never kept, and clearing a Profile's history removes the icons it no longer needs.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><time datetime="2026-11-17">2026-11-17</time> <span>Drag to reorder Pinned Tabs</span> <span class="pr">#14</span></summary>
-            <ul>
-              <li>Hold a Pinned Tab or a Folder and drag it to a new place. Let a Pinned Tab go on a Folder to put it in, or drag it past its Folder's ends to take it out.</li>
-              <li>Held without dragging, a row opens its menu, where "Move up" and "Move down" do the same.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><em class="pending">not merged</em> <span>Start Page</span></summary>
-            <ul>
-              <li>A new Tab opens on a Start Page built into the app, with the Profile's Pinned Tabs and recent pages. In a new Private Tab, it says what Private Tabs keep apart and what they erase.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><em class="pending">not merged</em> <span>The name Okapi</span></summary>
-            <ul>
-              <li>The browser is now called Okapi. JRNY stays the maker's name. The launcher shows "Okapi", and the Google Play title will be "Okapi Browser by JRNY". The application ID stays <code>app.jrny.browser</code>, so an installed copy updates in place and keeps its Profiles. <a href="https://github.com/cylim/android-browser/blob/main/docs/adr/0005-product-name-okapi.md">ADR 0005</a> says why.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><em class="pending">not merged</em> <span>GeckoView, Mozilla's engine, renders pages</span></summary>
-            <ul>
-              <li>Pages render in GeckoView inside the app instead of Android System WebView. Sites see Firefox for Android, and no request carries the app's package name any more.</li>
-              <li>Page dialogs, list and date fields, Okapi's own error pages, and downloads written by Okapi with their progress on the list.</li>
-              <li>Deleting a Profile wipes its web data at once. Private Tabs keep their storage in memory, apart from site databases, which are written to disk encrypted and deleted with the last Private Tab.</li>
-              <li>The app is larger, about 95 MB to download, and Okapi now ships each GeckoView security release itself.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><em class="pending">not merged</em> <span>Link wrappers</span></summary>
-            <ul>
-              <li>A link from another app that goes through a link wrapper, such as Outlook's Safe Links or Google's <code>/url</code> redirect, is matched against your Site Rules by the address it carries. Nothing is fetched to find it.</li>
-              <li>The list is under Settings → Site Rules → Link wrappers. Add, change or delete them, or go back to the default list. Okapi keeps only your changes, so new default wrappers still arrive, and backups include them.</li>
-            </ul>
-          </details>
-
-          <details>
-            <summary><em class="pending">not merged</em> <span>Fixed: suggestions and passwords typed before the <code>@</code></span></summary>
-            <ul>
-              <li>While you type, text with a colon before its first <code>/</code>, <code>?</code> or <code>#</code>, such as <code>admin:hunter2</code>, is no longer sent to the search engine for suggestions, because an <code>@</code> typed next would make it credentials. Before, a pause before the <code>@</code> could send the password.</li>
-              <li>A search with an early colon, such as <code>python: list comprehension</code>, now gets only bookmark and history suggestions while you type. Go still searches for it.</li>
-            </ul>
-          </details>
-        </section>
-
-        <section class="release limits" aria-labelledby="rel-limits">
-          <h3 id="rel-limits" class="release-head"><span class="ver">Known limits</span></h3>
-          <ul>
-            <li>Passkeys don't work until Okapi is approved as a privileged browser. Password managers work through Android Autofill.</li>
-            <li>There is no Custom Tabs service. An app that asks for a Custom Tab gets a normal Tab.</li>
-            <li>A download stops if Android ends the app while it runs.</li>
-            <li>Back/forward history isn't restored after Android kills the app.</li>
-            <li>A Move loses unsaved form input and pages reached by submitting a form.</li>
-            <li>Sign-in with two Accounts at once still needs checking on GeckoView, for Google, Microsoft, GitHub and Apple.</li>
-            <li>Not in v1: sync, extensions, a built-in password manager, content blocking and a lock per Profile.</li>
-          </ul>
-        </section>
+      <ol class="steps">
+        <li>On your phone or tablet, tap <a href="https://github.com/cylim/android-browser/releases/latest/download/okapi-arm64-v8a.apk">Download the APK</a>.</li>
+        <li>Open the downloaded file. Android asks whether your browser may install apps. Allow it.</li>
+        <li>Tap <b>Install</b>, then open Okapi.</li>
+        <li>To open links from other apps in Okapi, make it your default browser. The page menu offers <b>Set as default browser</b>.</li>
+      </ol>
+      <p class="note">Okapi doesn't update itself yet. Each new version goes on <a href="https://github.com/cylim/android-browser/releases">GitHub Releases</a>. Install it over the old one, and your Profiles, Tabs and sign-ins stay. Okapi ships each security fix of its engine in a new version, so keep it up to date.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/cylim/android-browser/releases/latest/download/okapi-arm64-v8a.apk">Download the APK <span class="soon">95 MB</span></a>
+        <a class="btn btn-quiet" href="https://github.com/cylim/android-browser/releases">All releases</a>
       </div>
     </section>
 
-    <section id="next" class="band wrap" aria-labelledby="next-title">
+    <section id="limits" class="band wrap" aria-labelledby="limits-title">
       <div class="section-head">
-        <h2 id="next-title">After v1</h2>
-        <p>On the roadmap once the first release is out. None of it is built yet.</p>
+        <h2 id="limits-title">What Okapi doesn't do yet</h2>
+        <p>Okapi is new, and Chrome and Firefox still do some things it can't. Each gap has an issue on GitHub, and the roadmap says when it comes.</p>
       </div>
-      <ul class="next">
-        <li>Passkeys, after approval as a privileged browser</li>
-        <li>A Custom Tabs service</li>
-        <li>A biometric lock per Profile</li>
-        <li>Content blocking</li>
-        <li>Bookmark export and import</li>
-        <li>A Google Play release</li>
+      <ul class="gaps">
+        <li><b>No sync between devices.</b> Backup moves your data by file instead. <a href="https://github.com/cylim/android-browser/issues/38">#38</a></li>
+        <li><b>No passkeys yet.</b> Password managers work through Android Autofill. <a href="https://github.com/cylim/android-browser/issues/36">#36</a></li>
+        <li><b>No web notifications.</b> <a href="https://github.com/cylim/android-browser/issues/35">#35</a></li>
+        <li><b>No Custom Tabs.</b> An app that asks for an in-app browser tab gets a normal Okapi Tab. <a href="https://github.com/cylim/android-browser/issues/37">#37</a></li>
+        <li><b>No translation, reader view, QR scanner or voice search.</b> <a href="https://github.com/cylim/android-browser/issues/39">#39</a> <a href="https://github.com/cylim/android-browser/issues/40">#40</a> <a href="https://github.com/cylim/android-browser/issues/41">#41</a> <a href="https://github.com/cylim/android-browser/issues/42">#42</a></li>
+        <li><b>Extensions work in every Profile at once.</b> uBlock Origin's settings and trusted sites apply in all of them. <a href="https://github.com/cylim/android-browser/issues/43">#43</a></li>
+        <li><b>Android 15 or later only.</b> <a href="https://github.com/cylim/android-browser/issues/44">#44</a></li>
+        <li><b>Large, and heavy on memory.</b> At most 5 Tabs stay loaded. The others reload when you open them. <a href="https://github.com/cylim/android-browser/issues/45">#45</a></li>
+        <li><b>Sign-in is still being checked</b> on the new engine, with two Accounts each on Google, Microsoft, GitHub and Apple. <a href="https://github.com/cylim/android-browser/issues/33">#33</a></li>
+        <li><b>A download stops</b> if Android ends the app while it runs.</li>
       </ul>
       <div class="actions">
-        <a class="btn btn-primary" href="https://github.com/cylim/android-browser">Follow along on GitHub</a>
         <a class="btn btn-quiet" href="https://github.com/cylim/android-browser/blob/main/docs/ROADMAP.md">Read the roadmap</a>
+        <a class="btn btn-quiet" href="https://github.com/cylim/android-browser/blob/main/CHANGELOG.md">Read the changelog</a>
       </div>
     </section>
   </main>
@@ -547,6 +401,7 @@
     <p class="foot-brand"><picture><source srcset="assets/mark-compact-dark.svg" media="(prefers-color-scheme: dark)"><img src="assets/mark-compact.svg" alt="" width="21" height="24"></picture><span>Okapi, a browser by JRNY, is free software under the <a href="https://github.com/cylim/android-browser/blob/main/LICENSE">MIT License</a>.</span></p>
     <ul>
       <li><a href="https://github.com/cylim/android-browser">Source</a></li>
+      <li><a href="https://github.com/cylim/android-browser/blob/main/CHANGELOG.md">Changelog</a></li>
       <li><a href="privacy.html">Privacy policy</a></li>
       <li><a href="https://github.com/cylim/android-browser/blob/main/SECURITY.md">Security policy</a></li>
       <li><a href="https://github.com/cylim/android-browser/blob/main/CONTRIBUTING.md">Contributing</a></li>

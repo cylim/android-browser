@@ -6,7 +6,7 @@ All notable changes to Okapi, a browser by JRNY, are listed here, grouped by ver
 
 There is no release yet. Version 0.1.0 is what the app builds as today. It ships once Milestone 6 is done: a signed APK built by GitHub Actions and published on [GitHub Releases](https://github.com/cylim/android-browser/releases), and a check that the build meets F-Droid's requirements.
 
-Everything below is new in 0.1.0, in the order it landed. The last four, the Start Page, the name Okapi, WebView usage metrics and the suggestion fix, aren't merged yet.
+Everything below is new in 0.1.0, in the order it landed.
 
 ### Browsing in one Profile (Milestone 1, #1), 2026-11-16
 
@@ -97,24 +97,20 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Hold a Pinned Tab or a Folder and drag it to a new place. Let a Pinned Tab go on a Folder to put it in, or drag it past its Folder's ends to take it out.
 - Held without dragging, a row opens its menu, where "Move up" and "Move down" do the same.
 
-### Start Page (not merged yet)
+### Start Page (#15), 2026-11-18
 
 - A new Tab opens on a Start Page built into the app, with the Profile's Pinned Tabs and recent pages. In a new Private Tab, it says what Private Tabs keep apart and what they erase.
 
-### The name Okapi (not merged yet)
+### The name Okapi (#15), 2026-11-18
 
 - The browser is now called Okapi, after Pangolin was considered first and dropped. JRNY stays the maker's name. The launcher shows "Okapi", and the Google Play title will be "Okapi Browser by JRNY", always paired with JRNY in store text. The application ID stays `app.jrny.browser`, so an installed copy updates in place and keeps its Profiles. [ADR 0005](docs/adr/0005-product-name-okapi.md) says why.
 
-### WebView usage metrics are turned off (not merged yet)
-
-- Okapi tells Android System WebView not to send its usage statistics to Google, whatever the device's usage and diagnostics setting is. WebView's crash reports still follow that setting and contain no page addresses.
-
-### Fixed: suggestions and passwords typed before the `@` (not merged yet)
+### Fixed: suggestions and passwords typed before the `@` (#15), 2026-11-18
 
 - While you type, text with a colon before its first `/`, `?` or `#`, such as `admin:hunter2`, is no longer sent to the search engine for suggestions, because an `@` typed next would make it credentials. Before, a pause before the `@` could send the password.
 - A search with an early colon, such as `python: list comprehension`, now gets only bookmark and history suggestions while you type. Go still searches for it.
 
-### Web capabilities (not merged yet)
+### Web capabilities (#18), 2026-11-18
 
 - A site can ask for the camera, the microphone or your location. Okapi names the site and offers "Allow once", "Always allow" or "Block". Each Profile keeps its own answers, so allowing a site in one Profile doesn't allow it in another. A Private Tab only offers "Allow" and "Block", and forgets them.
 - Android is asked for its own permission only when a site you allowed needs it and Okapi doesn't have it yet, never before. If Android refuses, Okapi says so and opens Android's settings for it.
@@ -123,7 +119,7 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - A video's fullscreen button fills the screen, hides the system bars and turns the screen to match the video. Back leaves fullscreen.
 - A site that asks for a username and password before its page (HTTP sign-in) gets a dialog that a password manager can fill. Okapi keeps nothing typed there.
 
-### Links and files (not merged yet)
+### Links and files (#19), 2026-11-18
 
 - A tapped phone, mail, message or map link opens its app. Any other link for an app, such as `intent:` or `market:`, shows a bar under the page with "Open", and nothing leaves the browser before you tap it. In a Private Tab every such link waits for "Open". Only the link goes to the app.
 - Files a page makes itself (`blob:` and `data:` addresses), such as an exported CSV or PDF, are saved to the Downloads folder and listed with the Profile's downloads.
@@ -131,19 +127,19 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - The page menu starts with a row of icons (Forward on narrow phones, Bookmark, Share, Reload), then Page (Copy link, Print), Profile (Move, Open in Profile) and Browser sections.
 - Print opens Android's print dialog, which can also save the page as a PDF.
 
-### Page tools (not merged yet)
+### Page tools (#20), 2026-11-18
 
 - Find in page, from the page menu: it counts the matches and moves between them. On a phone it takes the address bar's place; on a tablet it runs across the top of the page.
 - Desktop site, a switch in the page menu, asks a site for its desktop version and lays the page out at desktop width. Each Profile remembers it for the site, and it shows in Site settings. A Private Tab keeps it until it closes.
 - Settings → Pages: text size for every page (50% to 200%), "Darken pages without a dark theme" while Okapi's theme is dark, and pull to refresh, which is on by default.
 
-### Tabs and data (not merged yet)
+### Tabs and data (#21), 2026-11-18
 
 - Closing a Tab offers "Undo" for a few seconds, which puts it back where it was. The last ten closed Tabs of each Profile are listed under "Recently closed" at the top of the history. Private Tabs and Pinned Tabs are never listed.
 - Settings → Clear browsing data clears the Active Profile's history, cookies and site data, cached files, site permissions and Desktop site choices, recently closed Tabs or site icons, from all time. Checking cookies warns that the Profile's Accounts will be signed out.
 - Add to Home screen pins the page to the launcher with the site's icon and the Profile's badge. It opens in that Profile, whichever Profile is active, and stops working when the Profile is deleted.
 
-### GeckoView engine (not merged yet)
+### GeckoView engine (#25), 2026-11-25
 
 - Pages render in GeckoView, Mozilla's Gecko engine, inside the app, instead of Android System WebView ([ADR 0006](docs/adr/0006-geckoview-as-engine.md)). Each Profile is a GeckoView session context with the same name as before. Sites see Firefox for Android, and no request carries the app's package name any more.
 - Deleting a Profile wipes its web data at once, as well as at the next cold start. Private Tabs keep their storage in memory, apart from site databases, which the engine keeps on disk encrypted until no Private Tab is open.
@@ -155,12 +151,12 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Protected video (DRM) plays, and a video without sound may play by itself.
 - The APK is much larger: about 95 MB to download. Okapi now ships each GeckoView security release itself.
 
-### Backup (not merged yet)
+### Backup (#27), 2026-11-26
 
 - Settings → Export backup saves every Profile's bookmarks and Folders, history, open Tabs, Site Rules and Site settings, with the settings, to a file you choose. It is encrypted with a password unless you turn that off. Cookies and sign-ins are never in it.
 - Settings → Import backup brings a backup back. Merge adds only what is missing; Replace deletes the Profiles here and puts the backup's in their place.
 
-### Link Wrappers (not merged yet)
+### Link Wrappers (#29), 2026-11-26
 
 - An Incoming Link through a Link Wrapper, such as Outlook's Safe Links or Google's `/url` redirect, is judged by the Site Rules by the address it carries. Okapi reads that address from the link and fetches nothing. When no rule covers it, a rule for the wrapper's own site still decides.
 - The default list covers Outlook Safe Links, Google, Facebook, Messenger, Instagram, YouTube, Slack and LinkedIn. Settings → Site Rules → Link wrappers lists them, one per site, and they can be added, changed or deleted. "Use default list" undoes every change. Okapi keeps only the changes, so new default wrappers still arrive.
@@ -168,7 +164,7 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - "Check a link" names the address a wrapped link carries. "Always" after a Move offers that address's site, not the wrapper's.
 - A backup holds the changes to the Link Wrappers. Merge adds the wrappers for sites that have none; Replace takes the backup's changes.
 
-### Extensions and content blocking (not merged yet)
+### Extensions and content blocking (#30), 2026-11-27
 
 - Add extensions from addons.mozilla.org: Settings → Extensions → Find extensions, then "Add to Firefox". Install from file takes a signed `.xpi`. Before anything is added, Okapi lists what it can do and says it works in every Profile.
 - Settings → Extensions, or Page menu → Manage extensions, lists them with a switch each. An extension's panel has Run in Private Tabs, its settings, what it can do, and Remove.
@@ -188,4 +184,5 @@ Everything below is new in 0.1.0, in the order it landed. The last four, the Sta
 - Site icons, dark pages and "Save image" need the engine's built-in Okapi extension, which runs in web pages only.
 - Extensions work in every Profile at once. uBlock Origin's trusted sites and settings apply in every Profile.
 - In the first seconds after the first install, a page can load before uBlock Origin is ready, unblocked.
-- Not in v1: sync, installing extensions, a built-in password manager and a lock per Profile.
+- Not in v1: sync, a built-in password manager and a lock per Profile.
+- Each gap the roadmap plans to close has a GitHub issue, listed in [ROADMAP.md](docs/ROADMAP.md).
